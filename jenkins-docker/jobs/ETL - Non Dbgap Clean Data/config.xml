@@ -8,20 +8,6 @@
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
-    <hudson.model.ParametersDefinitionProperty>
-      <parameterDefinitions>
-        <hudson.model.StringParameterDefinition>
-          <name>managed_inputs</name>
-          <defaultValue>s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.csv</defaultValue>
-          <trim>false</trim>
-        </hudson.model.StringParameterDefinition>
-        <hudson.model.StringParameterDefinition>
-          <name>metadata_file</name>
-          <defaultValue>s3://avillach-73-bdcatalyst-etl/general/data/metadata.json</defaultValue>
-          <trim>false</trim>
-        </hudson.model.StringParameterDefinition>
-      </parameterDefinitions>
-    </hudson.model.ParametersDefinitionProperty>
   </properties>
   <scm class="hudson.plugins.git.GitSCM" plugin="git@4.10.3">
     <configVersion>2</configVersion>
@@ -49,36 +35,23 @@
     <hudson.tasks.Shell>
       <command>#!/bin/bash
 
-aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
-
+aws sts assume-role --duration-seconds 1800 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
 export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
-aws s3 cp ${managed_inputs} .
+mkdir data
 
-csvcut -c 1,2,3,8,9 Managed_Inputs.csv &gt; inputs.csv
+aws s3 cp s3://avillach-73-bdcatalyst-etl/babyhug/decoded_data/ data/ --recursive --exclude &quot;*&quot; --include &quot;*.csv&quot;
 
-cat Managed_Inputs.csv
-# Generate mappings
-cat	inputs.csv
+java -jar jars/DataCurator.jar
 
-IFS=&apos;,&apos;
-[ ! -f inputs.csv ]
-while read abv_name stdy_id stdy_type data_ready data_processed
-do
-  if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]] &amp;&amp; [[ &quot;${data_processed,,}&quot; == &quot;no&quot; ]]; then
+aws s3 cp data/ s3://avillach-73-bdcatalyst-etl/babyhug/decoded_data/ --recursive
 
-	  if [[ ${stdy_type,,} == &quot;topmed&quot; ]] || [[ ${stdy_type,,} == &quot;parent&quot; ]]; then
-        echo &quot;downloading metadata for $stdy_id&quot;
-        aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${stdy_id}/metadata/ --recursive --exclude &quot;*&quot; --include &quot;${stdy_id}*.xml&quot; --quiet
-
-
-      fi
-   else 
-      echo &quot;$abv_name not ready for processing&quot;
-   fi
-done &lt; inputs.csv</command>
+#aws s3 mv s3://avillach-73-bdcatalyst-etl/msh/decoded_data/ s3://avillach-73-bdcatalyst-etl/msh/archive/ --recursive 
+#aws s3 cp s3://avillach-73-bdcatalyst-etl/msh/data/MSH_PatientMapping.v2.csv .
+#aws s3 cp s3://avillach-73-bdcatalyst-etl/msh/decoded_data/ . --recursive
+#aws s3 cp s3://avillach-73-bdcatalyst-etl/msh/rawData/ . --recursive</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>

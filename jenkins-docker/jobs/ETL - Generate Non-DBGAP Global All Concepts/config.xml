@@ -106,7 +106,7 @@ csvcut -c 1,2,3,8,9 data/Managed_Inputs.csv &gt; inputs.csv
                 
         java -jar jars/GenericGlobalConceptsGenerator.jar -rootnode ${phs_accession} -patientmappingfile data/${abv_name^^}_PatientMapping.v2.csv -trialid ${abv_name^^} -consentid ${consentid} -accession ${phs_accession}
         
-        aws s3 cp completed/${abv_name^^}_GlobalVars.csv s3://avillach-73-bdcatalyst-etl/${abv_name^^}/completed/ 
+        aws s3 cp completed/${abv_name^^}_GlobalVars.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/completed/ 
 
 #	 fi
 #  fi

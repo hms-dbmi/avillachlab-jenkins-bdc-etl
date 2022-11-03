@@ -11,13 +11,8 @@
     <hudson.model.ParametersDefinitionProperty>
       <parameterDefinitions>
         <hudson.model.FileParameterDefinition>
-          <name>manifest.json</name>
+          <name>metadata.json</name>
         </hudson.model.FileParameterDefinition>
-        <hudson.model.StringParameterDefinition>
-          <name>study_abv_name</name>
-          <defaultValue>test</defaultValue>
-          <trim>false</trim>
-        </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
@@ -30,21 +25,18 @@
   <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Shell>
-      <command>#!/bin/bash
-mkdir downloads
-gen3-client download-multiple --profile=jenkins --manifest=manifest.json --download-path=downloads --no-prompt
-
-aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
-
+      <command>
+aws sts assume-role --duration-seconds 1800 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
 export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
-aws s3 rm s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/rawData/ --recursive
-cd downloads/ 
-gzip -d *.txt.gz
-rm -rf ./*.tar.gz
-aws s3 cp ./ s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/rawData/ --recursive
+aws s3 cp metadata.json s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json
+
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+
 </command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>

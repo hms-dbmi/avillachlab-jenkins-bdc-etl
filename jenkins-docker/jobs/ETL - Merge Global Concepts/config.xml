@@ -82,7 +82,7 @@ while read abv_name stdy_id stdy_type data_ready data_processed
 do
   if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]]; then
 
-	  if [ ${stdy_type,,} == &quot;biolincc&quot; ] || [ ${stdy_type,,} == &quot;other&quot; ] || [ ${stdy_type,,} == &quot;orchid&quot; ]; then
+	  if [ ${stdy_type,,} == &quot;biolincc&quot; ] || [ ${stdy_type,,} == &quot;other&quot; ] || [ ${stdy_type,,} == &quot;orchid&quot; ] || [ ${stdy_type,,} == &quot;nsrr&quot; ]; then
 
         aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
         
@@ -90,7 +90,7 @@ do
         export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
         export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
         
-        aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name^^}/completed/${abv_name^^}_GlobalVars.csv data/
+        aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/completed/${abv_name^^}_GlobalVars.csv data/
 
 		unset AWS_ACCESS_KEY_ID
         unset AWS_SECRET_ACCESS_KEY

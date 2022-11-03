@@ -42,16 +42,20 @@ export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/completed/allConcepts_data_analyzer.csv data/allConcepts.csv
+#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/completed/allConcepts_data_analyzer.csv data/allConcepts.csv
 
-java -jar jars/BDCValidations.jar
+#java -jar jars/BDCValidations.jar
 
-mv completed/* data/
+#mv completed/* data/
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json data/metadata.json
+
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/completed/Patient_Count_Per_Consents.csv data/
 
 aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/genoCounts.csv data/
 
 java -jar jars/UpdateCountsInJsonMetadata.jar 
-</command>
+
+aws s3 cp completed/metadata.json s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>

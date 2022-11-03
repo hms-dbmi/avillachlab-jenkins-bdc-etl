@@ -90,7 +90,7 @@ IFS=&apos;,&apos;
 [ ! -f inputs.csv ]
 while read abv_name stdy_id stdy_type data_ready data_processed
 do
-  if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]]; then
+  if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]] &amp;&amp; [[ ${data_processed,,} == &quot;no&quot; ]]; then
 
 	  if [[ ${stdy_type,,} == &quot;topmed&quot; ]] || [[ ${stdy_type,,} == &quot;parent&quot; ]]; then
       	echo &quot;Processing ${stdy_id} ${abv_name}&quot;
@@ -154,9 +154,9 @@ do
 
         aws s3 cp completed/${abv_name^^}_allConcepts.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/completed/${stdy_id}/${abv_name^^}_allConcepts_new_search_with_data_analyzer.csv
         
-        tar -zvcf etl-reports-data-analyzer.tar.gz reports/*
+        #tar -zvcf etl-reports-data-analyzer.tar.gz reports/*
         
-        aws s3 cp etl-reports-data-analyzer.tar.gz s3://avillach-73-bdcatalyst-etl/${abv_name,,}/reports/${stdy_id}/
+        #aws s3 cp etl-reports-data-analyzer.tar.gz s3://avillach-73-bdcatalyst-etl/${abv_name,,}/reports/${stdy_id}/
          
         #find data/ -type f -exec rm -rf {} \;
         

@@ -11,45 +11,13 @@
     <hudson.model.ParametersDefinitionProperty>
       <parameterDefinitions>
         <hudson.model.StringParameterDefinition>
-          <name>managed_inputs</name>
-          <description>Job will decode dbgap raw data and store it decoded dataset in s3.
-
-Parameters:
-abv_name = Can be obtained from the Managed Inputs or JIRA ticket
-stdy_id = Can be obtained from the Managed Inputs or JIRA ticket
-</description>
-          <defaultValue>s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.csv</defaultValue>
-          <trim>false</trim>
-        </hudson.model.StringParameterDefinition>
-        <hudson.model.StringParameterDefinition>
-          <name>abv_name</name>
-          <description>Study&apos;s abbreviated name.</description>
-          <trim>false</trim>
-        </hudson.model.StringParameterDefinition>
-        <hudson.model.StringParameterDefinition>
-          <name>stdy_id</name>
-          <description>Study&apos;s phs accession</description>
+          <name>S3_DATA_SET_TAR_NAME</name>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@4.10.3">
-    <configVersion>2</configVersion>
-    <userRemoteConfigs>
-      <hudson.plugins.git.UserRemoteConfig>
-        <url>https://github.com/hms-dbmi/ETL-MissionControl-dbgap-submodule</url>
-      </hudson.plugins.git.UserRemoteConfig>
-    </userRemoteConfigs>
-    <branches>
-      <hudson.plugins.git.BranchSpec>
-        <name>*/master</name>
-      </hudson.plugins.git.BranchSpec>
-    </branches>
-    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
-    <submoduleCfg class="empty-list"/>
-    <extensions/>
-  </scm>
+  <scm class="hudson.scm.NullSCM"/>
   <canRoam>true</canRoam>
   <disabled>false</disabled>
   <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
@@ -61,49 +29,49 @@ stdy_id = Can be obtained from the Managed Inputs or JIRA ticket
       <command>#!/bin/bash
 
 # Managed Inputs
-
-
-mkdir data
-mkdir completed
-mkdir hierarchies
-mkdir processing
-
-find data/ -type f -exec rm -rf {} \;
-find processing/ -type f -exec rm -rf {} \;
-find completed -type f -exec rm -rf {} \;
-
-rm -rf uniq_ids.txt
-# pull data from raw data s3
-aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+## Data Analyzer javabin creation
+aws sts assume-role --duration-seconds 1800 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
 export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
-aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ ./data/ --recursive 
+ts=$(date &apos;+%m-%d-%y&apos;)
 
-#--exclude &quot;*&quot; --include &quot;${stdy_id,,}*&quot;
+#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/biodatacatalyst_javabins_data_analyzer_${ts}.tar.gz s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${S3_DATA_SET_TAR_NAME} .
+
+tar zxf ${S3_DATA_SET_TAR_NAME}
 
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
 unset AWS_SESSION_TOKEN
-# decode data set
-java -jar jars/DbgapDecodeFiles.jar -dictdir &quot;./data/&quot;
 
-# upload decoded files
+aws sts assume-role --duration-seconds 1800 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
 export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
-aws s3 rm s3://avillach-73-bdcatalyst-etl/${abv_name,,}/decoded_data/ --recursive
-
-aws s3 cp completed/ s3://avillach-73-bdcatalyst-etl/${abv_name,,}/decoded_data/ --recursive
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json metadata.json
 
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
 unset AWS_SESSION_TOKEN
 
 
+aws sts assume-role --duration-seconds 1800 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
+tar zcf biodatacatalyst_javabins_data_analyzer_${ts}.tar.gz columnMeta.csv *.javabin encryption_key metadata.json conceptsToRemove.txt
+
+aws s3 cp biodatacatalyst_javabins_data_analyzer_${ts}.tar.gz s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/
+
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+
+#aws s3 cp columnMeta.csv s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/columnMeta/columnMeta.csv
 
 </command>
       <configuredLocalRules/>
