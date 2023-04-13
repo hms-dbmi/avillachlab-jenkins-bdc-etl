@@ -4,10 +4,10 @@ This repo stores the etl pipelines that are orchestrated via a Jenkins Continuou
 
 Prerequisites:
 An EC2 with following configuration.  Contact an admin for appropriate role and ids that are needed:
-   IAM Role
-   VPC ID
-   SUBNET ID
-   AMI ID
+* IAM Role
+* VPC ID
+* SUBNET ID
+* AMI ID
 
 -----------------------------------------------------
 To deploy an initial jenkins phenotypic etl server by performing the following steps.  Terraform variables in the code below should be replaced with the values acquired in the prereqs.
