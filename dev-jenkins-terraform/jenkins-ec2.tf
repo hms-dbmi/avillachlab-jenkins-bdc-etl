@@ -96,7 +96,7 @@ resource "aws_instance" "dev-jenkins" {
   tags = {
     Owner       = "Avillach_Lab"
     Environment = "development"
-    Name        = "FISMA Terraform Playground - Dev Jenkins - ${var.stack-id} - ${var.git-commit}"
+    Name        = "Jenkins Phenotypic ETL Server - ${var.stack-id} - ${var.git-commit}"
   }
 
   user_data = data.template_cloudinit_config.config.rendered
