@@ -36,7 +36,7 @@
     </userRemoteConfigs>
     <branches>
       <hudson.plugins.git.BranchSpec>
-        <name>*/master</name>
+        <name>*/genomicIngestion</name>
       </hudson.plugins.git.BranchSpec>
     </branches>
     <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
@@ -53,13 +53,6 @@
     <hudson.tasks.Shell>
       <command>#!/bin/bash
 
-### assume etl role
-aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
-
-export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-
 mkdir data
 mkdir data/decoded
 mkdir completed
@@ -69,36 +62,7 @@ mkdir processing
 find data/ -type f -exec rm -rf {} \;
 find processing/ -type f -exec rm -rf {} \;
 find completed/ -type f -exec rm -rf {} \;
-rm -rf pic-sure-hpds/
 
-aws s3 cp ${managed_inputs} data/
-
-aws s3 cp ${metadata_file} data/metadata.json
-
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/PatientPool.txt data/
-
-unset AWS_ACCESS_KEY_ID
-unset AWS_SECRET_ACCESS_KEY
-unset AWS_SESSION_TOKEN
-
-# Removing iterative approach
-# This process should be handled with care as patient sequencing is critical to ensure data integrity
-
-
-#awk -F, &apos;{print $1&quot;,&quot;$2&quot;,&quot;$3&quot;,&quot;$8&quot;,&quot;$9}&apos; data/Managed_Inputs.csv &gt; inputs.csv
-
-# Generate mappings
-#cat	inputs.csv
-#IFS=&apos;,&apos;
-#[ ! -f inputs.csv ]
-#while read abv_name stdy_id stdy_type data_ready data_processed
-#do
-
-#if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]]; then
-
-#	  if [[ ${stdy_type,,} == &quot;topmed&quot; ]] || [[ ${stdy_type,,} == &quot;parent&quot; ]]; then
-
-### assume etl role
 aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
 
 export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
@@ -108,7 +72,6 @@ export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apo
 touch data/${abv_name^^}_PatientMapping.v2.csv
 
 echo &quot;aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ data/ --recursive --exclude=&quot;*&quot; --include=&quot;${stdy_id}*&quot; --quiet&quot;
-#aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/data/${abv_name^^}_PatientMapping.v2.csv data/  --quiet
 aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/decoded_data/ beforeConversion/ --recursive --quiet
 
 for  file  in  beforeConversion/*; do
@@ -120,16 +83,48 @@ done
 java -jar jars/DataCurator.jar
 
 mkdir data/decoded/
-cp data/* data/decoded/
+cp -r data/* data/decoded/
+
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+
+
+### assume etl role
+aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+
+aws s3 cp ${managed_inputs} data/
+
+head -1 data/Managed_Inputs.csv &gt; Managed_Inputs.csv
+
+grep -i &quot;${abv_name}&quot; data/Managed_Inputs.csv &gt;&gt; Managed_Inputs.csv
+
+echo &quot;$(cat Managed_Inputs.csv)&quot;
+
+rm data/Managed_Inputs.csv
+
+mv Managed_Inputs.csv data/Managed_Inputs.csv
+
+aws s3 cp ${metadata_file} data/metadata.json
+
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/PatientPool.txt data/
+
+aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/data/${abv_name^^}_PatientMapping.v2.csv data/  --quiet
 
 java -jar jars/HPDSPatientNumTracker.jar
 
 aws s3 cp data/${abv_name^^}_PatientMapping.v2.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/data/${abv_name^^}_PatientMapping.v2.csv
 aws s3 cp data/PatientPool.txt s3://avillach-73-bdcatalyst-etl/general/data/PatientPool.txt
 
-#	 fi
-#  fi
-#done  &lt; inputs.csv</command>
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+
+</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>

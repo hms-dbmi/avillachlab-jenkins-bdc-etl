@@ -1,27 +1,53 @@
 <?xml version='1.1' encoding='UTF-8'?>
 <project>
   <actions/>
-  <description></description>
+  <description>The purpose of this job is to correlate Patients between two different studies.  The studies must contain a mapping file that can correlate the unique patient identifiers between the two studies.&#xd;
+&#xd;
+Currently the only supported mapping file for this correlation is the subject.multi file provided by dbgap.  Requirements for the mapping are below.&#xd;
+&#xd;
+Currently only able to map from a non-compliant study that has a subject.multi file to a related dbgap study.&#xd;
+&#xd;
+Requirements:&#xd;
+* Subject.multi file must contain the unique subject identifiers used in both data sets in a single record.&#xd;
+* The non-compliant subject.multi file MUST contain the dbgap_subject_id used in the target dbgap study.   This is because dbgap data uses the dbgap_subject_id in all of their data files.  Currently not supporting another level of mapping as the use case does not exist yet.&#xd;
+&#xd;
+&#xd;
+</description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@1.33">
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@320.v5a_0933a_e7d61">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
     <hudson.model.ParametersDefinitionProperty>
       <parameterDefinitions>
         <hudson.model.StringParameterDefinition>
-          <name>managed_inputs</name>
-          <defaultValue>s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.csv</defaultValue>
+          <name>source_dbgap_stdy_abv_name</name>
+          <description>Dbgap study&apos;s abbreviated name.
+
+Ex: CFS</description>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
-          <name>metadata_file</name>
-          <defaultValue>s3://avillach-73-bdcatalyst-etl/general/data/metadata.json</defaultValue>
+          <name>target_stdy_abv_name</name>
+          <description>Target study&apos;s abbreviated name.  Target Study is the study that will be correlated to dbgap.
+
+Ex: NSRR_CFS</description>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
-          <name>abv_name</name>
+          <name>target_stdy_patient_id_header_name</name>
+          <description>Column header name in the target study subject.multi file that contains the target study&apos;s patient identifiers.
+
+Ex: SOURCE_SUBJECT_ID</description>
+          <defaultValue>SOURCE_SUBJECT_ID</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>dbgap_stdy_patient_id_header_name</name>
+          <description>Column header name in the target study subject.multi file that contains the DBGAP study&apos;s patient identifiers.
+</description>
+          <defaultValue>SOURCE_SUBJECT_ID2</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
@@ -61,25 +87,16 @@ export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut 
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
 mkdir data
-mkdir data/decoded
+
 mkdir completed
-mkdir hierarchies
-mkdir processing
 
-find data/ -type f -exec rm -rf {} \;
-find processing/ -type f -exec rm -rf {} \;
-find completed/ -type f -exec rm -rf {} \;
-rm -rf pic-sure-hpds/
+# Download the related studies patient mapping file.
+aws s3 cp s3://avillach-73-bdcatalyst-etl/${source_dbgap_stdy_abv_name,,}/data/${source_dbgap_stdy_abv_name^^}_PatientMapping.v2.csv data/
 
-aws s3 cp ${managed_inputs} data/Managed_Inputs.csv
+# Download the subject multi file for the study that needs to be correlated.
+aws s3 cp s3://avillach-73-bdcatalyst-etl/${target_stdy_abv_name,,}/rawData/ data/ --recursive --exclude &quot;*&quot; --include &quot;*MULTI.txt&quot; --include &quot;*.Multi.txt&quot; --include &quot;*.multi.txt&quot;
 
-grep -i ${abv_name^^} data/Managed_Inputs.csv &gt; data/Managed_Inputs.csv2
-
-mv data/Managed_Inputs.csv2 data/Managed_Inputs.csv
-
-aws s3 cp ${metadata_file} data/metadata.json
-
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/PatientPool.txt data/
+java -jar jars/CorrelatePatientMappings.jar -source_dbgap_stdy_abv_name ${source_dbgap_stdy_abv_name,,} -target_stdy_abv_name ${target_stdy_abv_name,,} -target_stdy_patient_id_header_name ${target_stdy_patient_id_header_name} -dbgap_stdy_patient_id_header_name ${dbgap_stdy_patient_id_header_name} -patientmappingfile data/${source_dbgap_stdy_abv_name^^}_PatientMapping.v2.csv
 
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
@@ -90,24 +107,8 @@ aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791
 export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-
-
-aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/data/${abv_name^^}_PatientMapping.v2.csv data/  --quiet
-aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ beforeConversion/ --recursive --quiet
-
-for  file  in  beforeConversion/*; do
-echo &quot;$file&quot;
-FILE_ENCODING=$(file -i $file)
-iconv -f 8859_1 -t UTF-8//TRANSLIT &quot;$file&quot; -o data/decoded/$(basename $file)
-done
-
-cp data/* decoded/
-
-java -jar jars/HPDSPatientNumTracker.jar
-
-aws s3 cp data/${abv_name^^}_PatientMapping.v2.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/data/${abv_name^^}_PatientMapping.v2.csv
-aws s3 cp data/PatientPool.txt s3://avillach-73-bdcatalyst-etl/general/data/PatientPool.txt
-</command>
+        
+aws s3 cp completed/${target_stdy_abv_name^^}_PatientMapping.v2.csv s3://avillach-73-bdcatalyst-etl/${target_stdy_abv_name,,}/data/</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>

@@ -133,7 +133,7 @@ do
         
         java -jar Partitioner.jar -propertiesfile resources/job.config -mappingskipheaders N -trialid ${abv_name^^}
         
-        bash runpartition.sh -j 14 -m 3g -c &apos;config.part*.config&apos; -r resources/
+        bash runpartition.sh -j 8 -m 4g -c &apos;config.part*.config&apos; -r resources/
         
         java -jar MergePartitions.jar -propertiesfile resources/job.config
            

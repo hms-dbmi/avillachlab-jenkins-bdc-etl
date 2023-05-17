@@ -33,7 +33,7 @@
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
           <name>git_hash</name>
-          <defaultValue>*/master</defaultValue>
+          <defaultValue>*/als-3928</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
@@ -146,6 +146,8 @@ aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002363/metadat
 aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002386/metadata/stopii_metadata.json local/source/phs002386/rawData/
 aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002383/metadata/walkphasst_metadata.json local/source/phs002383/rawData/
 
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002808/metadata/numom2b_metadata.json local/source/phs002808/rawData/
+
 aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002694/metadata/activ4a_metadata.json local/source/phs002694/rawData/
 aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002710/metadata/activ4b_metadata.json local/source/phs002710/rawData/
 aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002752/metadata/c3po_metadata.json local/source/phs002752/rawData/
@@ -178,7 +180,7 @@ unset AWS_SESSION_TOKEN
 # volume mount pwd that contains original data files as /opt/local/source/
 #
 mkdir -p &quot;${WORKSPACE}&quot;/output
-echo &quot;docker run -i -v &quot;${WORKSPACE}&quot;/local/source:/local/source -v &quot;${WORKSPACE}&quot;/output:/usr/local/docker-config/search/ -eLOADER_NAME=DictionaryImporterUtil $HPDS_ETL_IMAGE&quot;
+echo &quot;docker run -i -v &quot;${WORKSPACE}&quot;/local/source:/local/source -v &quot;${WORKSPACE}&quot;/tagging/output:/usr/local/docker-config/search/ -eLOADER_NAME=DictionaryImporterUtil $HPDS_ETL_IMAGE&quot;
 docker run -i -v &quot;${WORKSPACE}&quot;/tagging/local/source:/local/source/ -v &quot;${WORKSPACE}&quot;/tagging/output:/usr/local/docker-config/search/ -eLOADER_NAME=DictionaryImporterUtil $HPDS_ETL_IMAGE
 
 cd &quot;$WORKSPACE&quot;/tagging/output

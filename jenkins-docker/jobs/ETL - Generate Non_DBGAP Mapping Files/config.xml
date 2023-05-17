@@ -92,7 +92,9 @@ do
         export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
   
         aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/decoded_data/ data/ --recursive --exclude &quot;*&quot; --include &quot;*.csv&quot;
-          
+        
+        sed -i &apos;1s/^\xEF\xBB\xBF//&apos; data/*
+        
         java -jar jars/GenericMappingGenerator.jar -trialid ${stdy_id} &gt; completed/${stdy_id}_mapping_gen.log 
         #cat completed/${stdy_id}_mapping_gen.log
         aws s3 cp completed/${stdy_id}_mapping.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/mappings/${stdy_id}/mapping2.csv --quiet
@@ -112,5 +114,12 @@ done  &lt; inputs.csv</command>
     </hudson.tasks.Shell>
   </builders>
   <publishers/>
-  <buildWrappers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.40">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
 </project>

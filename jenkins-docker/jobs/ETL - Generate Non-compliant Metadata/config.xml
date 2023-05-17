@@ -1,12 +1,12 @@
 <?xml version='1.1' encoding='UTF-8'?>
 <project>
   <actions/>
-  <description></description>
+  <description>This job should be run for a single study only filling in the parameters using the information in the JIRA ticket that is assigned to a non-compliant studies data ingestion.</description>
   <keepDependencies>false</keepDependencies>
   <properties>
     <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@1.33">
       <autoRebuild>false</autoRebuild>
-      <rebuildDisabled>false</rebuildDisabled>
+      <rebuildDisabled>true</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
     <hudson.model.ParametersDefinitionProperty>
       <parameterDefinitions>
@@ -17,11 +17,32 @@
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
           <name>metadata_file</name>
-          <defaultValue>s3://avillach-73-bdcatalyst-etl/general/data/metadata.json</defaultValue>
+          <defaultValue>s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
-          <name>abv_name</name>
+          <name>consent_group_code</name>
+          <description>Consent code for the study.   Ex: c1</description>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>consent_group_full_name</name>
+          <description>Readable Full name for the consent group. Ex: General Research Use (GRU)</description>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>consent_group_abv_name</name>
+          <description>Abv name for the consent group.   Ex: GRU</description>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>study_accession</name>
+          <description>PHS accession number assigned to the study: Ex: phs002694</description>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>git_hash</name>
+          <defaultValue>master</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
@@ -36,7 +57,7 @@
     </userRemoteConfigs>
     <branches>
       <hudson.plugins.git.BranchSpec>
-        <name>*/master</name>
+        <name>${git_hash}</name>
       </hudson.plugins.git.BranchSpec>
     </branches>
     <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
@@ -51,7 +72,7 @@
   <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Shell>
-      <command>#!/bin/bash
+      <command>#!/bin/bash -xe
 
 ### assume etl role
 aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
@@ -61,29 +82,19 @@ export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut 
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
 mkdir data
-mkdir data/decoded
 mkdir completed
-mkdir hierarchies
-mkdir processing
 
-find data/ -type f -exec rm -rf {} \;
-find processing/ -type f -exec rm -rf {} \;
-find completed/ -type f -exec rm -rf {} \;
-rm -rf pic-sure-hpds/
-
-aws s3 cp ${managed_inputs} data/Managed_Inputs.csv
-
-grep -i ${abv_name^^} data/Managed_Inputs.csv &gt; data/Managed_Inputs.csv2
-
-mv data/Managed_Inputs.csv2 data/Managed_Inputs.csv
+aws s3 cp ${managed_inputs} data/
 
 aws s3 cp ${metadata_file} data/metadata.json
-
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/PatientPool.txt data/
 
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
 unset AWS_SESSION_TOKEN
+
+echo &quot;java -jar jars/JsonMetadataGenerator.jar -metadatatype \&quot;BDC_GENERIC\&quot; -consentgroupfullname \&quot;${consent_group_full_name}\&quot; -consentgroupabvname \&quot;${consent_group_abv_name^^}\&quot; -consentgroupcode \&quot;${consent_group_code}\&quot; -studyaccession \&quot;${study_accession,,}\&quot;&quot;
+
+java -jar jars/JsonMetadataGenerator.jar -metadatatype &quot;BDC_GENERIC&quot; -consentgroupfullname &quot;${consent_group_full_name}&quot; -consentgroupabvname &quot;${consent_group_abv_name^^}&quot; -consentgroupcode &quot;${consent_group_code}&quot; -studyaccession &quot;${study_accession,,}&quot;
 
 aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
 
@@ -91,23 +102,7 @@ export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
-
-aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/data/${abv_name^^}_PatientMapping.v2.csv data/  --quiet
-aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ beforeConversion/ --recursive --quiet
-
-for  file  in  beforeConversion/*; do
-echo &quot;$file&quot;
-FILE_ENCODING=$(file -i $file)
-iconv -f 8859_1 -t UTF-8//TRANSLIT &quot;$file&quot; -o data/decoded/$(basename $file)
-done
-
-cp data/* decoded/
-
-java -jar jars/HPDSPatientNumTracker.jar
-
-aws s3 cp data/${abv_name^^}_PatientMapping.v2.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/data/${abv_name^^}_PatientMapping.v2.csv
-aws s3 cp data/PatientPool.txt s3://avillach-73-bdcatalyst-etl/general/data/PatientPool.txt
-</command>
+aws s3 cp completed/metadata.json s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>

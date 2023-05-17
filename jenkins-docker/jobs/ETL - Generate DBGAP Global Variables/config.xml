@@ -83,6 +83,7 @@ do
   if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]]; then
 
 	  if [[ ${stdy_type,,} == &quot;topmed&quot; ]] || [[ ${stdy_type,,} == &quot;parent&quot; ]]; then
+        echo &quot;pulling data for $abv_name&quot;
         aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
         
         export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
@@ -93,7 +94,7 @@ do
         
         aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ data/ --recursive --exclude &quot;*&quot; --include &quot;${stdy_id}*sample.multi*&quot; --include &quot;${stdy_id}*Sample.Multi*&quot; --include &quot;${stdy_id}*Sample.MULTI*&quot; --quiet
         
-        aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/data/${abv_name^^}_PatientMapping.v2.csv data/
+        aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/data/${abv_name^^}_PatientMapping.v2.csv data/ --quiet
         
         unset AWS_ACCESS_KEY_ID
         unset AWS_SECRET_ACCESS_KEY
@@ -109,23 +110,21 @@ aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791
 export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-
+echo &quot;pulling harmonized data set&quot;
 aws s3 cp s3://avillach-73-bdcatalyst-etl/hrmn/completed/HRMN_allConcepts.csv data/ --quiet
 
 aws s3 cp s3://avillach-73-bdcatalyst-etl/hrmn/data/HRMN_PatientMapping.v2.csv data/ --quiet
 
-aws s3 cp ${managed_inputs} data/
-
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
 unset AWS_SESSION_TOKEN
-
+echo &quot;generating sample id data&quot;
 java -jar jars/SampleIdGenerator.jar 
-
+echo &quot;generating consent group data&quot;
 java -jar jars/ConsentGroupGenerator.jar
-
+echo &quot;generating phs id data&quot;
 java -jar jars/PHSIdGenerator.jar
-
+echo &quot;generating rootnode data&quot;
 java -jar jars/RootNodeGenerator.jar
 
 aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
