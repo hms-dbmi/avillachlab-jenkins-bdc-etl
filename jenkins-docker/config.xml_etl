@@ -1,11 +1,11 @@
 <?xml version='1.1' encoding='UTF-8'?>
 <hudson>
   <disabledAdministrativeMonitors>
-    <string>jenkins.diagnostics.RootUrlNotSetMonitor</string>
     <string>jenkins.diagnostics.SecurityIsOffMonitor</string>
+    <string>jenkins.diagnostics.RootUrlNotSetMonitor</string>
+    <string>jenkins.security.s2m.MasterKillSwitchWarning</string>
   </disabledAdministrativeMonitors>
-  <version>2.204.2</version>
-  <installStateName>RUNNING</installStateName>
+  <version>2.387.3</version>
   <numExecutors>5</numExecutors>
   <mode>NORMAL</mode>
   <useSecurity>true</useSecurity>
@@ -38,12 +38,14 @@
     </hudson.model.AllView>
     <listView>
       <owner class="hudson" reference="../../.."/>
-      <name>Data Ingestion Pipelines</name>
+      <name>Phenotypic Data Ingestion Pipelines</name>
       <filterExecutors>false</filterExecutors>
       <filterQueue>false</filterQueue>
       <properties class="hudson.model.View$PropertyList"/>
       <jobNames>
         <comparator class="java.lang.String$CaseInsensitiveComparator"/>
+        <string>ETL - Non-Compliant Phenotype Data Load Pipeline</string>
+        <string>ETL - Phenotype Data Load Pipeline</string>
       </jobNames>
       <jobFilters/>
       <columns>
@@ -59,21 +61,75 @@
     </listView>
     <listView>
       <owner class="hudson" reference="../../.."/>
-      <name>Data Curation Pipelines</name>
+      <name>Phenotypic Data Curation Pipelines</name>
       <filterExecutors>false</filterExecutors>
       <filterQueue>false</filterQueue>
       <properties class="hudson.model.View$PropertyList"/>
       <jobNames>
-        <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView[5]/jobNames/comparator"/>
-        <string>ETL - BDC Update Metadata Counts</string>
+        <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
+        <string>ETL - Archive Previous Study Version</string>
         <string>ETL - Configure gen3 client</string>
         <string>ETL - DBGap Decode Data</string>
-        <string>ETL - DBGap Generate All Concepts Pipeline</string>
+        <string>ETL - DBGap Sequence Patients</string>
         <string>ETL - Generate Metadata</string>
-        <string>ETL - Merge and Generate data analyzer javabin</string>
-        <string>ETL - Non Compliant Generate All Concepts Pipeline</string>
+        <string>ETL - HPDS Javabin generation pipeline</string>
         <string>ETL - Pull Raw Data from Gen3</string>
-        <string>ETL - Sequence Patients</string>
+        <string>ETL - Update Metadata Counts</string>
+      </jobNames>
+      <jobFilters/>
+      <columns>
+        <hudson.views.StatusColumn/>
+        <hudson.views.WeatherColumn/>
+        <hudson.views.JobColumn/>
+        <hudson.views.LastSuccessColumn/>
+        <hudson.views.LastFailureColumn/>
+        <hudson.views.LastDurationColumn/>
+        <hudson.views.BuildButtonColumn/>
+      </columns>
+      <recurse>false</recurse>
+    </listView>
+    <listView>
+      <owner class="hudson" reference="../../.."/>
+      <name>Non-compliant Data Curation </name>
+      <description>For non-compliant Dbgap studies.  Data curation will vary.  This view contain any jobs needed to prepare data for the data ingestion pipeline.</description>
+      <filterExecutors>false</filterExecutors>
+      <filterQueue>false</filterQueue>
+      <properties class="hudson.model.View$PropertyList"/>
+      <jobNames>
+        <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
+        <string>ETL - Generate DBGAP Mapping Files</string>
+        <string>ETL - Generate Non-compliant Metadata</string>
+        <string>ETL - Generate Non-DBGAP Global All Concepts</string>
+        <string>ETL - Import Non-Compliant Decoded Data From Git</string>
+        <string>ETL - Non Compliant Sequence Patients</string>
+        <string>ETL - Non-Compliant Phenotype Data Load Pipeline</string>
+        <string>SWB FailSafe - Upload Decoded Data Set to s3</string>
+        <string>SWB FailSafe - Upload Destigmatizing variables to s3</string>
+      </jobNames>
+      <jobFilters/>
+      <columns>
+        <hudson.views.StatusColumn/>
+        <hudson.views.WeatherColumn/>
+        <hudson.views.JobColumn/>
+        <hudson.views.LastSuccessColumn/>
+        <hudson.views.LastFailureColumn/>
+        <hudson.views.LastDurationColumn/>
+        <hudson.views.BuildButtonColumn/>
+      </columns>
+      <recurse>false</recurse>
+    </listView>
+    <listView>
+      <owner class="hudson" reference="../../.."/>
+      <name>Genomic Ingestion Testing</name>
+      <filterExecutors>false</filterExecutors>
+      <filterQueue>false</filterQueue>
+      <properties class="hudson.model.View$PropertyList"/>
+      <jobNames>
+        <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
+        <string>Sharra test for index file generation</string>
+        <string>Sharra test for vcf import and load</string>
+        <string>Sharra test for vcf load</string>
+        <string>Sharra test genomic ingestion pipeline</string>
       </jobNames>
       <jobFilters/>
       <columns>
@@ -88,7 +144,7 @@
       <recurse>false</recurse>
     </listView>
   </views>
-  <primaryView>Data Ingestion Pipelines</primaryView>
+  <primaryView>Phenotypic Data Ingestion Pipelines</primaryView>
   <slaveAgentPort>50000</slaveAgentPort>
   <label></label>
   <crumbIssuer class="hudson.security.csrf.DefaultCrumbIssuer">
@@ -101,26 +157,26 @@
         <unserializable-parents/>
         <tree-map>
           <default>
-            <comparator class="hudson.util.CaseInsensitiveComparator"/>
+            <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../../../../views/listView/jobNames/comparator"/>
           </default>
           <int>7</int>
           <string>arn_role_app</string>
-          <string>${arn_role_app}</string>
+          <string>arn:aws:iam::900561893673:role/hms-dbmi-cnc-role</string>
           <string>arn_role_cnc</string>
-          <string>${arn_role_cnc}</string>
+          <string>arn:aws:iam::900561893673:role/system/jenkins-s3-role</string>
           <string>arn_role_data</string>
-          <string>${arn_role_data}</string>
-          <string>stack_s3_bucket</string>
-          <string>${stack_s3_bucket}</string>
+          <string> arn:aws:iam::736265540791:role/curated-datasets-s3-role</string>
           <string>avillachlab_release_control_repo</string>
-          <string>${avillachlab_release_control_repo}</string>
-          <string>git_branch_avillachlab_jenkins_dev_release_control</string>
-          <string>${git_branch_avillachlab_jenkins_dev_release_control}</string>
+          <string>https://github.com/hms-dbmi/avillachlab-jenkins-dev-release-control-integration</string>
           <string>aws_account_app</string>
-          <string>${aws_account_app}</string>
-
+          <string>900561893673</string>
+          <string>git_branch_avillachlab_jenkins_dev_release_control</string>
+          <string>paul-non-FISMA</string>
+          <string>stack_s3_bucket</string>
+          <string>avillach-biodatacatalyst-deployments-3drb48r</string>
         </tree-map>
       </envVars>
     </hudson.slaves.EnvironmentVariablesNodeProperty>
   </globalNodeProperties>
+  <nodeRenameMigrationNeeded>true</nodeRenameMigrationNeeded>
 </hudson>
