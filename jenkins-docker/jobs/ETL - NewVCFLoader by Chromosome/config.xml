@@ -1,0 +1,142 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.FileParameterDefinition>
+          <name>vcfIndex.tsv</name>
+        </hudson.model.FileParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>javaOpts</name>
+          <defaultValue>-Xmx48g</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.2.1">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>https://github.com/hms-dbmi/pic-sure-hpds</url>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>feature/ALS-4978-spring-boot</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="empty-list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>JDK-18</jdk>
+  <triggers/>
+  <concurrentBuild>true</concurrentBuild>
+  <builders>
+    <hudson.tasks.Maven>
+      <targets>clean install -DskipTests</targets>
+      <mavenName>Maven 3.9.5</mavenName>
+      <usePrivateRepository>false</usePrivateRepository>
+      <settings class="jenkins.mvn.DefaultSettingsProvider"/>
+      <globalSettings class="jenkins.mvn.DefaultGlobalSettingsProvider"/>
+      <injectBuildVariables>false</injectBuildVariables>
+    </hudson.tasks.Maven>
+    <hudson.tasks.Shell>
+      <command>ls -l
+
+        mkdir -p data
+
+        studyId=$(head -n 1 vcfIndex.tsv)
+
+        rm -rf data/${studyId}
+        mkdir -p data/${studyId}
+        mkdir -p data/${studyId}/all
+        mkdir -p data/${studyId}/merged
+        mkdir -p data/vcfInput
+
+        for i in $(seq 1 22); do
+        sed -n &quot;2p&quot; vcfIndex.tsv &gt; &quot;data/${studyId}/chr${i}VcfIndex.tsv&quot;
+        lineNum=$((i + 2))
+        sed -n &quot;${lineNum}p&quot; vcfIndex.tsv &gt;&gt; &quot;data/${studyId}/chr${i}VcfIndex.tsv&quot;
+        done
+
+        sed -n &quot;2p&quot; vcfIndex.tsv &gt; &quot;data/${studyId}/chrXVcfIndex.tsv&quot;
+        sed -n &quot;25p&quot; vcfIndex.tsv &gt;&gt; &quot;data/${studyId}/chrXVcfIndex.tsv&quot;
+
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr1.annotated.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr2.annotated.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr3.annotated.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr4.annotated.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr5.annotated.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr6.annotated.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr7.annotated.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr8.annotated.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr9.annotated.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr10.annotated.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr11.annotated.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr12.annotated.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr13.annotated.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr14.annotated.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr15.annotated.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr16.annotated.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr17.annotated.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr18.annotated.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr19.annotated.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr20.annotated.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr21.annotated.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr22.annotated.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chrX.annotated.hpds.vcf.gz data/vcfInput/</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+    <hudson.tasks.Shell>
+      <command>studyId=$(head -n 1 vcfIndex.tsv)
+
+
+        i=&apos;X&apos;
+
+        mkdir -p &quot;data/${studyId}/${i}/all&quot;
+        mkdir -p &quot;data/${studyId}/${i}/merged&quot;
+
+        java ${javaOpts} -jar docker/pic-sure-hpds-etl/VCFLocalLoader-jar-with-dependencies.jar data/${studyId}/chr${i}VcfIndex.tsv data/${studyId}/${i}/all data/${studyId}/${i}/merged
+        ### assume etl role
+        unset AWS_SESSION_TOKEN AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+        aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+        export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+        export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+        export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+
+        aws s3 sync &quot;data/${studyId}/${i}/all&quot; &quot;s3://avillach-73-bdcatalyst-etl/general/hpds/genomics_javabins/9b/v3/${studyId}/${i}/&quot;
+
+
+        for i in $(seq 1 22); do
+        mkdir -p &quot;data/${studyId}/${i}/all&quot;
+        mkdir -p &quot;data/${studyId}/${i}/merged&quot;
+
+        java ${javaOpts} -jar docker/pic-sure-hpds-etl/VCFLocalLoader-jar-with-dependencies.jar data/${studyId}/chr${i}VcfIndex.tsv data/${studyId}/${i}/all data/${studyId}/${i}/merged
+        ### assume etl role
+        unset AWS_SESSION_TOKEN AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+        aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+        export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+        export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+        export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+
+        aws s3 sync &quot;data/${studyId}/${i}/all&quot; &quot;s3://avillach-73-bdcatalyst-etl/general/hpds/genomics_javabins/9b/v3/${studyId}/${i}/&quot;
+        done
+
+
+        rm -rf data/${studyId}
+        rm -rf data/vcfInput/${studyId}*</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers/>
+</project>
