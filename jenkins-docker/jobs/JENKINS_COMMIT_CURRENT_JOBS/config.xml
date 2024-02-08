@@ -4,10 +4,20 @@
   <description>This job will commit to a developer branch.  Committing to master will be allowed.</description>
   <keepDependencies>false</keepDependencies>
   <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@320.v5a_0933a_e7d61">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
     <hudson.model.ParametersDefinitionProperty>
       <parameterDefinitions>
         <hudson.model.StringParameterDefinition>
+          <name>jenkins-etl-repo</name>
+          <defaultValue>https://github.com/hms-dbmi/avillachlab-jenkins-bdc-etl</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
           <name>branch</name>
+          <defaultValue>main</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
@@ -24,16 +34,20 @@
     <hudson.tasks.Shell>
       <command>#!/bin/bash
 
-cd ../../
+cd ${JENKINS_HOME}
 
 tar zvcf jobs.tar.gz jobs/*/config.xml
 tar -tvf jobs.tar.gz
+
 echo &quot;${WORKSPACE}&quot;
+
 cp jobs.tar.gz ${WORKSPACE}
+
 if [[ $branch != &apos;master&apos; ]]; then
 	cd ${WORKSPACE}
-	git clone -b ${branch} https://github.com/hms-dbmi/avillachlab-jenkins
-    tar zxvf jobs.tar.gz -C avillachlab-jenkins/jenkins-docker/
+	echo &quot;git clone -b ${branch} ${jenkins-etl-repo}&quot;
+    git clone -b ${branch} https://github.com/hms-dbmi/avillachlab-jenkins-bdc-etl
+    tar zxvf jobs.tar.gz -C avillachlab-jenkins-bdc-etl/jenkins-docker/
 else 
 	echo &quot;committing to master is not allowed&quot;
 fi</command>

@@ -4,7 +4,7 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@1.33">
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@320.v5a_0933a_e7d61">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
@@ -23,7 +23,7 @@
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@4.10.3">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.2.0">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -72,17 +72,17 @@ unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
 unset AWS_SESSION_TOKEN
 
-csvcut -c 1,2,3,8,9 Managed_Inputs.csv &gt; inputs.csv
+csvcut -c 1,2,3,8,9,15 Managed_Inputs.csv &gt; inputs.csv
 
 # Generate mappings
 cat	inputs.csv
 IFS=&apos;,&apos;
 [ ! -f inputs.csv ]
-while read abv_name stdy_id stdy_type data_ready data_processed
+while read abv_name stdy_id stdy_type data_ready data_processed has_multi
 do
   if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]] &amp;&amp; [[ &quot;${data_processed,,}&quot; == &quot;no&quot; ]]; then
 
-	  if [ ${stdy_type,,} == &quot;biolincc&quot; ] || [ ${stdy_type,,} == &quot;other&quot; ] || [ ${stdy_type,,} == &quot;orchid&quot; ] || [ ${stdy_type,,} == &quot;nsrr&quot; ]; then
+	  if [[ ${stdy_type,,} != &quot;parent&quot; ]] &amp;&amp; [[ ${stdy_type,,} != &quot;topmed&quot; ]] &amp;&amp; [[ ${stdy_type,,} != &quot;substudy&quot; ]]; then
 
         ### assume etl role
         aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
@@ -95,14 +95,18 @@ do
         
         sed -i &apos;1s/^\xEF\xBB\xBF//&apos; data/*
         
-        java -jar jars/GenericMappingGenerator.jar -trialid ${stdy_id} &gt; completed/${stdy_id}_mapping_gen.log 
+        java -jar jars/GenericMappingGenerator.jar -trialid ${stdy_id} &gt; completed/${stdy_id}_mapping_gen1.log 
         #cat completed/${stdy_id}_mapping_gen.log
-        aws s3 cp completed/${stdy_id}_mapping.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/mappings/${stdy_id}/mapping2.csv --quiet
+
         #aws s3 cp completed/${stdy_id}_mapping_gen.log s3://avillach-73-bdcatalyst-etl/${abv_name,,}/mappings/${stdy_id}/${stdy_id}_mapping_gen.log --quiet
         #aws s3 cp completed/${stdy_id}_FilesMissingDictionaries.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/mappings/${stdy_id}/${stdy_id}_FilesMissingDictionaries.csv --quiet
-         
-        #find data/ -type f -exec rm -rf {} \;
-        
+        if [[ ${has_multi} ]]; then
+            aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ data/ --recursive --exclude=&quot;*&quot; --include=&quot;${stdy_id}*&quot; --quiet
+        	java -jar jars/DbgapTreeBuilder3.jar -trialid ${stdy_id} &gt; completed/${stdy_id}_mapping_gen2.log 
+            cat completed/${stdy_id}_mapping2.csv &gt;&gt; completed/${stdy_id}_mapping.csv
+        fi 
+        find data/ -type f -exec rm -rf {} \;
+        aws s3 cp completed/${stdy_id}_mapping.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/mappings/${stdy_id}/mapping2.csv --quiet
         ### remove role for next iteration
         unset AWS_ACCESS_KEY_ID
         unset AWS_SECRET_ACCESS_KEY

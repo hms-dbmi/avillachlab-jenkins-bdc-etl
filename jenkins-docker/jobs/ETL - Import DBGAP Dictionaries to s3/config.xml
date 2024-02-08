@@ -4,7 +4,7 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@1.33">
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@320.v5a_0933a_e7d61">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
@@ -23,7 +23,7 @@
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@4.10.3">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.2.0">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -32,7 +32,7 @@
     </userRemoteConfigs>
     <branches>
       <hudson.plugins.git.BranchSpec>
-        <name>*/master</name>
+        <name>*/genomicIngestion</name>
       </hudson.plugins.git.BranchSpec>
     </branches>
     <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
@@ -57,7 +57,7 @@ export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apo
 
 aws s3 cp ${managed_inputs} .
 
-csvcut -c 1,2,3,8,9 Managed_Inputs.csv &gt; inputs.csv
+csvcut -c 1,2,3,8,9,15 Managed_Inputs.csv &gt; inputs.csv
 
 cat Managed_Inputs.csv
 # Generate mappings
@@ -65,11 +65,11 @@ cat	inputs.csv
 
 IFS=&apos;,&apos;
 [ ! -f inputs.csv ]
-while read abv_name stdy_id stdy_type data_ready data_processed
+while read abv_name stdy_id stdy_type data_ready data_processed has_multi
 do
   if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]] &amp;&amp; [[ &quot;${data_processed,,}&quot; == &quot;no&quot; ]]; then
 
-	  if [[ ${stdy_type,,} == &quot;topmed&quot; ]] || [[ ${stdy_type,,} == &quot;parent&quot; ]]; then
+	   if [[ ${has_multi,,} == &quot;yes&quot; ]]; then
         echo &quot;downloading metadata for $stdy_id&quot;
         aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${stdy_id}/metadata/ --recursive --exclude &quot;*&quot; --include &quot;${stdy_id}*.xml&quot; --quiet
 

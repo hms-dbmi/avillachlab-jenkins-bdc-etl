@@ -4,19 +4,20 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@1.33">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
     <hudson.model.ParametersDefinitionProperty>
       <parameterDefinitions>
         <hudson.model.FileParameterDefinition>
           <name>server.key</name>
-          <description></description>
         </hudson.model.FileParameterDefinition>
         <hudson.model.FileParameterDefinition>
           <name>server.crt</name>
-          <description></description>
         </hudson.model.FileParameterDefinition>
         <hudson.model.FileParameterDefinition>
           <name>server.chain</name>
-          <description></description>
         </hudson.model.FileParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
@@ -36,11 +37,11 @@ export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
-aws s3 cp server.key s3://$stack_s3_bucket/certs/httpd/server.key
+#aws s3 cp server.key s3://$stack_s3_bucket/certs/httpd/server.key
 aws s3 cp server.crt s3://$stack_s3_bucket/certs/httpd/server.crt
 aws s3 cp server.chain s3://$stack_s3_bucket/certs/httpd/server.chain
 
-rm server.key
+#rm server.key
 rm server.crt
 rm server.chain
 
@@ -48,6 +49,7 @@ unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
 unset AWS_SESSION_TOKEN
 </command>
+      <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>
   <publishers/>

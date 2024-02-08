@@ -4,7 +4,7 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@1.33">
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@320.v5a_0933a_e7d61">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
@@ -63,9 +63,9 @@ export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
-tar zcf biodatacatalyst_javabins_data_analyzer_${ts}.tar.gz columnMeta.csv *.javabin encryption_key metadata.json conceptsToRemove.txt
+tar zcf biodatacatalyst_javabins_data_analyzer_${ts}_3.tar.gz columnMeta.csv *.javabin encryption_key metadata.json conceptsToRemove.txt
 
-aws s3 cp biodatacatalyst_javabins_data_analyzer_${ts}.tar.gz s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/
+aws s3 cp biodatacatalyst_javabins_data_analyzer_${ts}_3.tar.gz s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/
 
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY

@@ -1,0 +1,125 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description>Job to adjust the variable/subject counts for each study to reflect what is available in pic-sure&#xd;
+Pre-reqs: ingestion pipeline should be run</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@320.v5a_0933a_e7d61">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>metadata_file</name>
+          <defaultValue>s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>s3_bucket</name>
+          <defaultValue>s3://avillach-73-bdcatalyst-etl</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.2.0">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>https://github.com/hms-dbmi/ETL-MissionControl-dbgap-submodule</url>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>*/genomicIngestion</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="empty-list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+
+### assume etl role
+aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+
+aws s3 cp ${metadata_file} metadata_new_search.json
+aws s3 cp ${s3_bucket}/general/data/conceptsToRemove.txt conceptsToRemove.txt
+aws s3 cp ${s3_bucket}/general/data/consents.csv consents.csv
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+
+export LENGTH=$((`jq &apos;.[] | length&apos; metadata_new_search.json`-1))
+
+for i in $(seq 0 ${LENGTH});
+#for i in $(seq 0 10);
+do
+    export id=`jq -r &apos;.bio_data_catalyst[&apos;$i&apos;] | .study_identifier&apos; metadata_new_search.json`
+    export consent=`jq -r &apos;.bio_data_catalyst[&apos;$i&apos;] | .consent_group_code&apos; metadata_new_search.json`
+    export abv=`jq -r &apos;.bio_data_catalyst[&apos;$i&apos;] | .abbreviated_name&apos; metadata_new_search.json`
+    export datatype=`jq -r &apos;.bio_data_catalyst[&apos;$i&apos;] | .data_type&apos; metadata_new_search.json`
+    echo $id $consent $abv
+    aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+	export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+	export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+	export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+    export participantcount=`grep -i $id.$consent consents.csv | wc -l`
+    if [[ $participantcount == 0 ]]; then
+   		 	##consider the study noncompliant, get patient count from patient mapping for study
+        aws s3 cp ${s3_bucket}/${abv,,}/data/${abv^^}_PatientMapping.v2.csv ./${id,,}/${abv^^}_PatientMapping.v2.csv
+        export participantcount=`wc -l &lt; ${id,,}/${abv^^}_PatientMapping.v2.csv`
+    fi
+	echo &quot;Participant count &quot; $participantcount    
+    aws s3 cp ${s3_bucket}/${abv,,}/mappings/${id,,}/mapping2_post_analyzer.csv ./${id,,}/mapping2_post_analyzer.csv
+    export varcount=$((`wc -l &lt; ${id,,}/mapping2_post_analyzer.csv`-`grep -i ${id} conceptsToRemove.txt | wc -l`))
+    echo &quot;Variable count &quot; $varcount
+
+    #if study has genomic data, get genomic sample count from sample attributes file
+    if [[ ${datatype} == *&quot;G&quot;* ]]; then
+    	echo &quot;Getting genomic count&quot;
+        export genomiccount=-1
+    else
+    	export genomiccount=-1
+    fi
+
+	#update the fields with the values received
+	jq -r &apos;. | .bio_data_catalyst[&apos;$i&apos;].clinical_variable_count|=&apos;$varcount&apos; | .bio_data_catalyst[&apos;$i&apos;].raw_clinical_variable_count|=&apos;$varcount&apos; | .bio_data_catalyst[&apos;$i&apos;].raw_clinical_sample_size|=&apos;$participantcount&apos; | .bio_data_catalyst[&apos;$i&apos;].clinical_sample_size|=&apos;$participantcount metadata_new_search.json &gt; out.json
+    #switch back to this command when genomic ready
+    #jq -r &apos;. | .bio_data_catalyst[&apos;$i&apos;].clinical_variable_count|=&apos;$varcount&apos; | .bio_data_catalyst[&apos;$i&apos;].raw_clinical_variable_count|=&apos;$varcount&apos; | .bio_data_catalyst[&apos;$i&apos;].raw_clinical_sample_size|=&apos;$participantcount&apos; | .bio_data_catalyst[&apos;$i&apos;].clinical_sample_size|=&apos;$participantcount&apos; | .bio_data_catalyst[&apos;$i&apos;].raw_genetic_sample_size|=&apos;$genomiccount&apos; | .bio_data_catalyst[&apos;$i&apos;].genetic_sample_size|=&apos;$genomiccount metadata_new_search.json &gt; out.json
+	mv -f out.json metadata_new_search.json
+    unset AWS_ACCESS_KEY_ID
+	unset AWS_SECRET_ACCESS_KEY
+	unset AWS_SESSION_TOKEN
+done
+
+aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+
+aws s3 cp metadata_new_search.json s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search_g.json
+
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers/>
+</project>

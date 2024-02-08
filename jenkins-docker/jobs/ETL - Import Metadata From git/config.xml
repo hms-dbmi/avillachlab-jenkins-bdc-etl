@@ -4,7 +4,7 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@1.33">
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@320.v5a_0933a_e7d61">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
@@ -23,12 +23,11 @@
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@4.10.3">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.2.0">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
         <url>https://github.com/hms-dbmi/pic-sure-metadata-curation</url>
-        <credentialsId>ae99aaad-e5b0-4f64-b1b3-3af57e64fccc</credentialsId>
       </hudson.plugins.git.UserRemoteConfig>
     </userRemoteConfigs>
     <branches>
@@ -71,8 +70,9 @@ do
   if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]]; then
 	 if [ ${abv_name,,} == &quot;red_coral&quot; ]; then       
         aws s3 cp redcoral/output/ s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${stdy_id}/metadata/ --recursive --exclude &quot;*&quot; --include &quot;*.json&quot;
-     elif [ ${stdy_type,,} == &quot;c3po&quot; ] || [ ${stdy_type,,} == &quot;biolincc&quot; ] || [ ${stdy_type,,} == &quot;other&quot; ] || [ ${stdy_type,,} == &quot;orchid&quot; ] || [ ${stdy_type,,} == &quot;nsrr&quot; ]; then       
+     elif [[ ${stdy_type,,} != &quot;parent&quot; ]] &amp;&amp; [[ ${stdy_type,,} != &quot;topmed&quot; ]] &amp;&amp; [[ ${stdy_type,,} != &quot;substudy&quot; ]]; then
         aws s3 cp ${abv_name,,}/output/ s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${stdy_id}/metadata/ --recursive --exclude &quot;*&quot; --include &quot;*.json&quot;
+        aws s3 cp ${abv_name}/output/ s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${stdy_id}/metadata/ --recursive --exclude &quot;*&quot; --include &quot;*.json&quot;
      fi
   else 
      echo &quot;$abv_name not ready for processing&quot;

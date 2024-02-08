@@ -6,7 +6,7 @@
 global vars are identified by first character being an underscore.</description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@1.33">
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@320.v5a_0933a_e7d61">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
@@ -20,7 +20,7 @@ global vars are identified by first character being an underscore.</description>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@4.10.3">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.2.0">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -29,7 +29,7 @@ global vars are identified by first character being an underscore.</description>
     </userRemoteConfigs>
     <branches>
       <hudson.plugins.git.BranchSpec>
-        <name>*/master</name>
+        <name>*/genomicIngestion</name>
       </hudson.plugins.git.BranchSpec>
     </branches>
     <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
@@ -66,7 +66,7 @@ aws s3 cp ${managed_inputs} data/
 
 aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/metadata.json data/
 
-csvcut -c 1,2,3,8,9 data/Managed_Inputs.csv &gt; inputs.csv
+csvcut -c 1,2,3,8,9,15 data/Managed_Inputs.csv &gt; inputs.csv
 
 rm -rf uniq_ids.txt
 
@@ -78,11 +78,11 @@ unset AWS_SESSION_TOKEN
 cat	inputs.csv
 IFS=&apos;,&apos;
 [ ! -f inputs.csv ]
-while read abv_name stdy_id stdy_type data_ready data_processed
+while read abv_name stdy_id stdy_type data_ready data_processed has_multi
 do
   if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]]; then
 
-	  if [[ ${stdy_type,,} == &quot;topmed&quot; ]] || [[ ${stdy_type,,} == &quot;parent&quot; ]]; then
+	   if [[ ${has_multi,,} == &quot;yes&quot; ]]; then
         echo &quot;pulling data for $abv_name&quot;
         aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
         
@@ -126,6 +126,8 @@ echo &quot;generating phs id data&quot;
 java -jar jars/PHSIdGenerator.jar
 echo &quot;generating rootnode data&quot;
 java -jar jars/RootNodeGenerator.jar
+echo &quot;generating genomic sample id global var data&quot;
+java -jar jars/GenomicSampIdGlobalVarGenerator.jar
 
 aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
 
@@ -136,8 +138,9 @@ export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apo
 aws s3 cp completed/ s3://avillach-73-bdcatalyst-etl/general/data/ --recursive
 
 aws s3 cp s3://avillach-73-bdcatalyst-etl/general/mappings/mapping.prerootnodes.csv mappings/mapping.csv
-
-
+# Append the mappings for genomic sample id global variable.
+cat completed/SampleId_mapping.csv &gt;&gt; mappings/mapping.csv
+# Append the mappings for root node global variable.
 cat completed/rootnode_mapping.csv &gt;&gt; mappings/mapping.csv
 
 aws s3 cp mappings/mapping.csv s3://avillach-73-bdcatalyst-etl/general/mappings/mapping.postrootnodes.csv

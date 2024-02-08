@@ -1,14 +1,18 @@
 <?xml version='1.1' encoding='UTF-8'?>
 <project>
   <actions/>
-  <description>Builds docker image to run RawDataImporter-jar-with-dependencies.jar for dictionary loading.</description>
+  <description>Builds docker image to run DictionaryImporterUtil-jar-with-dependencies.jar in the import process.</description>
   <keepDependencies>false</keepDependencies>
   <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@1.33">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
     <hudson.model.ParametersDefinitionProperty>
       <parameterDefinitions>
         <hudson.model.StringParameterDefinition>
           <name>pipeline_build_id</name>
-          <defaultValue>MANUAL_RUN</defaultValue>
+          <defaultValue>MANUAL_RUN_FULL_DATA_SET</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
@@ -29,7 +33,7 @@
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
         <url>https://github.com/hms-dbmi/pic-sure-search-prototype</url>
-        <credentialsId>8d05504e-c08a-428b-890e-9b03e755f436</credentialsId>
+        <credentialsId>ae99aaad-e5b0-4f64-b1b3-3af57e64fccc</credentialsId>
       </hudson.plugins.git.UserRemoteConfig>
     </userRemoteConfigs>
     <branches>
@@ -63,17 +67,11 @@ GIT_COMMIT_SHORT=`echo ${GIT_COMMIT} | cut -c1-7`
 
 cd tagging
 
-echo &quot;FROM openjdk:11-jre-slim as loader&quot; &gt; Dockerfile
-echo &quot;ADD  ./target/RawDataImporter-jar-with-dependencies.jar .&quot; &gt;&gt; Dockerfile
+docker build -t hms-dbmi/pic-sure-hpds-dictionary:${GIT_BRANCH_SHORT}_${GIT_COMMIT_SHORT} -f Dockerfile_hpds_dictionary .
 
-echo &quot;ENTRYPOINT [\&quot;java\&quot;, \&quot;-Xmx8192m\&quot;, \&quot;-jar\&quot;, \&quot;RawDataImporter-jar-with-dependencies.jar\&quot;]&quot; &gt;&gt; Dockerfile
-echo &quot;CMD [ \&quot;/local/source/\&quot; ]&quot; &gt;&gt; Dockerfile
+docker save hms-dbmi/pic-sure-hpds-dictionary:${GIT_BRANCH_SHORT}_${GIT_COMMIT_SHORT} | gzip &gt; pic-sure-hpds-dictionary.tar.gz
 
-docker build -t hms-dbmi/pic-sure-hpds-search:${GIT_BRANCH_SHORT}_${GIT_COMMIT_SHORT} .
-
-docker save hms-dbmi/pic-sure-hpds-search:${GIT_BRANCH_SHORT}_${GIT_COMMIT_SHORT} | gzip &gt; pic-sure-hpds-search.tar.gz
-
-aws s3 --sse=AES256 cp pic-sure-hpds-search.tar.gz s3://$S3_BUCKET_NAME/releases/jenkins_pipeline_build_${pipeline_build_id}/pic-sure-hpds-search.tar.gz
+aws s3 --sse=AES256 cp pic-sure-hpds-dictionary.tar.gz s3://$S3_BUCKET_NAME/releases/jenkins_pipeline_build_${pipeline_build_id}/pic-sure-hpds-dictionary.tar.gz
 
 </command>
       <configuredLocalRules/>

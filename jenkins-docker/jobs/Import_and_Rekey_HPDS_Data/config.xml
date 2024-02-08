@@ -4,35 +4,33 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@1.33">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
     <hudson.model.ParametersDefinitionProperty>
       <parameterDefinitions>
         <hudson.model.StringParameterDefinition>
           <name>source_s3_url</name>
-          <description></description>
-          <defaultValue></defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
           <name>output_file_name</name>
-          <description></description>
-          <defaultValue></defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
           <name>destination_bucket_hash</name>
           <description>the git hash of the commit that changed the data set</description>
-          <defaultValue></defaultValue>
           <trim>true</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.BooleanParameterDefinition>
           <name>isDestigmatized</name>
-          <description></description>
           <defaultValue>false</defaultValue>
         </hudson.model.BooleanParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@4.7.1">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@4.10.3">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -56,9 +54,12 @@
   <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Shell>
-      <command>
+      <command>#!/bin/bash
+
 ### Build ETL Image
-aws s3 --sse=AES256 cp s3://${stack_s3_bucket}/releases/jenkins_pipeline_build_${GIT_COMMIT}/pic-sure-hpds-etl.tar.gz pic-sure-hpds-etl.tar.gz
+#aws s3 --sse=AES256 cp s3://${stack_s3_bucket}/releases/jenkins_pipeline_build_${GIT_COMMIT}/pic-sure-hpds-etl.tar.gz pic-sure-hpds-etl.tar.gz
+
+aws s3 --sse=AES256 cp s3://${stack_s3_bucket}/releases/jenkins_pipeline_build_${destination_bucket_hash}/pic-sure-hpds-etl.tar.gz pic-sure-hpds-etl.tar.gz
 
 HPDS_ETL_IMAGE=`docker load &lt; ./pic-sure-hpds-etl.tar.gz  | cut -d &apos; &apos; -f 3`
 echo $HPDS_ETL_IMAGE
@@ -73,7 +74,7 @@ aws sts assume-role --duration-seconds 900 --role-arn $arn_role_data --role-sess
 export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-
+echo &quot;aws s3 cp ${source_s3_url} local/source/javabins.tar.gz&quot;
 aws s3 cp ${source_s3_url} local/source/javabins.tar.gz
 
 tar -xvzf local/source/javabins.tar.gz -C local/source
@@ -105,7 +106,7 @@ fi
 
 cd &quot;$WORKSPACE&quot;/local/hpds/
 
-tar -cvzf ${output_file_name}.tar.gz *.javabin encryption_key metadata.json
+tar -cvzf ${output_file_name}.tar.gz *.javabin encryption_key metadata.json columnMeta.csv
 
 aws s3 --sse=AES256 cp ${output_file_name}.tar.gz s3://${stack_s3_bucket}/data/${destination_bucket_hash}/${output_file_name}.tar.gz --quiet
 
@@ -122,7 +123,7 @@ fi
   </builders>
   <publishers/>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.39">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.40">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>

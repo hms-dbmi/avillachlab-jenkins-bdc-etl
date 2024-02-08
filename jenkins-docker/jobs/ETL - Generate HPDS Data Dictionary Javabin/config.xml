@@ -4,7 +4,7 @@
   <description>Imports data dictionaries into HPDS format.</description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@1.33">
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@320.v5a_0933a_e7d61">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
@@ -39,12 +39,11 @@
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@4.10.3">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.2.0">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
         <url>https://github.com/hms-dbmi/pic-sure-search-prototype</url>
-        <credentialsId>ae99aaad-e5b0-4f64-b1b3-3af57e64fccc</credentialsId>
       </hudson.plugins.git.UserRemoteConfig>
     </userRemoteConfigs>
     <branches>
@@ -60,7 +59,18 @@
   <disabled>false</disabled>
   <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
   <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
-  <triggers/>
+  <triggers>
+    <jenkins.triggers.ReverseBuildTrigger>
+      <spec></spec>
+      <upstreamProjects>ETL - Generate Phenotype Javabins Data Analyzer</upstreamProjects>
+      <threshold>
+        <name>SUCCESS</name>
+        <ordinal>0</ordinal>
+        <color>BLUE</color>
+        <completeBuild>true</completeBuild>
+      </threshold>
+    </jenkins.triggers.ReverseBuildTrigger>
+  </triggers>
   <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Maven>
@@ -85,25 +95,40 @@ GIT_COMMIT_SHORT=`echo ${GIT_COMMIT} | cut -c1-7`
 
 cd tagging
 
-docker build -t hms-dbmi/pic-sure-hpds-dictionary:${GIT_BRANCH_SHORT}_${GIT_COMMIT_SHORT} -f Dockerfile_hpds_dictionary .
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
 
-docker save hms-dbmi/pic-sure-hpds-dictionary:${GIT_BRANCH_SHORT}_${GIT_COMMIT_SHORT} | gzip &gt; pic-sure-hpds-dictionary.tar.gz
+aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
 
-HPDS_ETL_IMAGE=`docker load &lt; ./pic-sure-hpds-dictionary.tar.gz  | cut -d &apos; &apos; -f 3`
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
-cd ${WORKSPACE}
+# Pull config files and stigmatizing variables 
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/conceptsToRemove.txt ./local/source/conceptsToRemove.csv
 
-echo $HPDS_ETL_IMAGE
-ls -alh `pwd`
+# Pull columnMeta.csv
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/columnMeta/columnMeta.csv ./local/source/columnMeta.csv
+
+# Adding the files to the docker container that is needed is much better practice then doing the volume mounting 
+# that is currently being done in the docker run.  Will investigate further if that is possible. TD
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/resources/dictionary_control_file.csv ./configs/dictionary_control_file.csv
 
 mkdir -p tmp/
 mkdir -p local
 mkdir -p local/source
 mkdir -p output/
+mkdir -p configs/
+
 #cp columnMeta.csv local/source/
 #cp conceptsToRemove.csv local/source/
 
 ### Pull data set to rekey.
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+
 aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
 
 export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
@@ -126,8 +151,8 @@ do
 
 	  #if [[ ${stdy_type,,} == &quot;topmed&quot; ]] || [[ ${stdy_type,,} == &quot;parent&quot; ]]; then
         echo &quot;downloading metadata for $stdy_id&quot;
-        aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${stdy_id}/metadata/ local/source/${stdy_id}/rawData/ --recursive --exclude &quot;*&quot; --include &quot;${stdy_id}*.xml&quot; --quiet
-        #aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${stdy_id}/metadata/ local/source/${stdy_id}/rawData/ --recursive --exclude &quot;*&quot; --include &quot;*.json&quot; 
+        aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${stdy_id}/metadata/ ./local/source/${stdy_id}/rawData/ --recursive --exclude &quot;*&quot; --include &quot;${stdy_id}*.xml&quot; --quiet
+        aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${stdy_id}/metadata/ ./local/source/${stdy_id}/rawData/ --recursive --exclude &quot;*&quot; --include &quot;*.json&quot; 
 
       #fi
    else 
@@ -137,26 +162,34 @@ done &lt; inputs.csv
 
 ### Temp to get to this work
 ### non compliant and harmonized studies
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002415/metadata/babyhug_metadata.json local/source/phs002415/rawData/babyhug_metadata.json
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002362/metadata/csscd_metadata.json local/source/phs002362/rawData/csscd_metadata.json
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002385/metadata/hct_for_scd_metadata.json local/source/phs002385/rawData/hctforscd_metadata.json
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002348/metadata/msh_metadata.json local/source/phs002348/rawData/msh_metadata.json
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002299/metadata/orchid_metadata.json local/source/phs002299/rawData/
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002363/metadata/redcoral_metadata.json local/source/phs002363/rawData/
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002386/metadata/stopii_metadata.json local/source/phs002386/rawData/
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002383/metadata/walkphasst_metadata.json local/source/phs002383/rawData/
 
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002808/metadata/numom2b_metadata.json local/source/phs002808/rawData/
+### giving the loop a try
+#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002415/metadata/babyhug_metadata.json local/source/phs002415/rawData/babyhug_metadata.json
+#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002362/metadata/csscd_metadata.json local/source/phs002362/rawData/csscd_metadata.json
+#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002385/metadata/hct_for_scd_metadata.json local/source/phs002385/rawData/hctforscd_metadata.json
+#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002348/metadata/msh_metadata.json local/source/phs002348/rawData/msh_metadata.json
+#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002299/metadata/orchid_metadata.json local/source/phs002299/rawData/
+#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002363/metadata/redcoral_metadata.json local/source/phs002363/rawData/
+#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002386/metadata/stopii_metadata.json local/source/phs002386/rawData/
+#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002383/metadata/walkphasst_metadata.json local/source/phs002383/rawData/
 
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002694/metadata/activ4a_metadata.json local/source/phs002694/rawData/
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002710/metadata/activ4b_metadata.json local/source/phs002710/rawData/
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002752/metadata/c3po_metadata.json local/source/phs002752/rawData/
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002715/metadata/nsrr_cfs_metadata.json local/source/phs002715/rawData/
+#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002808/metadata/numom2b_metadata.json local/source/phs002808/rawData/
 
+#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002694/metadata/activ4a_metadata.json local/source/phs002694/rawData/
+#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002710/metadata/activ4b_metadata.json local/source/phs002710/rawData/
+#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002752/metadata/c3po_metadata.json local/source/phs002752/rawData/
+#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002715/metadata/nsrr_cfs_metadata.json local/source/phs002715/rawData/
+#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs003212/metadata/dir_metadata.json local/source/phs003212/rawData/
 
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/hrmn/metadata/dcc_harmonized.json  local/source/hrmn/rawData/
+#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/tutorial-biolincc_camp/metadata/camp_metadata.json local/source/tutorial-biolincc_camp/rawData/
+#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/tutorial-tutorial-biolincc_digitalis/metadata/biolincc_digitalis_metadata.json local/source/tutorial-tutorial-biolincc_digitalis/rawData/
 
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/columnMeta/columnMeta.csv local/source/columnMeta.csv
+#### remove this if loop is working
+
+# This is not managed by the study loop. 
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/hrmn/metadata/dcc_harmonized.json  ./local/source/hrmn/rawData/
+
+#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/columnMeta/columnMeta.csv local/source/columnMeta.csv
 
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
@@ -168,19 +201,23 @@ export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/conceptsToRemove.txt local/source/conceptsToRemove.csv
-
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
 unset AWS_SESSION_TOKEN
 
-### need conceptsToRemove.txt from another source after development is done
-
 #### Execute dictionary import
+#build image
+docker build -t hms-dbmi/pic-sure-hpds-dictionary:${GIT_BRANCH_SHORT}_${GIT_COMMIT_SHORT} -f Dockerfile_hpds_dictionary .
+
+docker save hms-dbmi/pic-sure-hpds-dictionary:${GIT_BRANCH_SHORT}_${GIT_COMMIT_SHORT} | gzip &gt; pic-sure-hpds-dictionary.tar.gz
+
+HPDS_ETL_IMAGE=`docker load &lt; ./pic-sure-hpds-dictionary.tar.gz  | cut -d &apos; &apos; -f 3`
+
+echo $HPDS_ETL_IMAGE
+
 # volume mount pwd that contains original data files as /opt/local/source/
 #
-mkdir -p &quot;${WORKSPACE}&quot;/output
-echo &quot;docker run -i -v &quot;${WORKSPACE}&quot;/local/source:/local/source -v &quot;${WORKSPACE}&quot;/tagging/output:/usr/local/docker-config/search/ -eLOADER_NAME=DictionaryImporterUtil $HPDS_ETL_IMAGE&quot;
+mkdir -p &quot;${WORKSPACE}&quot;/tagging/output
 docker run -i -v &quot;${WORKSPACE}&quot;/tagging/local/source:/local/source/ -v &quot;${WORKSPACE}&quot;/tagging/output:/usr/local/docker-config/search/ -eLOADER_NAME=DictionaryImporterUtil $HPDS_ETL_IMAGE
 
 cd &quot;$WORKSPACE&quot;/tagging/output
@@ -193,12 +230,9 @@ export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
-echo &quot;aws s3 --sse=AES256 cp dictionary.javabin.tar.gz s3://${stack_s3_bucket}/data/${destination_bucket_hash}/&quot;
-#aws s3 --sse=AES256 cp dictionary.javabin.tar.gz s3://${stack_s3_bucket}/data/${destination_bucket_hash}/ --quiet
-
 aws s3 --sse=AES256 cp dictionary_javabin_${ts}.tar.gz s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/
 
-aws s3 --sse=AES256 cp Missing_Dictionary_Entries_${ts}.csv s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/
+aws s3 --sse=AES256 cp Missing_Dictionary_Entries.csv s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/Missing_Dictionary_Entries_${ts}.csv
 
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY

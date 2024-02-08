@@ -4,7 +4,7 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@1.33">
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@320.v5a_0933a_e7d61">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
@@ -27,7 +27,7 @@
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@4.10.3">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.2.0">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -36,7 +36,7 @@
     </userRemoteConfigs>
     <branches>
       <hudson.plugins.git.BranchSpec>
-        <name>*/master</name>
+        <name>*/genomicIngestion</name>
       </hudson.plugins.git.BranchSpec>
     </branches>
     <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
@@ -73,7 +73,7 @@ rm -rf pic-sure-hpds/
 
 aws s3 cp ${managed_inputs} data/Managed_Inputs.csv
 
-grep -i ${abv_name^^} data/Managed_Inputs.csv &gt; data/Managed_Inputs.csv2
+grep -i ${abv_name^^}, data/Managed_Inputs.csv &gt; data/Managed_Inputs.csv2
 
 mv data/Managed_Inputs.csv2 data/Managed_Inputs.csv
 
@@ -101,7 +101,7 @@ FILE_ENCODING=$(file -i $file)
 iconv -f 8859_1 -t UTF-8//TRANSLIT &quot;$file&quot; -o data/decoded/$(basename $file)
 done
 
-cp data/* decoded/
+cp data/* data/decoded/
 
 java -jar jars/HPDSPatientNumTracker.jar
 

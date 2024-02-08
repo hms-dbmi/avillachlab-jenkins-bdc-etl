@@ -4,7 +4,7 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@1.33">
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@320.v5a_0933a_e7d61">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
@@ -23,7 +23,7 @@
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@4.10.3">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.2.0">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -71,7 +71,7 @@ do
   if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]]; then
 	 if [ ${data_processed,,} == &quot;no&quot; ]; then 
      	if [ ${stdy_type,,} == &quot;c3po&quot; ] || [ ${stdy_type,,} == &quot;biolincc&quot; ] || [ ${stdy_type,,} == &quot;other&quot; ] || [ ${stdy_type,,} == &quot;orchid&quot; ] || [ ${stdy_type,,} == &quot;nsrr&quot; ]; then       
-        	aws s3 cp ${abv_name,,}/output/ s3://avillach-73-bdcatalyst-etl/${abv_name,,}/decoded_data/ --recursive --exclude &quot;*&quot; --include &quot;*.csv&quot;
+        	aws s3 cp ${abv_name}/output/ s3://avillach-73-bdcatalyst-etl/${abv_name,,}/decoded_data/ --recursive --exclude &quot;*&quot; --include &quot;*.csv&quot;
 		fi
      else
         echo &quot;$abv_name already processed&quot;

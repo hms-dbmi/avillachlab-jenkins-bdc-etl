@@ -4,30 +4,31 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@1.33">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
     <hudson.model.ParametersDefinitionProperty>
       <parameterDefinitions>
         <hudson.model.StringParameterDefinition>
           <name>pipeline_build_id</name>
-          <description></description>
           <defaultValue>MANUAL_RUN</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
           <name>git_hash</name>
-          <description></description>
           <defaultValue>*/master</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
           <name>S3_BUCKET_NAME</name>
-          <description></description>
           <defaultValue>${stack_s3_bucket}</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@4.0.0">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@4.10.3">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -36,11 +37,11 @@
     </userRemoteConfigs>
     <branches>
       <hudson.plugins.git.BranchSpec>
-        <name>${git_hash}</name>
+        <name>2cef0a0335c981f952841254704d29b264296f78</name>
       </hudson.plugins.git.BranchSpec>
     </branches>
     <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
-    <submoduleCfg class="list"/>
+    <submoduleCfg class="empty-list"/>
     <extensions/>
   </scm>
   <canRoam>true</canRoam>
@@ -69,10 +70,11 @@ cd ../../
 mkdir -p docker_image_output
 cd docker_image_output
 docker save hms-dbmi/pic-sure-hpds:${GIT_BRANCH_SHORT}_${GIT_COMMIT_SHORT} | gzip &gt; pic-sure-hpds.tar.gz
-aws s3 --sse=AES256 cp pic-sure-hpds.tar.gz s3://$S3_BUCKET_NAME/releases/jenkins_pipeline_build_${pipeline_build_id}/pic-sure-hpds.tar.gz
+aws s3 --sse=AES256 cp pic-sure-hpds.tar.gz s3://$S3_BUCKET_NAME/releases/aric_fix/pic-sure-hpds.tar.gz
 docker save hms-dbmi/pic-sure-hpds-etl:${GIT_BRANCH_SHORT}_${GIT_COMMIT_SHORT} | gzip &gt; pic-sure-hpds-etl.tar.gz
-aws s3 --sse=AES256 cp pic-sure-hpds-etl.tar.gz s3://$S3_BUCKET_NAME/releases/jenkins_pipeline_build_${pipeline_build_id}/pic-sure-hpds-etl.tar.gz
+aws s3 --sse=AES256 cp pic-sure-hpds-etl.tar.gz s3://$S3_BUCKET_NAME/releases/aric_fix/pic-sure-hpds-etl.tar.gz
 </command>
+      <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>
   <publishers/>
