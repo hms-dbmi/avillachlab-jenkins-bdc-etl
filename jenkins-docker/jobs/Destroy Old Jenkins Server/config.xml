@@ -9,25 +9,25 @@
         <hudson.model.StringParameterDefinition>
           <name>stack_s3_bucket</name>
           <description></description>
-          <defaultValue>avillach-biodatacatalyst-deployments-3drb48r</defaultValue>
+          <defaultValue></defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
           <name>stack_id</name>
           <description></description>
-          <defaultValue>3drb48r</defaultValue>
+          <defaultValue></defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
           <name>stack_jenkins_dockerfile</name>
           <description></description>
-          <defaultValue>Dockerfile_nonFisma</defaultValue>
+          <defaultValue>Dockerfile</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
           <name>subnet_id</name>
           <description></description>
-          <defaultValue>subnet-00a35d901a151ab01</defaultValue>
+          <defaultValue>subnet-002719488d0e4f10d</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
@@ -39,39 +39,34 @@
         <hudson.model.StringParameterDefinition>
           <name>access_cidr</name>
           <description></description>
-          <defaultValue>134.174.0.0/16</defaultValue>
+          <defaultValue>172.24.0.68/32</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
           <name>vpc_id</name>
           <description></description>
-          <defaultValue>vpc-06d289a45c9021bdc</defaultValue>
+          <defaultValue>vpc-07fdd0533a5ec2e35</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
           <name>provisioning_cidr</name>
           <description></description>
-          <defaultValue>0.0.0.0/0</defaultValue>
+          <defaultValue>172.36.0.0/25</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>jenkins_githash_to_destroy</name>
+          <description></description>
+          <defaultValue></defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
           <name>cis_centos_linux_ami_id</name>
           <description></description>
-          <defaultValue>ami-0f644567956fefe71</defaultValue>
+          <defaultValue></defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
-        <hudson.model.StringParameterDefinition>
-          <name>config_xml_filename</name>
-          <description>which jenkins configuration file should this use?</description>
-          <defaultValue>config.xml_nonFisma</defaultValue>
-          <trim>true</trim>
-        </hudson.model.StringParameterDefinition>
-        <hudson.model.StringParameterDefinition>
-          <name>okta_app_id</name>
-          <description>The identifier to use for OKTA access</description>
-          <defaultValue></defaultValue>
-          <trim>true</trim>
-        </hudson.model.StringParameterDefinition>
+
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
@@ -100,32 +95,26 @@
   <builders>
     <hudson.tasks.Shell>
       <command>cd dev-jenkins-terraform
+aws s3 --sse=AES256 cp s3://${stack_s3_bucket}/jenkins_state_${jenkins_githash_to_destroy}/terraform.tfstate terraform.tfstate 
 env &gt; env.txt
 terraform init
-terraform apply -auto-approve \
--var &quot;git-commit=`echo ${GIT_COMMIT} |cut -c1-7`&quot; \
+terraform destroy  -auto-approve \
 -var &quot;stack-s3-bucket=${stack_s3_bucket}&quot; \
--var &quot;stack-jenkins-dockerfile=${stack_jenkins_dockerfile}&quot; \
 -var &quot;stack-id=${stack_id}&quot; \
+-var &quot;stack-jenkins-dockerfile=${stack_jenkins_dockerfile}&quot; \
 -var &quot;subnet-id=${subnet_id}&quot; \
 -var &quot;vpc-id=${vpc_id}&quot; \
 -var &quot;instance-profile-name=${instance_profile_name}&quot; \
 -var &quot;access-cidr=${access_cidr}&quot; \
 -var &quot;provisioning-cidr=${provisioning_cidr}&quot; \
--var &quot;config-xml-filename=${config_xml_filename}&quot; \
--var &quot;avillachlab-release-control-repo=${avillachlab_release_control_repo}&quot; \
--var &quot;git-branch-avillachlab-jenkins-dev-release-control=${git_branch_avillachlab_jenkins_dev_release_control}&quot; \
--var &quot;okta-app-id=${okta_app_id}&quot; \
 -var &quot;cis-centos-linux-ami-id=${cis_centos_linux_ami_id}&quot;
 
-aws s3 --sse=AES256 cp terraform.tfstate s3://${stack_s3_bucket}/jenkins_state_${GIT_COMMIT}/terraform.tfstate 
-aws s3 --sse=AES256 cp env.txt s3://${stack_s3_bucket}/jenkins_state_${GIT_COMMIT}/last_env.txt
+aws s3 --sse=AES256 cp terraform.tfstate s3://${stack_s3_bucket}/jenkins_state_${jenkins_githash_to_destroy}/terraform.tfstate 
+aws s3 --sse=AES256 cp env.txt s3://${stack_s3_bucket}/jenkins_state_${jenkins_githash_to_destroy}/last_env.txt
 
-INSTANCE_ID=`terraform state show aws_instance.dev-jenkins | grep &quot;\&quot;i-[a-f0-9]&quot; | cut -f 2 -d &quot;=&quot; | sed &apos;s/&quot;//g&apos;`
 
-while [ -z $(/usr/local/bin/aws --region=us-east-1 ec2 describe-tags --filters &quot;Name=resource-id,Values=${INSTANCE_ID}&quot; | grep InitComplete) ];do echo &quot;still initializing&quot;;sleep 10;done
 
-echo &quot;http://`terraform state show aws_instance.dev-jenkins | grep private_ip | cut -f 2 -d &quot;=&quot; | sed &apos;s/\&quot;//g&apos; | sed &apos;s/ //g&apos;`&quot;</command>
+</command>
     </hudson.tasks.Shell>
   </builders>
   <publishers/>
