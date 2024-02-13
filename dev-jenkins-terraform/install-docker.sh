@@ -1,13 +1,20 @@
 #!/bin/bash
+
+# Should be on the base image
+# wget, ssm, cloudwatch
+
+echo "user-data progress starting update"
+sudo yum -y update 
 sudo yum install wget -y
 sudo yum install -y https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
 sudo systemctl enable amazon-ssm-agent
 sudo systemctl start amazon-ssm-agent
 wget https://s3.amazonaws.com/amazoncloudwatch-agent/centos/amd64/latest/amazon-cloudwatch-agent.rpm
 sudo rpm -U amazon-cloudwatch-agent.rpm
+
+# cloudwatch configs should be defined externally instead of in the user-script
 sudo touch /opt/aws/amazon-cloudwatch-agent/etc/custom_config.json
 echo "
-
 {
 	\"metrics\": {
 		
@@ -88,8 +95,7 @@ echo "
 " > /opt/aws/amazon-cloudwatch-agent/etc/custom_config.json
 sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/custom_config.json  -s
 
-echo "user-data progress starting update"
-sudo yum -y update 
+# pretty sure we do not need to install docker here as it is already in the base ami.  Will verify before removing.
 echo "user-data progress finished update installing epel-release"
 sudo yum -y install epel-release 
 echo "user-data progress finished epel-release adding docker-ce repo"
@@ -100,16 +106,24 @@ echo "user-data progress finished docker install enabling docker service"
 sudo systemctl enable docker
 echo "user-data progress finished enabling docker service starting docker"
 sudo service docker start
-cd /home/centos/jenkins
-sudo mkdir -p /var/jenkins_home/jobs/
-sudo mkdir -p /var/log/jenkins-docker-logs
-cp -r jobs/* /var/jenkins_home/jobs/
-sudo docker build --build-arg S3_BUCKET=${stack_s3_bucket} -t avillach-lab-dev-jenkins -f ${stack_jenkins_dockerfile} .
-sudo docker run -d -v /var/jenkins_home/workspace:/var/jenkins_home/workspace -v /var/jenkins_home/jobs:/var/jenkins_home/jobs -v /var/run/docker.sock:/var/run/docker.sock -p 80:8080 --name jenkins --restart always avillach-lab-dev-jenkins
-echo "setup script finished"
 
-sudo docker logs -f jenkins > /var/log/jenkins-docker-logs/jenkins.log &
+## Should just need this to get the container running
+
+# grab image tar
+aws s3 cp s3://${stack_s3_bucket}/containers/jenkins/jenkins.tar.gz jenkins.tar.gz
+
+# load image
+load_result=$(docker load -i jenkins.tar.gz)
+image_tag=$(echo "$load_result" | grep -o -E "jenkins:[[:alnum:]_]+")
+
+#run docker container
+sudo docker run -d --log-driver syslog --log-opt tag=jenkins \
+                    -v /var/jenkins_home/workspace:/var/jenkins_home/workspace \
+                    -v /var/run/docker.sock:/var/run/docker.sock \
+                    -p 443:8443 \
+                    --restart always \
+                    --name jenkins \
+                    $image_tag
 
 INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")" --silent http://169.254.169.254/latest/meta-data/instance-id)
-sudo docker exec jenkins /usr/local/bin/aws --region=us-east-1 ec2 create-tags --resources $${INSTANCE_ID} --tags Key=InitComplete,Value=true
-
+sudo /usr/bin/aws --region=us-east-1 ec2 create-tags --resources $${INSTANCE_ID} --tags Key=InitComplete,Value=true
