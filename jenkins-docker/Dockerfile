@@ -1,45 +1,70 @@
-FROM jenkins/jenkins:lts
+FROM jenkins/jenkins:latest
 
-ARG S3_BUCKET
+# user to swap easily between OS operations and jenkins configuration.
+ENV JENKINS_USERNAME=$USER
+# Disbale setup wizard
+ENV JAVA_OPTS -Djenkins.install.runSetupWizard=false
 
-COPY plugins.txt /usr/share/jenkins/ref/plugins.txt
+ARG TERRAFORM_DISTRO
+ARG PLUGINS_FILE
+ARG CONFIG_XML_FILE
+ARG CASC_FILE
+ARG SCRIPT_APPROVAL_FILE
+ARG HUDSON_TASKS_FILE
+ARG JOBS_DIR
+ARG PKCS12_FILE
+ARG PKCS12_PASS
+ARG HTTP_PORT=-1
+ARG HTTPS_PORT=8443
 
-COPY config.xml /var/jenkins_home/config.xml
-
-COPY scriptApproval.xml /var/jenkins_home/scriptApproval.xml
-
-COPY hudson.tasks.Maven.xml /var/jenkins_home/hudson.tasks.Maven.xml
-
-USER root 
-
-RUN echo "s/stack_s3_bucket_var/$S3_BUCKET/"
-
-RUN sed -i "s/stack_s3_bucket_var/$S3_BUCKET/" /var/jenkins_home/config.xml
-
-RUN echo deb http://deb.debian.org/debian stretch-backports main >> /etc/apt/sources.list
+# Can use this to swap users back to jenkins user without hardcoding it.  Safe to hardcode swap to root user.
+###### OS configs and package installations ########
+# We could run these commands and build an image then configure jenkins only in this dockerfile instead of directly using the jenkins stock image
+USER root
 
 RUN apt-get update
 
-RUN apt-get -y install apt-transport-https
+#RUN apt-get -y -t stretch-backports install openjdk-11-jdk-headless
 
-RUN apt-get -y install python3-pip
+RUN apt-get -y install apt-transport-https \
+    python3-pip \
+    wget
 
-RUN pip3 install --no-input awscli --upgrade
+# maybe not the best way to install awscli
+# see https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
+RUN pip3 install --no-input awscli --upgrade --break-system-packages
 
-RUN curl -fsSL https://get.docker.com | sh
+RUN set -e; \
+    curl -fsSL https://get.docker.com | sh && \
+    docker --version
 
-RUN docker --version 
-
-RUN wget https://www-us.apache.org/dist/maven/maven-3/3.6.3/binaries/apache-maven-3.6.3-bin.tar.gz -P /opt
-
-RUN apt-get -y -t stretch-backports install openjdk-11-jdk
-
-RUN tar -xvzf /opt/apache-maven-3.6.3-bin.tar.gz -C /opt
-
-RUN rm /opt/apache-maven-3.6.3-bin.tar.gz
-
+# maven
+RUN apt-get -y install maven
+# jq
 RUN apt-get install jq -y
+# terraform
+RUN wget -c $TERRAFORM_DISTRO -O /opt/terraform.zip && \
+    unzip /opt/terraform.zip -d /usr/local/bin/ && rm -f /opt/terraform.zip
 
-RUN `/usr/local/bin/install-plugins.sh < /usr/share/jenkins/ref/plugins.txt` || echo "Some errors occurred during plugin installation."
+# Cleanup
+RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /var/cache/apt/*
 
-RUN wget https://releases.hashicorp.com/terraform/0.12.31/terraform_0.12.31_linux_amd64.zip && unzip terraform_0.12.31_linux_amd64.zip && mv terraform /usr/local/bin/
+##### Configuration for jenkins ###########
+USER $JENKINS_USERNAME
+
+# Copy CASC file
+COPY $CASC_FILE /var/jenkins_home/
+
+# Install Plugins.  If no plugins provided continue.
+COPY $PLUGINS_FILE /usr/share/jenkins/ref/plugins.txt
+
+RUN /bin/jenkins-plugin-cli -f /usr/share/jenkins/ref/plugins.txt || echo "Some errors occurred during plugin installation."
+
+# Configurations
+COPY $CONFIG_XML_FILE /var/jenkins_home/config.xml
+COPY $SCRIPT_APPROVAL_FILE /var/jenkins_home/scriptApproval.xml
+COPY $HUDSON_TASKS_FILE /var/jenkins_home/hudson.tasks.Maven.xml
+COPY $JOBS_DIR /var/jenkins_home/jobs
+COPY $PKCS12_FILE /var/jenkins_home/$PKCS12_FILE
+
+ENV JENKINS_OPTS="--httpPort=$HTTP_PORT --httpsPort=$HTTPS_PORT --httpsKeyStore=/var/jenkins_home/$PKCS12_FILE --httpsKeyStorePassword=$PKCS12_PASS"
