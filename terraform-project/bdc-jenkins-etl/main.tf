@@ -7,8 +7,8 @@ data "aws_ami" "this" {
 
 # going to leave the ec2 key pair here for now.  We may want to manage this abstractly as it will constantly rotate the key.
 resource "aws_instance" "this" {
-  ami = data.aws_ami.this.id
-  instance_type = var.instance_type
+  ami                         = data.aws_ami.this.id
+  instance_type               = var.instance_type
   associate_public_ip_address = var.associate_public_ip_address # We should look into removing this public interface.
   # key_name = aws_key_pair.generated_key.key_name # lets eliminate the key pair for now.  We do not use it to connect to the instance
 
@@ -17,8 +17,8 @@ resource "aws_instance" "this" {
   # I want to explore using EBS attached devices. This would eliminate a static non-detachable block device.
   root_block_device {
     delete_on_termination = true
-    encrypted = true
-    volume_size = var.volume_size
+    encrypted             = true
+    volume_size           = var.volume_size
   }
   # Lets not copy the docker folder to the server.  
   # docker build stuff goes in the docker build job.  all we want the server to do is run our container and any provisioning for volume mounts.
@@ -33,16 +33,16 @@ resource "aws_instance" "this" {
   #  }
   #}
 
-#  provisioner "file" {
-#    content = data.template_file.jenkins-config-xml.rendered
-#    destination = "/home/centos/jenkins/config.xml"
-#    connection {
-#      type     = "ssh"
-#      user     = "centos"
-#      private_key = tls_private_key.provisioning-key.private_key_pem
-#      host = self.private_ip
-#    }
-#  }
+  #  provisioner "file" {
+  #    content = data.template_file.jenkins-config-xml.rendered
+  #    destination = "/home/centos/jenkins/config.xml"
+  #    connection {
+  #      type     = "ssh"
+  #      user     = "centos"
+  #      private_key = tls_private_key.provisioning-key.private_key_pem
+  #      host = self.private_ip
+  #    }
+  #  }
 
   vpc_security_group_ids = [
     aws_security_group.inbound.id,
@@ -85,7 +85,7 @@ data "template_file" "this" {
 
   vars = {
     stack_s3_bucket = var.stack_s3_bucket
-    
+
   }
 }
 
@@ -119,14 +119,14 @@ data "template_cloudinit_config" "this" {
 }
 
 resource "aws_security_group" "inbound" {
-  name = "jenkins_inbound_${local.uniq_name}"
+  name        = "jenkins_inbound_${local.uniq_name}"
   description = "Allow inbound traffic from LMA on ports 22, 80 and 443"
-  vpc_id = var.vpc_id
+  vpc_id      = var.vpc_id
 
   ingress {
     from_port = 80
-    to_port = 80
-    protocol = "tcp"
+    to_port   = 80
+    protocol  = "tcp"
     cidr_blocks = [
       var.access_cidr
 
@@ -135,8 +135,8 @@ resource "aws_security_group" "inbound" {
 
   ingress {
     from_port = 443
-    to_port = 443
-    protocol = "tcp"
+    to_port   = 443
+    protocol  = "tcp"
     cidr_blocks = [
       var.access_cidr
 
@@ -145,8 +145,8 @@ resource "aws_security_group" "inbound" {
 
   ingress {
     from_port = 22
-    to_port = 22
-    protocol = "tcp"
+    to_port   = 22
+    protocol  = "tcp"
     cidr_blocks = [
       var.access_cidr
 
@@ -155,8 +155,8 @@ resource "aws_security_group" "inbound" {
 
   ingress {
     from_port = 22
-    to_port = 22
-    protocol = "tcp"
+    to_port   = 22
+    protocol  = "tcp"
     cidr_blocks = [
       var.provisioning_cidr
     ]
@@ -169,16 +169,16 @@ resource "aws_security_group" "inbound" {
 }
 
 resource "aws_security_group" "outbound" {
-  name = "jenkins_outbound_${local.uniq_name}"
+  name        = "jenkins_outbound_${local.uniq_name}"
   description = "Allow outbound traffic from Jenkins"
-  vpc_id = var.vpc_id
+  vpc_id      = var.vpc_id
 
   egress {
     from_port = 0
-    to_port = 0
-    protocol = -1
+    to_port   = 0
+    protocol  = -1
     cidr_blocks = [
-       "0.0.0.0/0"
+      "0.0.0.0/0"
     ]
   }
 
