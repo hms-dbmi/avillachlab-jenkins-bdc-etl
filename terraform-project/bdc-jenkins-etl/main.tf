@@ -105,7 +105,7 @@ data "template_file" "this" {
 #    stack_s3_bucket = var.stack_s3_bucket
 #    jenkins_role_admin_name = var.jenkins-role-admin-name
 #  }
-#}  
+#}
 
 data "template_cloudinit_config" "this" {
   gzip          = true

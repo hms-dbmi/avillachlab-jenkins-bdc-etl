@@ -1,3 +1,4 @@
+# Going to leave the provisional key as it may be very useful for us in the short-term with removing ssh keys
 resource "tls_private_key" "provisioning-key" {
   algorithm = "RSA"
   rsa_bits  = 4096
@@ -5,11 +6,12 @@ resource "tls_private_key" "provisioning-key" {
 output "provisioning-private-key" {
   value = tls_private_key.provisioning-key.private_key_pem
 }
+
+# let's not have this be dynamic. 
 resource "aws_key_pair" "generated_key" {
   key_name   = "jenkins-provisioning-key-${var.stack-id}-${var.git-commit}"
   public_key = tls_private_key.provisioning-key.public_key_openssh
 }
-
 
 data "template_file" "jenkins-user_data" {
   template = file("install-docker.sh")
@@ -20,22 +22,23 @@ data "template_file" "jenkins-user_data" {
   }
 }
 
-
-data "template_file" "jenkins-config-xml" {
-  template = file("../jenkins-docker/${var.config-xml-filename}")
-  vars = {
-    okta_saml_app_id = var.okta-app-id
-    aws_account_app = var.aws-account-app
-    arn_role_app = var.arn-role-app
-    arn_role_cnc = var.arn-role-cnc
-    arn_role_data = var.arn-role-data
-    git_branch_avillachlab_jenkins_dev_release_control = var.git-branch-avillachlab-jenkins-dev-release-control
-    avillachlab_release_control_repo = var.avillachlab-release-control-repo
-    stack_s3_bucket = var.stack-s3-bucket
-    jenkins_role_admin_name = var.jenkins-role-admin-name
-  }
-}
-   
+# I wouldn't render this config file here as it ties it to infrastructure
+# We can use terraform to render config files if we want.
+# Externalizing the variables out of the xml file will make them easier to manage as well.
+#data "template_file" "jenkins-config-xml" {
+#  template = file("../jenkins-docker/${var.config-xml-filename}")
+#  vars = {
+#    okta_saml_app_id = var.okta-app-id
+#    aws_account_app = var.aws-account-app
+#    arn_role_app = var.arn-role-app
+#    arn_role_cnc = var.arn-role-cnc
+#    arn_role_data = var.arn-role-data
+#    git_branch_avillachlab_jenkins_dev_release_control = var.git-branch-avillachlab-jenkins-dev-release-control
+#    avillachlab_release_control_repo = var.avillachlab-release-control-repo
+#    stack_s3_bucket = var.stack-s3-bucket
+#    jenkins_role_admin_name = var.jenkins-role-admin-name
+#  }
+#}  
 
 data "template_cloudinit_config" "config" {
   gzip          = true
@@ -62,8 +65,6 @@ resource "aws_instance" "dev-jenkins" {
     volume_size = 1000
   }
 
-
-
   provisioner "file" {
     source      = "../jenkins-docker"
     destination = "/home/centos/jenkins"
@@ -75,16 +76,16 @@ resource "aws_instance" "dev-jenkins" {
     }
   }
 
-  provisioner "file" {
-    content = data.template_file.jenkins-config-xml.rendered
-    destination = "/home/centos/jenkins/config.xml"
-    connection {
-      type     = "ssh"
-      user     = "centos"
-      private_key = tls_private_key.provisioning-key.private_key_pem
-      host = self.private_ip
-    }
-  }
+#  provisioner "file" {
+#    content = data.template_file.jenkins-config-xml.rendered
+#    destination = "/home/centos/jenkins/config.xml"
+#    connection {
+#      type     = "ssh"
+#      user     = "centos"
+#      private_key = tls_private_key.provisioning-key.private_key_pem
+#      host = self.private_ip
+#    }
+#  }
 
   vpc_security_group_ids = [
     aws_security_group.inbound-jenkins-from-lma.id,
