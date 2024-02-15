@@ -31,7 +31,7 @@ if [ -z ${awscli_version} ] || [ ${awscli_version} == v1 ]; then
    yum install python38 -y
    curl "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o "awscli-bundle.zip"
    unzip awscli-bundle.zip
-   sudo ./awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws
+   sudo python3.8 ./awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws
    sudo chmod +x /usr/local/aws/bin/aws
 elif [ ${awscli_version} == v2 ]; then
    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
@@ -148,10 +148,11 @@ load_result=$(docker load -i jenkins.tar.gz)
 image_tag=$(echo "$load_result" | grep -o -E "jenkins:[[:alnum:]_]+")
 
 #run docker container
+# kind of weird to volume mount jenkins workspace.  Guess that is to have the workspace available via shell?
 sudo docker run -d --log-driver syslog --log-opt tag=jenkins \
                     -v /var/jenkins_home/workspace:/var/jenkins_home/workspace \
                     -v /var/run/docker.sock:/var/run/docker.sock \
-                    -p 443:8443 \
+                    -p 80:8080 \
                     --restart always \
                     --name jenkins \
                     $image_tag
