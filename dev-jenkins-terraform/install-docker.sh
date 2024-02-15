@@ -13,7 +13,7 @@ if ! command -v yum-config-manager &> /dev/null; then
 else
    echo "yum-config-manager is already installed."
 fi
-
+export awscli_version=v1
 # aws cli2 is only distributed as an install for good reason see: https://github.com/aws/aws-cli/issues/4947
 # Need to test aws cli2 more.  We will most likely need to change how assume role is performed.
 if [ -z $awscli_version ] || [ ${awscli_version} == v1 ]; then
