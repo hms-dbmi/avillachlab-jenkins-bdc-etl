@@ -1,4 +1,34 @@
 #!/bin/bash
+# Would not need complicated business logic in an golden ami build.  I should already know what package manager my business needs.  
+if ! command -v yum-config-manager &> /dev/null; then
+   echo "yum-config-manager is not installed."
+
+   # Check if dnf is installed
+   if command -v dnf &> /dev/null; then
+      echo "dnf is installed. Installing yum-utils..."
+      sudo dnf install -y yum-utils
+   else
+      echo "dnf is not installed."
+   fi
+else
+   echo "yum-config-manager is already installed."
+fi
+
+# aws cli2 is only distributed as an install for good reason see: https://github.com/aws/aws-cli/issues/4947
+# Need to test aws cli2 more.  We will most likely need to change how assume role is performed.
+if [ -z $awscli_version ] || [ ${awscli_version,,} == v1 ]; then
+   sudo yum -y install python3-pip
+   sudo pip3 install awscli --upgrade --user
+elif [ ${awscli_version,,} == v2 ]; then
+   curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+   unzip awscliv2.zip
+   sudo ./aws/install
+else
+   echo "invalid aws version: $aws_version"
+   exit 1
+fi
+
+aws --version
 
 # Should be on the base image
 # wget, ssm, cloudwatch
@@ -89,22 +119,7 @@ echo "
 " > /opt/aws/amazon-cloudwatch-agent/etc/custom_config.json
 sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/custom_config.json  -s
 
-# pretty sure we do not need to install docker here as it is already in the base ami.  Will verify before removing.
 echo "user-data progress finished update installing epel-release"
-
-if ! command -v yum-config-manager &> /dev/null; then
-    echo "yum-config-manager is not installed."
-
-    # Check if dnf is installed
-    if command -v dnf &> /dev/null; then
-        echo "dnf is installed. Installing yum-utils..."
-        sudo dnf install -y yum-utils
-    else
-        echo "dnf is not installed. Please install it manually."
-    fi
-else
-    echo "yum-config-manager is already installed."
-fi
 
 sudo yum -y install epel-release 
 echo "user-data progress finished epel-release adding docker-ce repo"
@@ -116,6 +131,7 @@ sudo systemctl enable docker
 echo "user-data progress finished enabling docker service starting docker"
 sudo service docker start
 
+#### Everything above should be in a ami
 ## Should just need this to get the container running
 
 # grab image tar
