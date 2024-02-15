@@ -10,7 +10,6 @@ resource "aws_instance" "this" {
   ami                         = data.aws_ami.this.id
   instance_type               = var.instance_type
   associate_public_ip_address = var.associate_public_ip_address # We should look into removing this public interface.
-  # key_name = aws_key_pair.generated_key.key_name # lets eliminate the key pair for now.  We do not use it to connect to the instance
 
   iam_instance_profile = var.instance_profile_name
 
@@ -57,7 +56,7 @@ resource "aws_instance" "this" {
     Name        = "Jenkins Phenotypic ETL Server - ${local.uniq_name}"
   }
 
-  user_data = data.template_cloudinit_config.config.rendered
+  user_data = data.template_cloudinit_config.this.rendered
 
 }
 
@@ -114,7 +113,7 @@ data "template_cloudinit_config" "this" {
   # user_data
   part {
     content_type = "text/x-shellscript"
-    content      = data.template_file.jenkins-user_data.rendered
+    content      = data.template_file.this.rendered
   }
 }
 
