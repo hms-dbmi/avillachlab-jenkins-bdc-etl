@@ -19,7 +19,7 @@ fi
 if [ -z $awscli_version ] || [ ${awscli_version,,} == v1 ]; then
    sudo yum -y install python3-pip
    sudo pip3 install awscli --upgrade --user
-elif [ ${awscli_version,,} == v2 ]; then
+elif [ ${awscli_version} == v2 ]; then
    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
    unzip awscliv2.zip
    sudo ./aws/install
