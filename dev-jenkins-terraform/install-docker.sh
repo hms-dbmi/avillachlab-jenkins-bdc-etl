@@ -14,11 +14,25 @@ else
    echo "yum-config-manager is already installed."
 fi
 
+echo "user-data progress starting update"
+sudo yum -y update 
+sudo yum -y install unzip
+sudo yum install wget -y
+sudo yum install -y https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
+sudo systemctl enable amazon-ssm-agent
+sudo systemctl start amazon-ssm-agent
+wget https://s3.amazonaws.com/amazoncloudwatch-agent/centos/amd64/latest/amazon-cloudwatch-agent.rpm
+sudo rpm -U amazon-cloudwatch-agent.rpm
+
+
 # aws cli2 is only distributed as an install for good reason see: https://github.com/aws/aws-cli/issues/4947
 # Need to test aws cli2 more.  We will most likely need to change how assume role is performed.
 if [ -z ${awscli_version} ] || [ ${awscli_version} == v1 ]; then
-   sudo yum -y install python3-pip
-   sudo pip3 install awscli --upgrade --user
+   yum install python38 -y
+   curl "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o "awscli-bundle.zip"
+   unzip awscli-bundle.zip
+   sudo ./awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws
+   sudo chmod +x /usr/local/aws/bin/aws
 elif [ ${awscli_version} == v2 ]; then
    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
    unzip awscliv2.zip
@@ -33,14 +47,6 @@ aws --version
 # Should be on the base image
 # wget, ssm, cloudwatch
 
-echo "user-data progress starting update"
-sudo yum -y update 
-sudo yum install wget -y
-sudo yum install -y https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
-sudo systemctl enable amazon-ssm-agent
-sudo systemctl start amazon-ssm-agent
-wget https://s3.amazonaws.com/amazoncloudwatch-agent/centos/amd64/latest/amazon-cloudwatch-agent.rpm
-sudo rpm -U amazon-cloudwatch-agent.rpm
 
 # cloudwatch configs should be defined externally instead of in the user-script
 sudo touch /opt/aws/amazon-cloudwatch-agent/etc/custom_config.json
@@ -135,7 +141,7 @@ sudo service docker start
 ## Should just need this to get the container running
 
 # grab image tar
-aws s3 cp s3://${stack_s3_bucket}/containers/jenkins/jenkins.tar.gz jenkins.tar.gz
+/usr/local/bin/aws s3 cp s3://${stack_s3_bucket}/containers/jenkins/jenkins.tar.gz jenkins.tar.gz
 
 # load image
 load_result=$(docker load -i jenkins.tar.gz)
@@ -151,4 +157,4 @@ sudo docker run -d --log-driver syslog --log-opt tag=jenkins \
                     $image_tag
 
 INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")" --silent http://169.254.169.254/latest/meta-data/instance-id)
-sudo /usr/bin/aws --region=us-east-1 ec2 create-tags --resources $${INSTANCE_ID} --tags Key=InitComplete,Value=true
+sudo /usr/local/bin/aws --region=us-east-1 ec2 create-tags --resources $${INSTANCE_ID} --tags Key=InitComplete,Value=true
