@@ -77,12 +77,6 @@ echo "
                \"log_group_name\":\"yum.log\",
                \"log_stream_name\":\"{instance_id} yum.log\",
                \"timestamp_format\":\"UTC\"
-            },
-            {
-               \"file_path\":\"/var/log/jenkins-docker-logs/*\",
-               \"log_group_name\":\"jenkins-logs\",
-               \"log_stream_name\":\"{instance_id} ${stack_id} jenkins-app-logs\",
-               \"timestamp_format\":\"UTC\"
             }
          ]
       }
