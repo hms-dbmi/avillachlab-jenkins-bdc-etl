@@ -16,15 +16,15 @@ fi
 
 # aws cli2 is only distributed as an install for good reason see: https://github.com/aws/aws-cli/issues/4947
 # Need to test aws cli2 more.  We will most likely need to change how assume role is performed.
-if [ -z $$awscli_version ] || [ $$awscli_version == v1 ]; then
+if [ -z ${awscli_version} ] || [ ${awscli_version} == v1 ]; then
    sudo yum -y install python3-pip
    sudo pip3 install awscli --upgrade --user
-elif [ $$awscli_version == v2 ]; then
+elif [ ${awscli_version} == v2 ]; then
    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
    unzip awscliv2.zip
    sudo ./aws/install
 else
-   echo "invalid aws version: $$awscli_version"
+   echo "invalid aws version: ${awscli_version}"
    exit 1
 fi
 

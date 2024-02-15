@@ -57,7 +57,6 @@ resource "aws_instance" "this" {
   }
 
   user_data = data.template_cloudinit_config.this.rendered
-
 }
 
 # this is pretty insecure.  We are outputting the private key to an output.  
@@ -84,7 +83,7 @@ data "template_file" "this" {
 
   vars = {
     stack_s3_bucket = var.stack_s3_bucket
-
+    awscli_version  = "v1" # leaving it a constant for now
   }
 }
 
