@@ -91,6 +91,21 @@ sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-c
 
 # pretty sure we do not need to install docker here as it is already in the base ami.  Will verify before removing.
 echo "user-data progress finished update installing epel-release"
+
+if ! command -v yum-config-manager &> /dev/null; then
+    echo "yum-config-manager is not installed."
+
+    # Check if dnf is installed
+    if command -v dnf &> /dev/null; then
+        echo "dnf is installed. Installing yum-utils..."
+        sudo dnf install -y yum-utils
+    else
+        echo "dnf is not installed. Please install it manually."
+    fi
+else
+    echo "yum-config-manager is already installed."
+fi
+
 sudo yum -y install epel-release 
 echo "user-data progress finished epel-release adding docker-ce repo"
 sudo yum-config-manager  --add-repo https://download.docker.com/linux/centos/docker-ce.repo
