@@ -15,7 +15,7 @@ output "private_ip" {
 
 output "security_group_ids" {
   description = "List of security group IDs associated with the EC2 instance"
-  value       = aws_instance.this.security_group_names
+  value       = aws_instance.this.security_groups
 }
 
 # Output for the latest AMI
