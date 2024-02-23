@@ -1,4 +1,4 @@
-FROM jenkins/jenkins:lts-jdk11
+FROM jenkins/jenkins:2.426.1-lts-jdk11
 
 # user to swap easily between OS operations and jenkins configuration.
 ENV JENKINS_USERNAME=$USER
@@ -24,15 +24,15 @@ USER root
 
 RUN apt-get update
 
-#RUN apt-get -y -t stretch-backports install openjdk-11-jdk-headless
-
 RUN apt-get -y install apt-transport-https \
     python3-pip \
     wget
 
 # maybe not the best way to install awscli
 # see https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
-RUN pip3 install --no-input awscli --upgrade
+#RUN pip3 install --no-input awscli --upgrade
+RUN pip3 install --no-input awscli --upgrade --break-system-packages
+
 RUN set -e; \
     curl -fsSL https://get.docker.com | sh && \
     docker --version
