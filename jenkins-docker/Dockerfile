@@ -68,4 +68,5 @@ COPY $PKCS12_FILE /var/jenkins_home/$PKCS12_FILE
 
 # bad idea to have env here.  Use environment in entrypoint
 # may not have ssl. like integration
-#ENV JENKINS_OPTS="--httpPort=$HTTP_PORT --httpsPort=$HTTPS_PORT --httpsKeyStore=/var/jenkins_home/$PKCS12_FILE --httpsKeyStorePassword=$PKCS12_PASS"
+#ENV JENKINS_OPTS="--httpPort=$HTTP_PORT --httpsPort=$HTTPS_PORT" --httpsKeyStore=/var/jenkins_home/$PKCS12_FILE --httpsKeyStorePassword=$PKCS12_PASS"
+ENV JENKINS_OPTS="--httpPort=$HTTP_PORT --httpsPort=$HTTPS_PORT"
