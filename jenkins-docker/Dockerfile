@@ -58,7 +58,7 @@ COPY $CASC_FILE /var/jenkins_home/
 # Install Plugins.  If no plugins provided continue.
 COPY $PLUGINS_FILE /usr/share/jenkins/ref/plugins.txt
 
-RUN /bin/jenkins-plugin-cli -f /usr/share/jenkins/ref/plugins.txt || echo "Some errors occurred during plugin installation."
+RUN /bin/jenkins-plugin-cli -f /usr/share/jenkins/ref/plugins.txt
 
 # Configurations
 COPY $CONFIG_XML_FILE /var/jenkins_home/config.xml
