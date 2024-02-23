@@ -32,8 +32,7 @@ RUN apt-get -y install apt-transport-https \
 
 # maybe not the best way to install awscli
 # see https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
-RUN pip3 install --no-input awscli --upgrade --break-system-packages
-
+RUN pip3 install --no-input awscli --upgrade
 RUN set -e; \
     curl -fsSL https://get.docker.com | sh && \
     docker --version
