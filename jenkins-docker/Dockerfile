@@ -14,8 +14,8 @@ ARG HUDSON_TASKS_FILE
 ARG JOBS_DIR
 ARG PKCS12_FILE
 ARG PKCS12_PASS
-ARG HTTP_PORT=-1
-ARG HTTPS_PORT=8443
+ARG HTTP_PORT=80
+ARG HTTPS_PORT=8080
 
 # Can use this to swap users back to jenkins user without hardcoding it.  Safe to hardcode swap to root user.
 ###### OS configs and package installations ########
