@@ -1,4 +1,4 @@
-FROM jenkins/jenkins:latest
+FROM jenkins/jenkins:lts
 
 # user to swap easily between OS operations and jenkins configuration.
 ENV JENKINS_USERNAME=$USER
