@@ -5,43 +5,25 @@ data "aws_ami" "this" {
   owners      = var.ami_owners
 }
 
+resource "aws_iam_instance_profile" "this" {
+  name = "jenkins-s3-policy-secure"
+  role = var.instance_profile_name
+}
+
 # going to leave the ec2 key pair here for now.  We may want to manage this abstractly as it will constantly rotate the key.
 resource "aws_instance" "this" {
   ami                         = data.aws_ami.this.id
   instance_type               = var.instance_type
   associate_public_ip_address = var.associate_public_ip_address # We should look into removing this public interface.
-
-  iam_instance_profile = var.instance_profile_name
+  iam_instance_profile = aws_iam_instance_profile.this.name
 
   # I want to explore using EBS attached devices. This would eliminate a static non-detachable block device.
-  root_block_device {
+root_block_device {
     delete_on_termination = true
     encrypted             = true
     volume_size           = var.volume_size
   }
-  # Lets not copy the docker folder to the server.  
-  # docker build stuff goes in the docker build job.  all we want the server to do is run our container and any provisioning for volume mounts.
-  # provisioner "file" {
-  #  source      = "../jenkins-docker"
-  #  destination = "/home/centos/jenkins"
-  #  connection {
-  #    type     = "ssh"
-  #    user     = "centos"
-  #    private_key = tls_private_key.provisioning-key.private_key_pem
-  #    host = self.private_ip
-  #  }
-  #}
 
-  #  provisioner "file" {
-  #    content = data.template_file.jenkins-config-xml.rendered
-  #    destination = "/home/centos/jenkins/config.xml"
-  #    connection {
-  #      type     = "ssh"
-  #      user     = "centos"
-  #      private_key = tls_private_key.provisioning-key.private_key_pem
-  #      host = self.private_ip
-  #    }
-  #  }
 
   vpc_security_group_ids = [
     aws_security_group.inbound.id,
