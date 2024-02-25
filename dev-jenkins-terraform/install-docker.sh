@@ -1,18 +1,4 @@
 #!/bin/bash
-# Would not need complicated business logic in an golden ami build.  I should already know what package manager my business needs.  
-if ! command -v yum-config-manager &> /dev/null; then
-   echo "yum-config-manager is not installed."
-
-   # Check if dnf is installed
-   if command -v dnf &> /dev/null; then
-      echo "dnf is installed. Installing yum-utils..."
-      sudo dnf install -y yum-utils
-   else
-      echo "dnf is not installed."
-   fi
-else
-   echo "yum-config-manager is already installed."
-fi
 
 echo "user-data progress starting update"
 sudo yum -y update 
@@ -24,25 +10,12 @@ sudo systemctl start amazon-ssm-agent
 wget https://s3.amazonaws.com/amazoncloudwatch-agent/centos/amd64/latest/amazon-cloudwatch-agent.rpm
 sudo rpm -U amazon-cloudwatch-agent.rpm
 
+# aws cli2
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli --update
 
-# aws cli2 is only distributed as an install for good reason see: https://github.com/aws/aws-cli/issues/4947
-# Need to test aws cli2 more.  We will most likely need to change how assume role is performed.
-if [ -z ${awscli_version} ] || [ ${awscli_version} == v1 ]; then
-   yum install python38 -y
-   curl "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o "awscli-bundle.zip"
-   unzip awscli-bundle.zip
-   sudo python3.8 ./awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws
-   sudo chmod +x /usr/local/aws/bin/aws
-elif [ ${awscli_version} == v2 ]; then
-   curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-   unzip awscliv2.zip
-   sudo ./aws/install
-else
-   echo "invalid aws version: ${awscli_version}"
-   exit 1
-fi
-
-aws --version
+echo "$(aws --version)"
 
 # Should be on the base image
 # wget, ssm, cloudwatch
@@ -141,7 +114,7 @@ sudo service docker start
 ## Should just need this to get the container running
 
 # grab image tar
-/usr/local/bin/aws s3 cp s3://${stack_s3_bucket}/containers/jenkins/jenkins.tar.gz jenkins.tar.gz
+aws s3 cp s3://${stack_s3_bucket}/containers/jenkins/jenkins.tar.gz jenkins.tar.gz
 
 # load image
 load_result=$(docker load -i jenkins.tar.gz)
@@ -158,4 +131,4 @@ sudo docker run -d --log-driver syslog --log-opt tag=jenkins \
                     $image_tag
 
 INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")" --silent http://169.254.169.254/latest/meta-data/instance-id)
-sudo /usr/local/bin/aws --region=us-east-1 ec2 create-tags --resources $${INSTANCE_ID} --tags Key=InitComplete,Value=true
+sudo aws --region=us-east-1 ec2 create-tags --resources $${INSTANCE_ID} --tags Key=InitComplete,Value=true
