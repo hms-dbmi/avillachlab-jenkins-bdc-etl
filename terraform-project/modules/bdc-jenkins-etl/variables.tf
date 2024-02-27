@@ -19,6 +19,11 @@ variable "associate_public_ip_address" {
   default     = true
 }
 
+variable "instance_profile_role" {
+  description = "IAM instance role for ec2 IAM profile"
+  type        = string
+}
+
 variable "instance_profile_name" {
   description = "IAM instance profile name for the EC2 instance"
   type        = string

@@ -6,8 +6,8 @@ data "aws_ami" "this" {
 }
 
 resource "aws_iam_instance_profile" "this" {
-  name = "jenkins-s3-policy-secure"
-  role = var.instance_profile_name
+  name = var.instance_profile_name
+  role = var.instance_profile_role
 }
 
 resource "aws_instance" "this" {
@@ -45,7 +45,6 @@ data "template_file" "this" {
 
   vars = {
     stack_s3_bucket = var.stack_s3_bucket
-    awscli_version  = "v1" # leaving it a constant for now
   }
 }
 
@@ -62,9 +61,10 @@ data "template_cloudinit_config" "this" {
 
 resource "aws_security_group" "inbound" {
   name        = "jenkins_inbound_${local.uniq_name}"
-  description = "Allow inbound traffic from LMA on ports 22, 80 and 443"
+  description = "Allow inbound traffic from private network on ports 22, 80 and 443"
   vpc_id      = var.vpc_id
 
+  # need to d
   ingress {
     from_port = 80
     to_port   = 80

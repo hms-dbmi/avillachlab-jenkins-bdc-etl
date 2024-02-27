@@ -111,7 +111,7 @@ echo "user-data progress finished enabling docker service starting docker"
 sudo service docker start
 
 #### Everything above should be in a ami
-## Should just need this to get the container running
+## Should just need the following to get the container running
 
 # grab image tar
 aws s3 cp s3://${stack_s3_bucket}/containers/jenkins/jenkins.tar.gz jenkins.tar.gz
