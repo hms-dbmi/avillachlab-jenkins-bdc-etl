@@ -10,15 +10,14 @@ resource "aws_iam_instance_profile" "this" {
   role = var.instance_profile_name
 }
 
-# going to leave the ec2 key pair here for now.  We may want to manage this abstractly as it will constantly rotate the key.
 resource "aws_instance" "this" {
   ami                         = data.aws_ami.this.id
   instance_type               = var.instance_type
   associate_public_ip_address = var.associate_public_ip_address # We should look into removing this public interface.
-  iam_instance_profile = aws_iam_instance_profile.this.name
+  iam_instance_profile        = aws_iam_instance_profile.this.name
 
   # I want to explore using EBS attached devices. This would eliminate a static non-detachable block device.
-root_block_device {
+  root_block_device {
     delete_on_termination = true
     encrypted             = true
     volume_size           = var.volume_size
@@ -41,7 +40,7 @@ root_block_device {
   user_data = data.template_cloudinit_config.this.rendered
 }
 
-# this is pretty insecure.  We are outputting the private key to an output.  
+# this is pretty insecure.  We are outputting the private key.  
 # removing key pair
 #resource "tls_private_key" "provisioning-key" {
 #  algorithm = "RSA"
@@ -109,7 +108,6 @@ resource "aws_security_group" "inbound" {
     protocol  = "tcp"
     cidr_blocks = [
       var.access_cidr
-
     ]
   }
 
@@ -130,15 +128,6 @@ resource "aws_security_group" "inbound" {
     cidr_blocks = [
       var.access_cidr
 
-    ]
-  }
-
-  ingress {
-    from_port = 22
-    to_port   = 22
-    protocol  = "tcp"
-    cidr_blocks = [
-      var.provisioning_cidr
     ]
   }
 

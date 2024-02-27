@@ -53,8 +53,3 @@ variable "access_cidr" {
   description = "CIDR block for inbound and outbound access"
   type        = string
 }
-
-variable "provisioning_cidr" {
-  description = "CIDR block for provisioning access"
-  type        = string
-}
