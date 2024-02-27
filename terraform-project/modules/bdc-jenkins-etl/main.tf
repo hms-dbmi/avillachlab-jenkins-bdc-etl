@@ -40,25 +40,6 @@ resource "aws_instance" "this" {
   user_data = data.template_cloudinit_config.this.rendered
 }
 
-# this is pretty insecure.  We are outputting the private key.  
-# removing key pair
-#resource "tls_private_key" "provisioning-key" {
-#  algorithm = "RSA"
-#  rsa_bits  = 4096
-#}
-#output "provisioning-private-key" {
-#  value = tls_private_key.provisioning-key.private_key_pem
-#}
-
-# Not going to provision this docker folder to jenkins
-# This will no longer be needed.  Was only being created to provision jenkins-docker contents to the server to do some docker configurations.
-# Will investigate a KMS solution or a SSM solution to connect securely to the instance
-#resource "aws_key_pair" "this" {
-#  key_name   = "jenkins-provisioning-key-${var.stack-id}-${var.git-commit}"
-#  public_key = tls_private_key.provisioning-key.public_key_openssh
-#}
-
-# Need to update this after user-script
 data "template_file" "this" {
   template = file(var.user_script)
 
@@ -67,24 +48,6 @@ data "template_file" "this" {
     awscli_version  = "v1" # leaving it a constant for now
   }
 }
-
-# I wouldn't render this config file here as it ties it to infrastructure
-# We can use terraform to render config files if we want though.
-# Externalizing the variables out of the xml file will make them easier to manage as well.
-#data "template_file" "jenkins-config-xml" {
-#  template = file("../jenkins-docker/${var.config-xml-filename}")
-#  vars = {
-#    okta_saml_app_id = var.okta-app-id
-#    aws_account_app = var.aws-account-app
-#    arn_role_app = var.arn-role-app
-#    arn_role_cnc = var.arn-role-cnc
-#    arn_role_data = var.arn-role-data
-#    git_branch_avillachlab_jenkins_dev_release_control = var.git-branch-avillachlab-jenkins-dev-release-control
-#    avillachlab_release_control_repo = var.avillachlab-release-control-repo
-#    stack_s3_bucket = var.stack_s3_bucket
-#    jenkins_role_admin_name = var.jenkins-role-admin-name
-#  }
-#}
 
 data "template_cloudinit_config" "this" {
   gzip          = true
@@ -127,7 +90,6 @@ resource "aws_security_group" "inbound" {
     protocol  = "tcp"
     cidr_blocks = [
       var.access_cidr
-
     ]
   }
 

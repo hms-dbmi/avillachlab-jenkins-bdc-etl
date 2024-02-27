@@ -1,6 +1,6 @@
 provider "aws" {
-  region     = "us-east-1" 
-  version    = "3.74"
+  region  = "us-east-1"
+  version = "3.74"
 }
 
 # currenlty using default AES encryption
