@@ -1,0 +1,60 @@
+jenkins:
+  civariables:
+    globalNodeProperties:
+    - envVars:
+        env:
+        - key: "aws_account_app"
+          value: "900561893673"
+        - key: "jenkins_config_s3_location"
+          value: "s3://^${stack_s3_bucket}/jenkins_config/migrating_config.xml"
+        - key: "stack_s3_bucket"
+          value: "avillach-biodatacatalyst-deployments-3drb48r"
+        - key: "git_branch_avillachlab_jenkins_dev_release_control"
+          value: "paul-non-FISMA"
+        - key: "terraform_distro"
+          value: "https://releases.hashicorp.com/terraform/0.12.31/terraform_0.12.31_linux_amd64.zip"
+jenkins:
+  tfvariables:
+    globalNodeProperties:
+      - envVars:
+          env:
+            - key: "TF_AMI_REGEX"
+              value: "CIS CentOS Linux 7 Benchmark v*"
+            - key: "TF_AMI_OWNERS"
+              value: "[ "679593333241" ]"
+            - key: "TF_INSTANCE_TYPE"
+              value: "r5.xlarge"
+            - key: "TF_ASSOCIATE_PUBLIC_IP_ADDRESS"
+              value: "true"
+            - key: "TF_INSTANCE_PROFILE_ROLE"
+              value: "jenkins-s3-role-secure"
+            - key: "TF_INSTANCE_PROFILE_NAME"
+              value: "jenkins-s3-policy-secure"
+            - key: "TF_VOLUME_SIZE"
+              value: "1000"
+            - key: "TF_SUBNET_ID"
+              value: "subnet-00a35d901a151ab01"
+            - key: "TF_STACK_S3_BUCKET"
+              value: "${stack_s3_bucket}"
+            - key: "TF_USER_SCRIPT"
+              value: "./user-scripts/centos7.sh"
+            - key: "TF_VPC_ID"
+              value: "vpc-06d289a45c9021bdc"
+            - key: "TF_ACCESS_CIDR"
+              value: "134.174.0.0/16"
+tool:
+  git:
+    installations:
+    - home: "git"
+      name: "Default"
+  jdk:
+    installations:
+    - home: "/usr/lib/jvm/java-11-openjdk-amd64/"
+      name: "JDK-11"
+  maven:
+    installations:
+    - home: "/opt/apache-maven-3.8.8/"
+      name: "Maven 3.8.8"
+  mavenGlobalConfig:
+    globalSettingsProvider: "standard"
+    settingsProvider: "standard"

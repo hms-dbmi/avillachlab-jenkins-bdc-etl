@@ -1,0 +1,95 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@320.v5a_0933a_e7d61">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.FileParameterDefinition>
+          <name>Managed_Inputs.csv</name>
+        </hudson.model.FileParameterDefinition>
+        <hudson.model.FileParameterDefinition>
+          <name>job.config</name>
+        </hudson.model.FileParameterDefinition>
+        <hudson.model.FileParameterDefinition>
+          <name>mapping.csv</name>
+        </hudson.model.FileParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.2.0">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>https://github.com/hms-dbmi/ETL-MissionControl-dbgap-submodule</url>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>*/master</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="empty-list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+mkdir data
+mkdir resources
+mkdir mappings
+mkdir completed
+
+aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/avillach-73-nhanes-s3-iam --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+
+aws s3 cp s3://avillach-73-nhanes-etl/completed/NHANES_allConcepts.csv .
+
+#head -30 nhanesfull.csv &gt; data/nhanesfull.csv
+#aws s3 cp s3://avillach-73-nhanes-etl/mappings/mapping.csv mappings/
+#aws s3 cp s3://avillach-73-nhanes-etl/resources/job.config resources/
+#mv mapping.csv mappings/
+#mv job.config resources/
+#mv Managed_Inputs.csv data/Managed_Inputs.csv
+
+# can&apos;t sequence atm
+#java -jar jars/SetPatientSequence.jar -propertiesfile resources/job.config
+#mv completed/*_PatientMapping.v2.csv mappings/
+
+#java -jar jars/GenerateAllConcepts.jar -propertiesfile resources/job.config
+
+#sed -i &apos;s/µ/\\/g&apos; completed/NHANES_allConcepts.csv
+
+#echo &quot;patient_num,concept_path,tval_char,nval_num,start_date&quot; &gt; NHANES_allConcepts.csv
+#cat completed/NHANES_allConcepts.csv &gt;&gt; NHANES_allConcepts.csv
+
+#aws s3 cp NHANES_allConcepts.csv s3://avillach-73-nhanes-etl/completed/NHANES_allConcepts.csv
+</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.40">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>

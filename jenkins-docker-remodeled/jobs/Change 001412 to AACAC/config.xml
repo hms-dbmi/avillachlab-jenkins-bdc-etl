@@ -1,0 +1,63 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@320.v5a_0933a_e7d61">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+        
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+
+#aws s3 mv s3://avillach-73-bdcatalyst-etl/dhs/oldData/phs001412/v1.p1/data/DHS_PatientMapping.v2.csv s3://avillach-73-bdcatalyst-etl/aacac/oldData/phs001412/v1.p1/data/AACAC_PatientMapping.v2.csv
+#aws s3 mv s3://avillach-73-bdcatalyst-etl/dhs/completed/phs001412/ s3://avillach-73-bdcatalyst-etl/aacac/completed/phs001412/ --recursive 
+#aws s3 mv s3://avillach-73-bdcatalyst-etl/dhs/rawData/ s3://avillach-73-bdcatalyst-etl/aacac/rawData/ --recursive --exclude &quot;*&quot; --include &quot;phs001412*&quot;
+#aws s3 mv s3://avillach-73-bdcatalyst-etl/dhs/decoded_data/ s3://avillach-73-bdcatalyst-etl/aacac/decoded_data/  --recursive --exclude &quot;*&quot; --include &quot;phs001412*&quot;
+#aws s3 mv s3://avillach-73-bdcatalyst-etl/aacac/completed/phs001412/DHS_allConcepts.csv s3://avillach-73-bdcatalyst-etl/aacac/completed/phs001412/AACAC_allConcepts.csv
+#aws s3 mv s3://avillach-73-bdcatalyst-etl/aacac/completed/phs001412/DHS_allConcepts_new_search.csv s3://avillach-73-bdcatalyst-etl/aacac/completed/phs001412/AACAC_allConcepts_new_search.csv
+#aws s3 mv s3://avillach-73-bdcatalyst-etl/aacac/completed/phs001412/DHS_allConcepts_new_search_with_data_analyzer.csv s3://avillach-73-bdcatalyst-etl/aacac/completed/phs001412/AACAC_allConcepts_new_search_with_data_analyzer.csv
+aws s3 mv s3://avillach-73-bdcatalyst-etl/aacac/decoded_data/phs001412.v1.pht006743.v1.p1.TOPMed_WGS_DHS_Subject.MULTI.txt s3://avillach-73-bdcatalyst-etl/aacac/decoded_data/phs001412.v1.pht006743.v1.p1.TOPMed_WGS_AACAC_Subject.MULTI.txt
+aws s3 mv s3://avillach-73-bdcatalyst-etl/aacac/decoded_data/phs001412.v1.pht006744.v1.p1.TOPMed_WGS_DHS_Pedigree.MULTI.txt s3://avillach-73-bdcatalyst-etl/aacac/decoded_data/phs001412.v1.pht006744.v1.p1.TOPMed_WGS_AACAC_Pedigree.MULTI.txt
+aws s3 mv s3://avillach-73-bdcatalyst-etl/aacac/decoded_data/phs001412.v1.pht006745.v1.p1.TOPMed_WGS_DHS_Sample.MULTI.txt s3://avillach-73-bdcatalyst-etl/aacac/decoded_data/phs001412.v1.pht006745.v1.p1.TOPMed_WGS_AACAC_Sample.MULTI.txt
+aws s3 mv s3://avillach-73-bdcatalyst-etl/aacac/decoded_data/phs001412.v1.pht006746.v1.p1.c1.TOPMed_WGS_DHS_Subject_Phenotypes.HMB-IRB-COL-NPU.txt s3://avillach-73-bdcatalyst-etl/aacac/decoded_data/phs001412.v1.pht006746.v1.p1.c1.TOPMed_WGS_AACAC_Subject_Phenotypes.HMB-IRB-COL-NPU.txt
+aws s3 mv s3://avillach-73-bdcatalyst-etl/aacac/decoded_data/phs001412.v1.pht006746.v1.p1.c2.TOPMed_WGS_DHS_Subject_Phenotypes.DS-DHD-IRB-COL-NPU.txt s3://avillach-73-bdcatalyst-etl/aacac/decoded_data/phs001412.v1.pht006746.v1.p1.c2.TOPMed_WGS_AACAC_Subject_Phenotypes.DS-DHD-IRB-COL-NPU.txt
+aws s3 mv s3://avillach-73-bdcatalyst-etl/aacac/decoded_data/phs001412.v1.pht006747.v1.p1.c1.TOPMed_WGS_DHS_Sample_Attributes.HMB-IRB-COL-NPU.txt s3://avillach-73-bdcatalyst-etl/aacac/decoded_data/phs001412.v1.pht006747.v1.p1.c1.TOPMed_WGS_AACAC_Sample_Attributes.HMB-IRB-COL-NPU.txt
+aws s3 mv s3://avillach-73-bdcatalyst-etl/aacac/decoded_data/phs001412.v1.pht006747.v1.p1.c2.TOPMed_WGS_DHS_Sample_Attributes.DS-DHD-IRB-COL-NPU.txt s3://avillach-73-bdcatalyst-etl/aacac/decoded_data/phs001412.v1.pht006747.v1.p1.c2.TOPMed_WGS_AACAC_Sample_Attributes.DS-DHD-IRB-COL-NPU.txt
+aws s3 mv s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006743.v1.TOPMed_WGS_DHS_Subject.data_dict.xml s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006743.v1.TOPMed_WGS_AACAC_Subject.data_dict.xml
+aws s3 mv s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006743.v1.p1.TOPMed_WGS_DHS_Subject.MULTI.txt s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006743.v1.p1.TOPMed_WGS_AACAC_Subject.MULTI.txt
+aws s3 mv s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006743.v1.p1.TOPMed_WGS_DHS_Subject.var_report.xml s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006743.v1.p1.TOPMed_WGS_AACAC_Subject.var_report.xml
+aws s3 mv s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006744.v1.TOPMed_WGS_DHS_Pedigree.data_dict.xml s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006744.v1.TOPMed_WGS_AACAC_Pedigree.data_dict.xml
+aws s3 mv s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006744.v1.p1.TOPMed_WGS_DHS_Pedigree.MULTI.txt s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006744.v1.p1.TOPMed_WGS_AACAC_Pedigree.MULTI.txt
+aws s3 mv s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006744.v1.p1.TOPMed_WGS_DHS_Pedigree.var_report.xml s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006744.v1.p1.TOPMed_WGS_AACAC_Pedigree.var_report.xml
+aws s3 mv s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006745.v1.TOPMed_WGS_DHS_Sample.data_dict.xml s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006745.v1.TOPMed_WGS_AACAC_Sample.data_dict.xml
+aws s3 mv s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006745.v1.p1.TOPMed_WGS_DHS_Sample.MULTI.txt s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006745.v1.p1.TOPMed_WGS_AACAC_Sample.MULTI.txt
+aws s3 mv s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006745.v1.p1.TOPMed_WGS_DHS_Sample.var_report.xml s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006745.v1.p1.TOPMed_WGS_AACAC_Sample.var_report.xml
+aws s3 mv s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006746.v1.TOPMed_WGS_DHS_Subject_Phenotypes.data_dict.xml s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006746.v1.TOPMed_WGS_AACAC_Subject_Phenotypes.data_dict.xml
+aws s3 mv s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006746.v1.p1.TOPMed_WGS_DHS_Subject_Phenotypes.var_report.xml s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006746.v1.p1.TOPMed_WGS_AACAC_Subject_Phenotypes.var_report.xml
+aws s3 mv s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006746.v1.p1.c1.TOPMed_WGS_DHS_Subject_Phenotypes.HMB-IRB-COL-NPU.txt s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006746.v1.p1.c1.TOPMed_WGS_AACAC_Subject_Phenotypes.HMB-IRB-COL-NPU.txt
+aws s3 mv s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006746.v1.p1.c2.TOPMed_WGS_DHS_Subject_Phenotypes.DS-DHD-IRB-COL-NPU.txt s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006746.v1.p1.c2.TOPMed_WGS_AACAC_Subject_Phenotypes.DS-DHD-IRB-COL-NPU.txt
+aws s3 mv s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006747.v1.TOPMed_WGS_DHS_Sample_Attributes.data_dict.xml s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006747.v1.TOPMed_WGS_AACAC_Sample_Attributes.data_dict.xml
+aws s3 mv s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006747.v1.p1.TOPMed_WGS_DHS_Sample_Attributes.var_report.xml s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006747.v1.p1.TOPMed_WGS_AACAC_Sample_Attributes.var_report.xml
+aws s3 mv s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006747.v1.p1.c1.TOPMed_WGS_DHS_Sample_Attributes.HMB-IRB-COL-NPU.txt s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006747.v1.p1.c1.TOPMed_WGS_AACAC_Sample_Attributes.HMB-IRB-COL-NPU.txt
+aws s3 mv s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006747.v1.p1.c2.TOPMed_WGS_DHS_Sample_Attributes.DS-DHD-IRB-COL-NPU.txt s3://avillach-73-bdcatalyst-etl/aacac/rawData/phs001412.v1.pht006747.v1.p1.c2.TOPMed_WGS_AACAC_Sample_Attributes.DS-DHD-IRB-COL-NPU.txt</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers/>
+</project>

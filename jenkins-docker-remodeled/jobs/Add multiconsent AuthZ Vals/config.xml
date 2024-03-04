@@ -1,0 +1,132 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@320.v5a_0933a_e7d61">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>managed_inputs</name>
+          <defaultValue>s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.csv</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>metadata_file</name>
+          <defaultValue>s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.2.0">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>https://github.com/hms-dbmi/ETL-MissionControl-dbgap-submodule</url>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>*/genomicIngestion</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="empty-list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+
+### assume etl role
+aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+
+mkdir data
+mkdir completed
+
+aws s3 cp ${managed_inputs} data/
+aws s3 cp ${metadata_file} data/
+
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+
+csvcut -c 1,2,3,8,9,12 data/Managed_Inputs.csv &gt; inputs.csv
+
+# Generate mappings
+cat	inputs.csv
+IFS=&apos;,&apos;
+[ ! -f inputs.csv ]
+while read abv_name stdy_id stdy_type data_ready data_processed authz_column
+do
+	if [[ ${stdy_id,,} == *&quot;phs&quot;* ]];
+    then
+		export prefix=${authz_column%/*}
+        jq -r &apos;.bio_data_catalyst[] | select(.study_identifier == &quot;&apos;${stdy_id,,}&apos;&quot;) | .consent_group_code&apos; data/metadata_new_search.json &gt; consents.txt
+        while read consent; 
+        do
+        	if [ $consent != &quot;c0&quot; ]
+            then
+				consentAbv=`jq -r &apos;.bio_data_catalyst[] | select(.study_identifier == &quot;&apos;${stdy_id,,}&apos;&quot; and .consent_group_code == &quot;&apos;${consent}&apos;&quot;).consent_group_name_abv&apos; data/metadata_new_search.json`
+            	if [ $consentAbv != &quot;Study access temporarily suspended&quot; ]
+               	 	then
+                	    lastChar=${authz_column: -1}
+            			if [ $lastChar != &quot;_&quot; ];
+            			then
+            				lastChar=&quot;&quot;
+            			fi
+                    studyAbv=${authz_column##*/}
+                    studyAbv=${studyAbv%%_*}
+                    newAuthz=${prefix}/${studyAbv}_${consentAbv}${lastChar}
+            		echo authz should be ${newAuthz}, fixing metadata
+                    jq -r &apos;{&quot;bio_data_catalyst&quot;: [.bio_data_catalyst[] | select(.study_identifier == &quot;&apos;${stdy_id,,}&apos;&quot; and .consent_group_code == &quot;&apos;${consent}&apos;&quot;).authZ |= &quot;&apos;${newAuthz}&apos;&quot;]}&apos;  data/metadata_new_search.json &gt; data/out.json
+            		mv -f data/out.json data/metadata_new_search.json
+            		jq -r &apos;.bio_data_catalyst[] | select(.study_identifier == &quot;&apos;${stdy_id,,}&apos;&quot;)&apos; data/metadata_new_search.json
+                fi
+            else
+            	echo c0 studies should not have an authz, fixing metadata
+                jq -r &apos;{&quot;bio_data_catalyst&quot;: [.bio_data_catalyst[] | select(.study_identifier == &quot;&apos;${stdy_id,,}&apos;&quot; and .consent_group_code == &quot;&apos;${consent}&apos;&quot;).authZ |= &quot;&quot;]}&apos;  data/metadata_new_search.json &gt; data/out.json
+            	mv -f data/out.json data/metadata_new_search.json
+            	jq -r &apos;.bio_data_catalyst[] | select(.study_identifier == &quot;&apos;${stdy_id,,}&apos;&quot;)&apos; data/metadata_new_search.json
+            fi
+        done &lt; consents.txt
+     else
+     	echo authz ${authz_column} is correct
+     fi
+done  &lt; inputs.csv
+
+aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+
+aws s3 cp data/metadata_new_search.json ${metadata_file}</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.40">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>
