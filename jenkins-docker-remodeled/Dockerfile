@@ -47,6 +47,7 @@ RUN wget -c $TERRAFORM_DISTRO -O /opt/terraform.zip && \
 
 # JDK Installations - Base Image JDK used by jenkins already available.
 # JDK 11 made available for update to jdk21 jenkins base image.
+RUN apt search openjdk
 RUN apt-get -y install openjdk-11-jdk 
 
 # Cleanup
