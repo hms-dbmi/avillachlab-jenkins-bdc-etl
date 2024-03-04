@@ -1,4 +1,4 @@
-FROM jenkins/jenkins:2.426.1-lts-jdk11
+FROM jenkins/jenkins:latest-jdk21
 
 # user to swap easily between OS operations and jenkins configuration.
 ENV JENKINS_USERNAME=$USER
@@ -45,8 +45,9 @@ RUN apt-get install jq -y
 RUN wget -c $TERRAFORM_DISTRO -O /opt/terraform.zip && \
     unzip /opt/terraform.zip -d /usr/local/bin/ && rm -f /opt/terraform.zip
 
-# JDK Installations
-
+# JDK Installations - Base Image JDK used by jenkins already available.
+# JDK 11 made available for update to jdk21 jenkins base image.
+RUN apt-get -y install openjdk-11-jdk 
 
 # Cleanup
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /var/cache/apt/*
