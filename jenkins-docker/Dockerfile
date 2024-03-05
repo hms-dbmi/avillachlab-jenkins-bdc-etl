@@ -22,7 +22,7 @@ ARG HTTPS_PORT=8080
 # We could run these commands and build an image then configure jenkins only in this dockerfile instead of directly using the jenkins stock image
 USER root
 
-RUN apt-get update
+RUN apt-get update -y
 
 RUN apt-get -y install apt-transport-https \
     python3-pip \
