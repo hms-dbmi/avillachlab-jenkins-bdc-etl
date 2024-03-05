@@ -79,7 +79,7 @@ export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut 
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
 # Pull columnMeta.csv
-aws s3 cp s3://avillach-73-nhanes-etl/hpds/javabin/columnMeta_sample.csv ./local/source/columnMeta.csv
+aws s3 cp s3://avillach-73-nhanes-etl/hpds/javabin/columnMeta_full.csv ./local/source/columnMeta.csv
 
 # Adding the files to the docker container that is needed is much better practice then doing the volume mounting 
 # that is currently being done in the docker run.  Will investigate further if that is possible. TD
@@ -108,7 +108,7 @@ docker save hms-dbmi/pic-sure-hpds-dictionary:${GIT_BRANCH_SHORT}_${GIT_COMMIT_S
 HPDS_ETL_IMAGE=`docker load &lt; ./pic-sure-hpds-dictionary.tar.gz  | cut -d &apos; &apos; -f 3`
 
 echo $HPDS_ETL_IMAGE
-
+touch ./local/source/conceptsToRemove.csv
 # volume mount pwd that contains original data files as /opt/local/source/
 #
 mkdir -p &quot;${WORKSPACE}&quot;/tagging/output
@@ -124,7 +124,7 @@ export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
-aws s3 --sse=AES256 cp dictionary_javabin_sample.tar.gz  s3://avillach-73-nhanes-etl/hpds/javabin/
+aws s3 --sse=AES256 cp dictionary_javabin_full.tar.gz  s3://avillach-73-nhanes-etl/hpds/javabin/
 
 #aws s3 --sse=AES256 cp Missing_Dictionary_Entries.csv s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/Missing_Dictionary_Entries_${ts}.csv
 

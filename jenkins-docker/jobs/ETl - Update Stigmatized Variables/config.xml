@@ -1,7 +1,7 @@
 <?xml version='1.1' encoding='UTF-8'?>
 <project>
   <actions/>
-  <description></description>
+  <description>Updates the analyzer javabin with new stigvars. Should also run the dictionary javabin job to generate new dictionary.</description>
   <keepDependencies>false</keepDependencies>
   <properties>
     <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@320.v5a_0933a_e7d61">
@@ -12,6 +12,7 @@
       <parameterDefinitions>
         <hudson.model.StringParameterDefinition>
           <name>S3_DATA_SET_TAR_NAME</name>
+          <description>i.e. biodatacatalyst_javabins_data_analyzer_02-21-24.tar.gz</description>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
       </parameterDefinitions>

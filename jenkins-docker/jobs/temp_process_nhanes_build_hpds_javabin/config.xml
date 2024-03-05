@@ -13,6 +13,9 @@
         <hudson.model.FileParameterDefinition>
           <name>metadata.json</name>
         </hudson.model.FileParameterDefinition>
+        <hudson.model.FileParameterDefinition>
+          <name>allConcepts.csv</name>
+        </hudson.model.FileParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
@@ -75,7 +78,7 @@ export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apo
 cd &quot;${WORKSPACE}&quot;/docker/pic-sure-hpds-etl/
 
 aws s3 cp s3://avillach-73-nhanes-etl/completed/NHANES_allConcepts.csv hpds/allConcepts.csv
-
+#mv &quot;${WORKSPACE}&quot;/allConcepts.csv hpds/
 cat /dev/urandom | tr -dc &apos;a-zA-Z0-9&apos; | fold -w 32 | head -n 1 &gt; hpds/encryption_key
 
 #aws s3 cp s3://avillach-73-bdcatalyst-etl/general/resources/docker-compose-csv-loader.yml .
@@ -100,11 +103,11 @@ ts=$(date &apos;+%m-%d-%y&apos;)
 
 touch conceptsToRemove.txt
 
-tar zcf nhanes_javabins_sample.tar.gz columnMeta.csv *.javabin encryption_key metadata.json conceptsToRemove.txt
+tar zcf nhanes_javabins_full.tar.gz columnMeta.csv *.javabin encryption_key metadata.json conceptsToRemove.txt
 
-aws s3 cp nhanes_javabins_sample.tar.gz s3://avillach-73-nhanes-etl/hpds/javabin/
+aws s3 cp nhanes_javabins_full.tar.gz s3://avillach-73-nhanes-etl/hpds/javabin/
 
-aws s3 cp columnMeta.csv s3://avillach-73-nhanes-etl/hpds/javabin/columnMeta_sample.csv
+aws s3 cp columnMeta.csv s3://avillach-73-nhanes-etl/hpds/javabin/columnMeta_full.csv
 
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY

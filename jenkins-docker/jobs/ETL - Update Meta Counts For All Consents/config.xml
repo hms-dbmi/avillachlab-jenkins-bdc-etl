@@ -89,19 +89,10 @@ do
     export varcount=$((`wc -l &lt; ${id,,}/mapping2_post_analyzer.csv`-`grep -i ${id} conceptsToRemove.txt | wc -l`))
     echo &quot;Variable count &quot; $varcount
 
-    #if study has genomic data, get genomic sample count from sample attributes file
-    if [[ ${datatype} == *&quot;G&quot;* ]]; then
-    	echo &quot;Getting genomic count&quot;
-        export genomiccount=-1
-    else
-    	export genomiccount=-1
-    fi
 
 	#update the fields with the values received
 	jq -r &apos;. | .bio_data_catalyst[&apos;$i&apos;].clinical_variable_count|=&apos;$varcount&apos; | .bio_data_catalyst[&apos;$i&apos;].raw_clinical_variable_count|=&apos;$varcount&apos; | .bio_data_catalyst[&apos;$i&apos;].raw_clinical_sample_size|=&apos;$participantcount&apos; | .bio_data_catalyst[&apos;$i&apos;].clinical_sample_size|=&apos;$participantcount metadata_new_search.json &gt; out.json
-    #switch back to this command when genomic ready
-    #jq -r &apos;. | .bio_data_catalyst[&apos;$i&apos;].clinical_variable_count|=&apos;$varcount&apos; | .bio_data_catalyst[&apos;$i&apos;].raw_clinical_variable_count|=&apos;$varcount&apos; | .bio_data_catalyst[&apos;$i&apos;].raw_clinical_sample_size|=&apos;$participantcount&apos; | .bio_data_catalyst[&apos;$i&apos;].clinical_sample_size|=&apos;$participantcount&apos; | .bio_data_catalyst[&apos;$i&apos;].raw_genetic_sample_size|=&apos;$genomiccount&apos; | .bio_data_catalyst[&apos;$i&apos;].genetic_sample_size|=&apos;$genomiccount metadata_new_search.json &gt; out.json
-	mv -f out.json metadata_new_search.json
+    mv -f out.json metadata_new_search.json
     unset AWS_ACCESS_KEY_ID
 	unset AWS_SECRET_ACCESS_KEY
 	unset AWS_SESSION_TOKEN
@@ -112,7 +103,7 @@ export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
-aws s3 cp metadata_new_search.json s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search_g.json
+aws s3 cp metadata_new_search.json s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json
 
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
