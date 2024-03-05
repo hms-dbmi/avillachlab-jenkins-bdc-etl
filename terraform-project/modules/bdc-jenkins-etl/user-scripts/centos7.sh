@@ -122,6 +122,7 @@ image_tag=$(echo "$load_result" | grep -o -E "jenkins:[[:alnum:]_]+")
 
 #run docker container
 # kind of weird to volume mount jenkins workspace.  Guess that is to have the workspace available via shell?
+# Using the host docker daemon gives the container root access.  We already install docker in jenkins itself.
 sudo docker run -d --log-driver syslog --log-opt tag=jenkins \
                     -v /var/jenkins_home/workspace:/var/jenkins_home/workspace \
                     -v /var/run/docker.sock:/var/run/docker.sock \
