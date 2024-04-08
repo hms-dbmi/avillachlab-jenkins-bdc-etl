@@ -20,6 +20,19 @@ echo "$(aws --version)"
 # Should be on the base image
 # wget, ssm, cloudwatch
 
+# CrowdStrike
+aws s3 cp s3://security-applications/falcon-sensor-7.11.0-16405.el7.x86_64.rpm .
+yum install -y falcon-sensor-7.11.0-16405.el7.x86_64.rpm
+
+CI_CROWDSTRIKE_CID=$(aws secretsmanager get-secret-value --region us-east-1 --secret-id ${arn_sm_secrets} --output text --query SecretString | jq -r ".cid")
+CI_GENERAL_DEPARTMEHT=$(aws secretsmanager get-secret-value --region us-east-1 --secret-id ${arn_sm_general} --output text --query SecretString | jq -r ".department")
+CI_GENERAL_GROUP=$(aws secretsmanager get-secret-value --region us-east-1 --secret-id ${arn_sm_general} --output text --query SecretString | jq -r ".group")
+
+/opt/CrowdStrike/falconctl -s -f \
+    --cid=${CI_CROWDSTRIKE_CID} \
+	--tags="AffiliationTag/HMS,department/${CI_GENERAL_DEPARTMEHT},group/${CI_GENERAL_GROUP}"
+
+service falcon-sensor restart
 
 # cloudwatch configs should be defined externally instead of in the user-script
 sudo touch /opt/aws/amazon-cloudwatch-agent/etc/custom_config.json

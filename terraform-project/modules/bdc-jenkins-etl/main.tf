@@ -45,6 +45,8 @@ data "template_file" "this" {
 
   vars = {
     stack_s3_bucket = var.stack_s3_bucket
+    arn_sm_crowdstrike = var.arn_sm_crowdstrike
+    arn_sm_general = var.arn_sm_general
   }
 }
 
@@ -126,3 +128,4 @@ resource "random_string" "random" {
 locals {
   uniq_name = random_string.random.result
 }
+

@@ -58,3 +58,13 @@ variable "access_cidr" {
   description = "CIDR block for inbound and outbound access"
   type        = string
 }
+
+variable "arn_sm_crowdstrike" {
+  description = "arn for CrowdStrike secrets"
+  type        = string
+}
+
+variable "arn_sm_general" {
+  description = "arn for general secrets"
+  type        = string
+}
