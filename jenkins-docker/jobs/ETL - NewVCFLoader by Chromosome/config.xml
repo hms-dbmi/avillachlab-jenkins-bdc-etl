@@ -11,7 +11,7 @@
         </hudson.model.FileParameterDefinition>
         <hudson.model.StringParameterDefinition>
           <name>javaOpts</name>
-          <defaultValue>-Xmx48g</defaultValue>
+          <defaultValue>-Xmx10g</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
@@ -26,7 +26,7 @@
     </userRemoteConfigs>
     <branches>
       <hudson.plugins.git.BranchSpec>
-        <name>feature/ALS-4978-spring-boot</name>
+        <name>ALS-5981</name>
       </hudson.plugins.git.BranchSpec>
     </branches>
     <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
@@ -54,7 +54,7 @@
 
         mkdir -p data
 
-        studyId=$(head -n 1 vcfIndex.tsv)
+        studyId=$(head -n 1 vcfIndex.tsv | tr -d &apos;&quot;&apos;)
 
         rm -rf data/${studyId}
         mkdir -p data/${studyId}
@@ -71,34 +71,49 @@
         sed -n &quot;2p&quot; vcfIndex.tsv &gt; &quot;data/${studyId}/chrXVcfIndex.tsv&quot;
         sed -n &quot;25p&quot; vcfIndex.tsv &gt;&gt; &quot;data/${studyId}/chrXVcfIndex.tsv&quot;
 
-        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr1.annotated.hpds.vcf.gz data/vcfInput/
-        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr2.annotated.hpds.vcf.gz data/vcfInput/
-        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr3.annotated.hpds.vcf.gz data/vcfInput/
-        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr4.annotated.hpds.vcf.gz data/vcfInput/
-        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr5.annotated.hpds.vcf.gz data/vcfInput/
-        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr6.annotated.hpds.vcf.gz data/vcfInput/
-        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr7.annotated.hpds.vcf.gz data/vcfInput/
-        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr8.annotated.hpds.vcf.gz data/vcfInput/
-        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr9.annotated.hpds.vcf.gz data/vcfInput/
-        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr10.annotated.hpds.vcf.gz data/vcfInput/
-        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr11.annotated.hpds.vcf.gz data/vcfInput/
-        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr12.annotated.hpds.vcf.gz data/vcfInput/
-        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr13.annotated.hpds.vcf.gz data/vcfInput/
-        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr14.annotated.hpds.vcf.gz data/vcfInput/
-        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr15.annotated.hpds.vcf.gz data/vcfInput/
-        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr16.annotated.hpds.vcf.gz data/vcfInput/
-        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr17.annotated.hpds.vcf.gz data/vcfInput/
-        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr18.annotated.hpds.vcf.gz data/vcfInput/
-        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr19.annotated.hpds.vcf.gz data/vcfInput/
-        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr20.annotated.hpds.vcf.gz data/vcfInput/
-        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr21.annotated.hpds.vcf.gz data/vcfInput/
-        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chr22.annotated.hpds.vcf.gz data/vcfInput/
-        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/${studyId}.chrX.annotated.hpds.vcf.gz data/vcfInput/</command>
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/modifiers_removed/${studyId}.chr1.annotated_remove_modifiers.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/modifiers_removed/${studyId}.chr2.annotated_remove_modifiers.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/modifiers_removed/${studyId}.chr3.annotated_remove_modifiers.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/modifiers_removed/${studyId}.chr4.annotated_remove_modifiers.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/modifiers_removed/${studyId}.chr5.annotated_remove_modifiers.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/modifiers_removed/${studyId}.chr6.annotated_remove_modifiers.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/modifiers_removed/${studyId}.chr7.annotated_remove_modifiers.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/modifiers_removed/${studyId}.chr8.annotated_remove_modifiers.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/modifiers_removed/${studyId}.chr9.annotated_remove_modifiers.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/modifiers_removed/${studyId}.chr10.annotated_remove_modifiers.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/modifiers_removed/${studyId}.chr11.annotated_remove_modifiers.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/modifiers_removed/${studyId}.chr12.annotated_remove_modifiers.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/modifiers_removed/${studyId}.chr13.annotated_remove_modifiers.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/modifiers_removed/${studyId}.chr14.annotated_remove_modifiers.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/modifiers_removed/${studyId}.chr15.annotated_remove_modifiers.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/modifiers_removed/${studyId}.chr16.annotated_remove_modifiers.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/modifiers_removed/${studyId}.chr17.annotated_remove_modifiers.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/modifiers_removed/${studyId}.chr18.annotated_remove_modifiers.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/modifiers_removed/${studyId}.chr19.annotated_remove_modifiers.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/modifiers_removed/${studyId}.chr20.annotated_remove_modifiers.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/modifiers_removed/${studyId}.chr21.annotated_remove_modifiers.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/modifiers_removed/${studyId}.chr22.annotated_remove_modifiers.hpds.vcf.gz data/vcfInput/
+        aws s3 cp s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/hpds_vcfs/modifiers_removed/${studyId}.chrX.annotated_remove_modifiers.hpds.vcf.gz data/vcfInput/
+
+        for i in X 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22; do
+        #rm -f data/vcfInput/${studyId}.chr${i}.annotated_remove_modifiers.hpds.vcf
+        gunzip data/vcfInput/${studyId}.chr${i}.annotated_remove_modifiers.hpds.vcf.gz
+
+        #creates files for the headers, then sort the rest of the lines by position
+        grep &quot;#&quot; data/vcfInput/${studyId}.chr${i}.annotated_remove_modifiers.hpds.vcf &gt;  data/vcfInput/${studyId}.chr${i}.headers.vcf
+        grep -v &quot;#&quot; data/vcfInput/${studyId}.chr${i}.annotated_remove_modifiers.hpds.vcf | sort -k2n &gt;&gt;  data/vcfInput/${studyId}.chr${i}.resort.vcf
+
+        cat data/vcfInput/${studyId}.chr${i}.headers.vcf &gt; data/vcfInput/${studyId}.chr${i}.annotated_remove_modifiers.hpds.vcf
+        rm data/vcfInput/${studyId}.chr${i}.headers.vcf
+        cat data/vcfInput/${studyId}.chr${i}.resort.vcf &gt;&gt; data/vcfInput/${studyId}.chr${i}.annotated_remove_modifiers.hpds.vcf
+        rm data/vcfInput/${studyId}.chr${i}.resort.vcf
+        bgzip -c data/vcfInput/${studyId}.chr${i}.annotated_remove_modifiers.hpds.vcf &gt; data/vcfInput/${studyId}.chr${i}.annotated_remove_modifiers.hpds.vcf.gz
+        rm data/vcfInput/${studyId}.chr${i}.annotated_remove_modifiers.hpds.vcf
+        done</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
     <hudson.tasks.Shell>
-      <command>studyId=$(head -n 1 vcfIndex.tsv)
-
+      <command>studyId=$(head -n 1 vcfIndex.tsv | tr -d &apos;&quot;&apos;)
 
         i=&apos;X&apos;
 
@@ -113,7 +128,7 @@
         export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
         export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
-        aws s3 sync &quot;data/${studyId}/${i}/all&quot; &quot;s3://avillach-73-bdcatalyst-etl/general/hpds/genomics_javabins/9b/v3/${studyId}/${i}/&quot;
+        aws s3 sync &quot;data/${studyId}/${i}/all&quot; &quot;s3://avillach-73-bdcatalyst-etl/general/hpds/genomics_javabins/9b/v4.1/${studyId}/${i}/&quot;
 
 
         for i in $(seq 1 22); do
@@ -128,7 +143,7 @@
         export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
         export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
-        aws s3 sync &quot;data/${studyId}/${i}/all&quot; &quot;s3://avillach-73-bdcatalyst-etl/general/hpds/genomics_javabins/9b/v3/${studyId}/${i}/&quot;
+        aws s3 sync &quot;data/${studyId}/${i}/all&quot; &quot;s3://avillach-73-bdcatalyst-etl/general/hpds/genomics_javabins/9b/v4.1/${studyId}/${i}/&quot;
         done
 
 
