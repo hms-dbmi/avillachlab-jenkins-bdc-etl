@@ -1,16 +1,8 @@
 pipeline {
     agent any
     
-    parameters {
-        choice(name: 'BRANCH', choices: ['master', 'develop'], description: 'Select the branch to build')
-    }
     
     stages {
-        stage('Checkout') {
-            steps {
-                git branch: params.BRANCH, url: 'https://github.com/hms-dbmi/avillachlab-jenkins-bdc-etl'
-            }
-        }
         
         stage('Build') {
             steps {
