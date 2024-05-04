@@ -1,0 +1,93 @@
+pipeline {
+    agent any
+    
+    parameters {
+        choice(name: 'BRANCH', choices: ['master', 'develop'], description: 'Select the branch to build')
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: params.BRANCH, url: 'https://github.com/hms-dbmi/avillachlab-jenkins-bdc-etl'
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                script {
+                    // Calculate short git commit hash
+                    def gitCommitShort = sh(script: 'echo ${GIT_COMMIT} | head -c7', returnStdout: true).trim()
+
+                    // Create certs directory
+                    sh 'mkdir -p certs/'
+
+                    // Download Jenkins config file from S3
+                    sh 'aws --region us-east-1 s3 cp "${jenkins_config_s3_location}" ./config.xml'
+
+                    // Build Container
+                    sh '''
+                    docker build \
+                      --build-arg TERRAFORM_DISTRO="${CI_terraform_distro}" \
+                      --build-arg CONFIG_XML_FILE="./config.xml" \
+                      --build-arg PLUGINS_FILE="./plugins.txt" \
+                      --build-arg SCRIPT_APPROVAL_FILE="./scriptApproval.xml" \
+                      --build-arg JOBS_DIR="./jobs/" \
+                      --build-arg PKCS12_FILE="" \
+                      --build-arg PKCS12_PASS="" \
+                      --build-arg HUDSON_TASKS_FILE="./hudson.tasks.Maven.xml" \
+                      -t jenkins:$gitCommitShort .
+                    '''
+
+                    // Save Docker image
+                    sh 'docker save jenkins:$gitCommitShort | gzip > jenkins.tar.gz'
+
+                    // Upload Docker image to S3
+                    sh 'aws s3 cp jenkins.tar.gz s3://${stack_s3_bucket}/containers/jenkins/'
+                }
+            }
+        }
+        
+        // Add more stages based on your CI/CD process
+        stage('Test') {
+            steps {
+                // Placeholder for running automated tests
+                echo 'Running automated tests...'
+            }
+        }
+        
+        stage('Deploy to Dev') {
+            steps {
+                // Placeholder for deploying to development environment
+                echo 'Deploying to development environment...'
+            }
+        }
+        
+        stage('Deploy to QA') {
+            steps {
+                // Placeholder for deploying to QA environment
+                echo 'Deploying to QA environment...'
+            }
+        }
+        
+        stage('Deploy to Staging') {
+            steps {
+                // Placeholder for deploying to staging environment
+                echo 'Deploying to staging environment...'
+            }
+        }
+        
+        stage('Deploy to Production') {
+            steps {
+                // Placeholder for deploying to production environment
+                echo 'Deploying to production environment...'
+            }
+        }
+        
+        stage('Post-Deployment Tasks') {
+            steps {
+                // Placeholder for post-deployment tasks
+                echo 'Performing post-deployment tasks...'
+            }
+        }
+    }
+}
