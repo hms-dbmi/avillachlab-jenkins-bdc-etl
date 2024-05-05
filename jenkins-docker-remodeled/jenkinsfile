@@ -4,6 +4,10 @@ pipeline {
     parameters {
         choice(name: 'BRANCH', choices: ['master', 'develop', 'some-architecture-work'], description: 'Select the branch to build')
     }
+
+    triggers {
+        pollSCM('*/5 * * * *')
+    }
     
     stages {
         stage('Checkout') {
