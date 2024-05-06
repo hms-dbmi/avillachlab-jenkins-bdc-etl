@@ -35,6 +35,7 @@ pipeline {
                     sh 'aws --region us-east-1 s3 cp "${jenkins_config_s3_location}" ./config.xml'
 
                     // Build Container
+                    sh 'ls -la'
                     sh """
                     docker build \
                     --build-arg TERRAFORM_DISTRO=\"${CI_terraform_distro}\" \
