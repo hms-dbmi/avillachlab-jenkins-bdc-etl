@@ -27,33 +27,34 @@ pipeline {
         stage('Build') {
             steps {
                 script {
-                    sh "cd jenkins-docker-remodeled/"
-                    // Create certs directory
-                    sh 'mkdir -p certs/'
+                    // Change directory to 'jenkins-docker-remodeled'
+                    dir('jenkins-docker-remodeled') {
+                        // Create certs directory
+                        sh 'mkdir -p certs/'
 
-                    // Download Jenkins config file from S3
-                    sh 'aws --region us-east-1 s3 cp "${jenkins_config_s3_location}" ./config.xml'
+                        // Download Jenkins config file from S3
+                        sh 'aws --region us-east-1 s3 cp "${jenkins_config_s3_location}" ./config.xml'
 
-                    // Build Container
-                    sh 'ls -la'
-                    sh """
-                    docker build -f Dockerfile \
-                    --build-arg TERRAFORM_DISTRO=\"${CI_terraform_distro}\" \
-                    --build-arg CONFIG_XML_FILE=\"./config.xml\" \
-                    --build-arg PLUGINS_FILE=\"./plugins.txt\" \
-                    --build-arg SCRIPT_APPROVAL_FILE=\"./scriptApproval.xml\" \
-                    --build-arg JOBS_DIR=\"./jobs/\" \
-                    --build-arg PKCS12_FILE=\"\" \
-                    --build-arg PKCS12_PASS=\"\" \
-                    --build-arg HUDSON_TASKS_FILE=\"./hudson.tasks.Maven.xml\" \
-                    -t jenkins:${params.DOCKER_TAG} .
-                    """
+                        // Build Container
+                        sh 'ls -la'
+                        sh """
+                        docker build -f Dockerfile \
+                        --build-arg TERRAFORM_DISTRO=\"${CI_terraform_distro}\" \
+                        --build-arg CONFIG_XML_FILE=\"./config.xml\" \
+                        --build-arg PLUGINS_FILE=\"./plugins.txt\" \
+                        --build-arg SCRIPT_APPROVAL_FILE=\"./scriptApproval.xml\" \
+                        --build-arg JOBS_DIR=\"./jobs/\" \
+                        --build-arg PKCS12_FILE=\"\" \
+                        --build-arg PKCS12_PASS=\"\" \
+                        --build-arg HUDSON_TASKS_FILE=\"./hudson.tasks.Maven.xml\" \
+                        -t jenkins:${params.DOCKER_TAG} .
+                        """
 
-                    // Save Docker image
-                    sh 'docker save jenkins:${params.DOCKER_TAG} | gzip > jenkins.tar.gz'
+                        // Save Docker image
+                        sh 'docker save jenkins:${params.DOCKER_TAG} | gzip > jenkins.tar.gz'
 
-                    // Upload Docker image to S3
-                    sh 'aws s3 cp jenkins.tar.gz s3://${stack_s3_bucket}/containers/jenkins/'
+                        // Upload Docker image to S3
+                        sh 'aws s3 cp jenkins.tar.gz s3://${stack_s3_bucket}/containers/jenkins/'
                 }
             }
         }
