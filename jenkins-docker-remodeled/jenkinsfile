@@ -6,16 +6,23 @@ pipeline {
     }
 
     triggers {
-        pollSCM('*/5 * * * *')
+        pollSCM('*/1 * * * *')
+    }
+
+    options {
+        skipDefaultCheckout()
     }
     
     stages {
         stage('Checkout') {
             steps {
-                git branch: params.BRANCH, url: 'https://github.com/hms-dbmi/avillachlab-jenkins-bdc-etl'
+                script {
+                    checkout([$class: 'GitSCM', 
+                              branches: [[name: "*/${params.BRANCH}"]],
+                              userRemoteConfigs: [[url: 'https://github.com/hms-dbmi/avillachlab-jenkins-bdc-etl']]])
+                }
             }
         }
-        
         stage('Build') {
             steps {
                 script {
