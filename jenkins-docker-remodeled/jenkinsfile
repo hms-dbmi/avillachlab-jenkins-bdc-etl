@@ -35,18 +35,18 @@ pipeline {
                     sh 'aws --region us-east-1 s3 cp "${jenkins_config_s3_location}" ./config.xml'
 
                     // Build Container
-                    sh '''
+                    sh """
                     docker build \
-                      --build-arg TERRAFORM_DISTRO="${CI_terraform_distro}" \
-                      --build-arg CONFIG_XML_FILE="./config.xml" \
-                      --build-arg PLUGINS_FILE="./plugins.txt" \
-                      --build-arg SCRIPT_APPROVAL_FILE="./scriptApproval.xml" \
-                      --build-arg JOBS_DIR="./jobs/" \
-                      --build-arg PKCS12_FILE="" \
-                      --build-arg PKCS12_PASS="" \
-                      --build-arg HUDSON_TASKS_FILE="./hudson.tasks.Maven.xml" \
-                      -t jenkins:${params.DOCKER_TAG} .
-d                   '''
+                    --build-arg TERRAFORM_DISTRO=\"${CI_terraform_distro}\" \
+                    --build-arg CONFIG_XML_FILE=\"./config.xml\" \
+                    --build-arg PLUGINS_FILE=\"./plugins.txt\" \
+                    --build-arg SCRIPT_APPROVAL_FILE=\"./scriptApproval.xml\" \
+                    --build-arg JOBS_DIR=\"./jobs/\" \
+                    --build-arg PKCS12_FILE=\"\" \
+                    --build-arg PKCS12_PASS=\"\" \
+                    --build-arg HUDSON_TASKS_FILE=\"./hudson.tasks.Maven.xml\" \
+                    -t jenkins:${params.DOCKER_TAG} .
+                    """
 
                     // Save Docker image
                     sh 'docker save jenkins:$gitCommitShort | gzip > jenkins.tar.gz'
