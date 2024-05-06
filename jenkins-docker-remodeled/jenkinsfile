@@ -3,6 +3,7 @@ pipeline {
     
     parameters {
         choice(name: 'BRANCH', choices: ['master', 'develop', 'some-architecture-work'], description: 'Select the branch to build')
+        string(name: 'DOCKER_TAG', defaultValue: 'latest', description: 'Specify the Docker image tag') 
     }
 
     triggers {
@@ -26,9 +27,7 @@ pipeline {
         stage('Build') {
             steps {
                 script {
-                    // Calculate short git commit hash
-                    def gitCommitShort = sh(script: 'echo ${GIT_COMMIT} | head -c7', returnStdout: true).trim()
-
+                    
                     // Create certs directory
                     sh 'mkdir -p certs/'
 
@@ -46,8 +45,8 @@ pipeline {
                       --build-arg PKCS12_FILE="" \
                       --build-arg PKCS12_PASS="" \
                       --build-arg HUDSON_TASKS_FILE="./hudson.tasks.Maven.xml" \
-                      -t jenkins:$gitCommitShort .
-                    '''
+                      -t jenkins:${params.DOCKER_TAG} .
+d                   '''
 
                     // Save Docker image
                     sh 'docker save jenkins:$gitCommitShort | gzip > jenkins.tar.gz'
