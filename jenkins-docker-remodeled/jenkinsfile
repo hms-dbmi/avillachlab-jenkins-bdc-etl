@@ -37,7 +37,7 @@ pipeline {
                     // Build Container
                     sh 'ls -la'
                     sh """
-                    docker build \
+                    docker build -f jenkins-docker-remodeled/Dockerfile \
                     --build-arg TERRAFORM_DISTRO=\"${CI_terraform_distro}\" \
                     --build-arg CONFIG_XML_FILE=\"./config.xml\" \
                     --build-arg PLUGINS_FILE=\"./plugins.txt\" \
@@ -50,7 +50,7 @@ pipeline {
                     """
 
                     // Save Docker image
-                    sh 'docker save jenkins:$gitCommitShort | gzip > jenkins.tar.gz'
+                    sh 'docker save jenkins:${params.DOCKER_TAG} | gzip > jenkins.tar.gz'
 
                     // Upload Docker image to S3
                     sh 'aws s3 cp jenkins.tar.gz s3://${stack_s3_bucket}/containers/jenkins/'
