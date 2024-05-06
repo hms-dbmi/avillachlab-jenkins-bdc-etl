@@ -27,7 +27,7 @@ pipeline {
         stage('Build') {
             steps {
                 script {
-                    
+                    sh "cd jenkins-docker-remodeled/"
                     // Create certs directory
                     sh 'mkdir -p certs/'
 
@@ -37,7 +37,7 @@ pipeline {
                     // Build Container
                     sh 'ls -la'
                     sh """
-                    docker build -f jenkins-docker-remodeled/Dockerfile \
+                    docker build -f Dockerfile \
                     --build-arg TERRAFORM_DISTRO=\"${CI_terraform_distro}\" \
                     --build-arg CONFIG_XML_FILE=\"./config.xml\" \
                     --build-arg PLUGINS_FILE=\"./plugins.txt\" \
