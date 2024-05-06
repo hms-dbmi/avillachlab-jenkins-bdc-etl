@@ -47,7 +47,7 @@ pipeline {
                         """
 
                         // Save Docker image and upload Docker image to S3
-                        sh 'docker save jenkins:${params.DOCKER_TAG} | gzip > jenkins.tar.gz && aws s3 cp jenkins.tar.gz s3://${stack_s3_bucket}/containers/jenkins/'
+                        sh "docker save jenkins:${params.DOCKER_TAG} | gzip > jenkins.tar.gz && aws s3 cp jenkins.tar.gz s3://${stack_s3_bucket}/containers/jenkins/"
                     }
                 }
             }
