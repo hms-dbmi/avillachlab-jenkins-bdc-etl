@@ -55,6 +55,7 @@ pipeline {
 
                         // Upload Docker image to S3
                         sh 'aws s3 cp jenkins.tar.gz s3://${stack_s3_bucket}/containers/jenkins/'
+                    }
                 }
             }
         }
