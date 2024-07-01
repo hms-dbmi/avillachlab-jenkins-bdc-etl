@@ -1,6 +1,5 @@
 #Lookup latest AMI
 data "aws_ami" "this" {
-  most_recent = true
   name_regex  = var.ami_regex
   owners      = var.ami_owners
 }
