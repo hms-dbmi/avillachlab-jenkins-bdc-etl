@@ -1,4 +1,4 @@
-FROM jenkins/jenkins:latest-jdk21
+FROM jenkins/jenkins:latest-jdk11
 
 # user to swap easily between OS operations and jenkins configuration.
 ENV JENKINS_USERNAME=$USER
