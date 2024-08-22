@@ -4,7 +4,7 @@
   <description>This job will archive dbgap previous version for any study type</description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@320.v5a_0933a_e7d61">
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
@@ -18,6 +18,7 @@
         <hudson.model.StringParameterDefinition>
           <name>version</name>
           <description>version number being archived</description>
+          <defaultValue>oops</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
@@ -29,6 +30,11 @@
           <name>study_accession</name>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
+        <hudson.model.BooleanParameterDefinition>
+          <name>phs_in_file_name</name>
+          <description>Select false if working with a study where the phs num is not in the file name</description>
+          <defaultValue>true</defaultValue>
+        </hudson.model.BooleanParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
@@ -47,10 +53,16 @@ aws sts assume-role --duration-seconds 1800 --role-arn arn:aws:iam::736265540791
 export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-
+if (${phs_in_file_name}) then
 aws s3 mv s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/rawData/  s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/oldData/${study_accession,,}/${version}.${participant_set}/rawData/ --recursive --exclude &quot;*&quot; --include &quot;${study_accession,,}*&quot;
 
 aws s3 mv s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/decoded_data/  s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/oldData/${study_accession,,}/${version}.${participant_set}/decoded_data/ --recursive --exclude &quot;*&quot; --include &quot;${study_accession,,}*&quot;
+else
+aws s3 mv s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/rawData/  s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/oldData/${study_accession,,}/${version}.${participant_set}/rawData/ --recursive
+
+aws s3 mv s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/decoded_data/  s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/oldData/${study_accession,,}/${version}.${participant_set}/decoded_data/ --recursive
+fi
+
 
 # don&apos;t archive this as a move as we want to keep current mappings.  Only remove if dbgap subject ids have changed in newer version
 aws s3 cp s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/data/${study_abv_name^^}_PatientMapping.v2.csv  s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/oldData/${study_accession,,}/${version}.${participant_set}/data/

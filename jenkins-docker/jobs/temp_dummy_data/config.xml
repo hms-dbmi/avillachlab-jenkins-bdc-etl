@@ -1,0 +1,106 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.FileParameterDefinition>
+          <name>metadata.json</name>
+          <description>metadata.json</description>
+        </hudson.model.FileParameterDefinition>
+        <hudson.model.FileParameterDefinition>
+          <name>allConcepts.csv</name>
+          <description>allConcepts.csv</description>
+        </hudson.model.FileParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.2.1">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>https://github.com/hms-dbmi/pic-sure-hpds</url>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>d72d88db87ac735aa021d1b2d98ae3b99d582d0b</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="empty-list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+
+GIT_BRANCH_SHORT=`echo ${GIT_BRANCH} | cut -d &quot;/&quot; -f 2` 
+GIT_COMMIT_SHORT=`echo ${GIT_COMMIT} | cut -c1-7`
+cd &quot;${WORKSPACE}&quot;/docker/pic-sure-hpds-etl
+docker build -t hms-dbmi/pic-sure-hpds-etl:${GIT_BRANCH_SHORT}_${GIT_COMMIT_SHORT} .
+
+mkdir -p &quot;${WORKSPACE}&quot;/docker_image_output
+cd &quot;${WORKSPACE}&quot;/docker_image_output
+docker save hms-dbmi/pic-sure-hpds-etl:${GIT_BRANCH_SHORT}_${GIT_COMMIT_SHORT} | gzip &gt; pic-sure-hpds-etl.tar.gz
+
+HPDS_ETL_IMAGE=`docker load &lt; ./pic-sure-hpds-etl.tar.gz  | cut -d &apos; &apos; -f 3`
+
+echo ${HPDS_ETL_IMAGE}
+
+cd &quot;${WORKSPACE}&quot;
+
+#cat /dev/urandom | tr -dc &apos;a-zA-Z0-9&apos; | fold -w 32 | head -n 1 &gt; hpds/encryption_key
+
+mkdir hpds
+cp ${WORKSPACE}/metadata.json hpds/
+cp ${WORKSPACE}/allConcepts.csv hpds/
+cat /dev/urandom | tr -dc &apos;a-zA-Z0-9&apos; | fold -w 32 | head -n 1 &gt; hpds/encryption_key
+
+#  hpds/allConcepts.csv
+docker run -i -v &quot;$(pwd)&quot;/hpds:/opt/local/hpds -v &quot;$(pwd)&quot;/hpds:/opt/local/phenocube -eNO_ROLLUP=NO_ROLLUP -eHEAPSIZE=4096 -eLOADER_NAME=CSVLoaderNewSearch ${HPDS_ETL_IMAGE}
+
+cd hpds
+ts=$(date &apos;+%m-%d-%y&apos;)
+
+touch conceptsToRemove.txt
+
+tar zcf ras_dummy_data_javabins_full.tar.gz columnMeta.csv *.javabin encryption_key metadata.json conceptsToRemove.txt
+
+#aws s3 cp nhanes_javabins_full.tar.gz s3://avillach-73-nhanes-etl/hpds/javabin/
+
+#aws s3 cp columnMeta.csv s3://avillach-73-nhanes-etl/hpds/javabin/columnMeta_full.csv
+
+#unset AWS_ACCESS_KEY_ID
+#unset AWS_SECRET_ACCESS_KEY
+#unset AWS_SESSION_TOKEN
+
+</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers>
+    <hudson.tasks.ArtifactArchiver>
+      <artifacts>hpds/ras_dummy_data_javabins_full.tar.gz, hpds/columnMeta.csv, hpds/metadata.json, hpds/conceptsToRemove.txt</artifacts>
+      <allowEmptyArchive>false</allowEmptyArchive>
+      <onlyIfSuccessful>false</onlyIfSuccessful>
+      <fingerprint>false</fingerprint>
+      <defaultExcludes>true</defaultExcludes>
+      <caseSensitive>true</caseSensitive>
+      <followSymlinks>false</followSymlinks>
+    </hudson.tasks.ArtifactArchiver>
+  </publishers>
+  <buildWrappers/>
+</project>

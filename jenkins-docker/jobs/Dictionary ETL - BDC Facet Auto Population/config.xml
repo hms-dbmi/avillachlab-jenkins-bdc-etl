@@ -1,0 +1,89 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>api</name>
+          <description>api url</description>
+          <defaultValue>http://172.20.0.3:8086/api</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+#creates data type category and facets
+
+curl --request PUT --data &apos;{&quot;name&quot;:&quot;data_type&quot;,&quot;display&quot;:&quot;Data Type&quot;,&quot;description&quot;:&quot;&quot;}&apos; \
+--header &apos;Content-Type: application/json&apos; ${api}/facetCategory
+
+curl --request PUT --data-urlencode &quot;categoryName=data_type&quot; --data-urlencode &quot;name=categorical&quot; \
+--data-urlencode &quot;display=Categorical&quot; --data-urlencode &quot;desc=&quot; --data-urlencode &quot;parentName=&quot; \
+${api}/facet
+
+curl --request PUT --data-urlencode &quot;categoryName=data_type&quot; --data-urlencode &quot;name=continuous&quot; \
+--data-urlencode &quot;display=Continuous&quot; --data-urlencode &quot;desc=&quot; --data-urlencode &quot;parentName=&quot; \
+${api}/facet
+
+#get all concepts, then sort into lists of categorical/continuous
+
+curl --request GET  ${api}/concept &gt; all_concepts.json
+jq -r &apos;.[] | select(.conceptType==&quot;categorical&quot;) | .conceptPath&apos; all_concepts.json &gt;&gt; categorical_concepts.csv
+jq -r &apos;.[] | select(.conceptType==&quot;continuous&quot;) | .conceptPath&apos; all_concepts.json &gt;&gt; continuous_concepts.csv
+while read conceptPath
+do
+	curl --request PUT --data-urlencode &quot;facetName=categorical&quot; --data-urlencode &quot;conceptPath=${conceptPath}&quot; ${api}/facet/concept
+done &lt; categorical_concepts.csv
+
+while read conceptPath
+do
+	curl --request PUT --data-urlencode &quot;facetName=continuous&quot; --data-urlencode &quot;conceptPath=${conceptPath}&quot; ${api}/facet/concept
+done &lt; continuous_concepts.csv
+
+
+#create/update dataset_id category
+curl --request PUT --data &apos;{&quot;name&quot;:&quot;dataset_id&quot;,&quot;display&quot;:&quot;Dataset&quot;,&quot;description&quot;:&quot;&quot;}&apos; \
+--header &apos;Content-Type: application/json&apos; ${api}/facetCategory
+
+#get all concepts for each dataset and populate
+curl --request GET --data-urlencode &quot;datasetRef=phs001013&quot;  ${api}/concept | jq -r &apos;.[] | .conceptPath&apos; &gt; phs001013_concepts.csv
+
+curl --request PUT --data-urlencode &quot;categoryName=dataset_id&quot; --data-urlencode &quot;name=phs001013&quot; \
+--data-urlencode &quot;display=HVH(phs001013)&quot; --data-urlencode &quot;desc=&quot; --data-urlencode &quot;parentName=&quot; \
+${api}/facet
+
+while read conceptPath
+do
+	curl --request PUT --data-urlencode &quot;facetName=phs001013&quot; --data-urlencode &quot;conceptPath=${conceptPath}&quot; ${api}/facet/concept
+done &lt; phs001013_concepts.csv</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.45">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>

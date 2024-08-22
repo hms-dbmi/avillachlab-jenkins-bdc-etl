@@ -13,12 +13,6 @@
         <hudson.model.FileParameterDefinition>
           <name>Managed_Inputs.csv</name>
         </hudson.model.FileParameterDefinition>
-        <hudson.model.FileParameterDefinition>
-          <name>job.config</name>
-        </hudson.model.FileParameterDefinition>
-        <hudson.model.FileParameterDefinition>
-          <name>mapping.csv</name>
-        </hudson.model.FileParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
@@ -26,7 +20,7 @@
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
-        <url>https://github.com/hms-dbmi/ETL-MissionControl-dbgap-submodule</url>
+        <url>https://github.com/hms-dbmi/ETLToolSuite-MissionControl</url>
       </hudson.plugins.git.UserRemoteConfig>
     </userRemoteConfigs>
     <branches>
@@ -51,6 +45,55 @@ mkdir data
 mkdir resources
 mkdir mappings
 mkdir completed
+mkdir processing
+aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/avillach-73-nhanes-s3-iam --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+
+aws s3 cp s3://avillach-73-nhanes-etl/data/nhanesfull.csv ./data/
+#sed &apos;s/\bNA\b//g&apos; nhanesfull.csv &gt; data/nhanesfull.csv
+
+#head -30 nhanesfull.csv &gt; data/nhanes_sample.csv
+aws s3 cp s3://avillach-73-nhanes-etl/mappings/mapping.csv mappings/
+aws s3 cp s3://avillach-73-nhanes-etl/resources/job.config resources/
+#mv mapping.csv mappings/
+#mv job.config resources/
+mv Managed_Inputs.csv data/Managed_Inputs.csv
+
+# can&apos;t sequence atm
+#java -jar jars/SetPatientSequence.jar -propertiesfile resources/job.config
+#mv completed/*_PatientMapping.v2.csv mappings/
+#java -jar jars/DataAnalyzer.jar -propertiesfile resources/job.config -mappingskipheaders N -trialid ${abv_name^^}
+
+#unset AWS_ACCESS_KEY_ID
+#unset AWS_SECRET_ACCESS_KEY
+#unset AWS_SESSION_TOKEN
+
+#aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/avillach-73-nhanes-s3-iam --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+
+#export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+#export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+#export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+
+#aws s3 cp completed/mappings.csv s3://avillach-73-nhanes-etl/mappings/mapping.csv
+
+#mv mapping.csv mappings/mapping.csv
+#echo &quot;partitioning data set&quot;
+#java -jar Partitioner.jar -propertiesfile resources/job.config -mappingskipheaders N -trialid NHANES
+
+#echo &quot;building partitioned data set&quot;
+#bash runpartition.sh -j 8 -m 4g -c &apos;config.part*.config&apos; -r resources/
+
+#echo &quot;merging partitions.&quot;
+#java -jar MergePartitions.jar -propertiesfile resources/job.config
+
+java -jar jars/GenerateAllConcepts.jar -propertiesfile resources/job.config
+
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
 
 aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/avillach-73-nhanes-s3-iam --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
 
@@ -58,27 +101,13 @@ export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
-aws s3 cp s3://avillach-73-nhanes-etl/data/nhanesfull.csv .
-
-head -30 nhanesfull.csv &gt; data/nhanesfull.csv
-#aws s3 cp s3://avillach-73-nhanes-etl/mappings/mapping.csv mappings/
-#aws s3 cp s3://avillach-73-nhanes-etl/resources/job.config resources/
-mv mapping.csv mappings/
-mv job.config resources/
-mv Managed_Inputs.csv data/Managed_Inputs.csv
-
-# can&apos;t sequence atm
-#java -jar jars/SetPatientSequence.jar -propertiesfile resources/job.config
-#mv completed/*_PatientMapping.v2.csv mappings/
-
-java -jar jars/GenerateAllConcepts.jar -propertiesfile resources/job.config
 
 sed -i &apos;s/µ/\\/g&apos; completed/NHANES_allConcepts.csv
 
 echo &quot;patient_num,concept_path,tval_char,nval_num,start_date&quot; &gt; NHANES_allConcepts.csv
 cat completed/NHANES_allConcepts.csv &gt;&gt; NHANES_allConcepts.csv
 
-aws s3 cp NHANES_allConcepts.csv s3://avillach-73-nhanes-etl/completed/
+aws s3 cp NHANES_allConcepts.csv s3://avillach-73-nhanes-etl/completed/NHANES_allConcepts.csv
 </command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>

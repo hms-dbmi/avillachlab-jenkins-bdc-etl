@@ -1,0 +1,152 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>backend_region</name>
+          <defaultValue>us-east-1</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>backend_key</name>
+          <defaultValue>jenkins_state/terraform.tfstate</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>ami_regex</name>
+          <description>Regex Lookup Examples:
+CIS CentOS Linux 7 Benchmark - Level 1 - v04*
+CIS Alma Linux 8 Benchmark - Level 1 -  v3*</description>
+          <defaultValue>CIS CentOS Linux 7 Benchmark - Level 1 - v04*</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>ami_owners</name>
+          <defaultValue>[ &quot;679593333241&quot; ]</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>instance_type</name>
+          <defaultValue>r5.large</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>associate_public_ip_address</name>
+          <defaultValue>true</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>instance_profile_role</name>
+          <defaultValue>jenkins-s3-role-secure</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>instance_profile_name</name>
+          <defaultValue>jenkins-s3-policy-secure</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>volume_size</name>
+          <defaultValue>100</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>subnet_id</name>
+          <defaultValue>subnet-00a35d901a151ab01</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>stack_s3_bucket</name>
+          <defaultValue>avillach-biodatacatalyst-deployments-3drb48r</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>user_script</name>
+          <defaultValue>${WORKSPACE}/dev-jenkins-terraform/install-docker.sh</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>vpc_id</name>
+          <defaultValue>vpc-06d289a45c9021bdc</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>access_cidr</name>
+          <defaultValue>134.174.0.0/16</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.2.1">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>https://github.com/hms-dbmi/avillachlab-jenkins-bdc-etl</url>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>df892bebeff5be921ffc4edf34d557dfb213a624</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="empty-list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+
+# This is not the correct way to use terraform modules.
+# will publish a private repo to handle using the module that will be similar to the example in the repository.
+cd ./terraform-project/modules/bdc-jenkins-etl
+
+terraform init \
+-backend-config=&quot;bucket=${stack_s3_bucket}&quot; \
+-backend-config=&quot;key=${backend_key}&quot; \
+-backend-config=&quot;region=${backend_region}&quot;
+
+terraform plan \
+  -var=&quot;ami_regex=$ami_regex&quot; \
+  -var=&quot;ami_owners=$ami_owners&quot; \
+  -var=&quot;instance_type=$instance_type&quot; \
+  -var=&quot;associate_public_ip_address=$associate_public_ip_address&quot; \
+  -var=&quot;instance_profile_role=$instance_profile_role&quot; \
+  -var=&quot;instance_profile_name=$instance_profile_name&quot; \
+  -var=&quot;volume_size=$volume_size&quot; \
+  -var=&quot;subnet_id=$subnet_id&quot; \
+  -var=&quot;stack_s3_bucket=$stack_s3_bucket&quot; \
+  -var=&quot;user_script=$user_script&quot; \
+  -var=&quot;vpc_id=$vpc_id&quot; \
+  -var=&quot;access_cidr=$access_cidr&quot; \
+  -out=tfplan
+
+terraform apply -auto-approve tfplan </command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.45">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>

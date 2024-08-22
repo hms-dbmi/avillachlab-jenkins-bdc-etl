@@ -4,10 +4,7 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <hudson.plugins.copyartifact.CopyArtifactPermissionProperty plugin="copyartifact@1.46.2">
-      <projectNameList/>
-    </hudson.plugins.copyartifact.CopyArtifactPermissionProperty>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@320.v5a_0933a_e7d61">
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
@@ -15,13 +12,13 @@
       <parameterDefinitions>
         <hudson.model.StringParameterDefinition>
           <name>git_hash</name>
-          <defaultValue>metadata-counts-update</defaultValue>
+          <defaultValue>d72d88db87ac735aa021d1b2d98ae3b99d582d0b</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@4.10.3">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.2.1">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -45,7 +42,7 @@
   <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Maven>
-      <targets>clean install -DskipTests</targets>
+      <targets>-U clean install -DskipTests</targets>
       <mavenName>Maven 3.6.3</mavenName>
       <usePrivateRepository>false</usePrivateRepository>
       <settings class="jenkins.mvn.DefaultSettingsProvider"/>
@@ -107,7 +104,7 @@ aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json 
 
 aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/conceptsToRemove.txt .
 
-docker run -i -v &quot;$(pwd)&quot;:/opt/local/hpds -eLOADER_NAME=UpdateClinicalVariableCounts $HPDS_ETL_IMAGE
+#docker run -i -v &quot;$(pwd)&quot;:/opt/local/hpds -eLOADER_NAME=UpdateClinicalVariableCounts $HPDS_ETL_IMAGE
 
 tar zcf biodatacatalyst_javabins_data_analyzer_${ts}.tar.gz columnMeta.csv *.javabin encryption_key metadata.json conceptsToRemove.txt
 
@@ -125,7 +122,7 @@ unset AWS_SESSION_TOKEN
   </builders>
   <publishers/>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.40">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.45">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>

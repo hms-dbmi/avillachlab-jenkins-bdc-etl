@@ -4,10 +4,6 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@320.v5a_0933a_e7d61">
-      <autoRebuild>false</autoRebuild>
-      <rebuildDisabled>false</rebuildDisabled>
-    </com.sonyericsson.rebuild.RebuildSettings>
     <hudson.model.ParametersDefinitionProperty>
       <parameterDefinitions>
         <hudson.model.StringParameterDefinition>
@@ -23,7 +19,7 @@
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.2.0">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.2.1">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -32,7 +28,7 @@
     </userRemoteConfigs>
     <branches>
       <hudson.plugins.git.BranchSpec>
-        <name>*/master</name>
+        <name>*/genomicIngestion</name>
       </hudson.plugins.git.BranchSpec>
     </branches>
     <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
@@ -72,13 +68,13 @@ unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
 unset AWS_SESSION_TOKEN
 
-csvcut -c 1,2,3,8,9,15 Managed_Inputs.csv &gt; inputs.csv
+csvcut -c 1,2,3,8,9,15,17 Managed_Inputs.csv &gt; inputs.csv
 
 # Generate mappings
 cat	inputs.csv
 IFS=&apos;,&apos;
 [ ! -f inputs.csv ]
-while read abv_name stdy_id stdy_type data_ready data_processed has_multi
+while read abv_name stdy_id stdy_type data_ready data_processed has_multi has_tables
 do
   if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]] &amp;&amp; [[ &quot;${data_processed,,}&quot; == &quot;no&quot; ]]; then
 
@@ -94,8 +90,13 @@ do
         aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/decoded_data/ data/ --recursive --exclude &quot;*&quot; --include &quot;*.csv&quot;
         
         sed -i &apos;1s/^\xEF\xBB\xBF//&apos; data/*
-        
+        if [[ ${has_tables,,} == &apos;yes&apos; ]]; then
+        echo &apos;Mapping with datatables enabled &apos; ${stdy_id}
+        java -jar jars/GenericMappingGenerator.jar -trialid ${stdy_id} -hasDataTables &gt; completed/${stdy_id}_mapping_gen1.log 
+        else
+        echo &apos;Mapping with datatables disabled for &apos; ${stdy_id}
         java -jar jars/GenericMappingGenerator.jar -trialid ${stdy_id} &gt; completed/${stdy_id}_mapping_gen1.log 
+        fi
         #cat completed/${stdy_id}_mapping_gen.log
 
         #aws s3 cp completed/${stdy_id}_mapping_gen.log s3://avillach-73-bdcatalyst-etl/${abv_name,,}/mappings/${stdy_id}/${stdy_id}_mapping_gen.log --quiet
@@ -119,7 +120,7 @@ done  &lt; inputs.csv</command>
   </builders>
   <publishers/>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.40">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.45">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>

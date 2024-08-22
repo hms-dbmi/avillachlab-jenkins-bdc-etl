@@ -4,7 +4,7 @@
   <description>Imports data dictionaries into HPDS format.</description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@320.v5a_0933a_e7d61">
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
@@ -33,13 +33,13 @@
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
           <name>git_hash</name>
-          <defaultValue>*/als-3928</defaultValue>
+          <defaultValue>*/dictionary-model-update</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.2.0">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.2.1">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -59,6 +59,7 @@
   <disabled>false</disabled>
   <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
   <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
   <triggers>
     <jenkins.triggers.ReverseBuildTrigger>
       <spec></spec>
@@ -156,54 +157,18 @@ do
 
       #fi
    else 
-      echo &quot;$abv_name not ready for processing&quot;
+      echo &quot;$abv_name $stdy_id not ready for processing&quot;
    fi
 done &lt; inputs.csv
-
-### Temp to get to this work
-### non compliant and harmonized studies
-
-### giving the loop a try
-#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002415/metadata/babyhug_metadata.json local/source/phs002415/rawData/babyhug_metadata.json
-#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002362/metadata/csscd_metadata.json local/source/phs002362/rawData/csscd_metadata.json
-#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002385/metadata/hct_for_scd_metadata.json local/source/phs002385/rawData/hctforscd_metadata.json
-#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002348/metadata/msh_metadata.json local/source/phs002348/rawData/msh_metadata.json
-#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002299/metadata/orchid_metadata.json local/source/phs002299/rawData/
-#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002363/metadata/redcoral_metadata.json local/source/phs002363/rawData/
-#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002386/metadata/stopii_metadata.json local/source/phs002386/rawData/
-#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002383/metadata/walkphasst_metadata.json local/source/phs002383/rawData/
-
-#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002808/metadata/numom2b_metadata.json local/source/phs002808/rawData/
-
-#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002694/metadata/activ4a_metadata.json local/source/phs002694/rawData/
-#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002710/metadata/activ4b_metadata.json local/source/phs002710/rawData/
-#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002752/metadata/c3po_metadata.json local/source/phs002752/rawData/
-#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002715/metadata/nsrr_cfs_metadata.json local/source/phs002715/rawData/
-#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs003212/metadata/dir_metadata.json local/source/phs003212/rawData/
-
-#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/tutorial-biolincc_camp/metadata/camp_metadata.json local/source/tutorial-biolincc_camp/rawData/
-#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/tutorial-tutorial-biolincc_digitalis/metadata/biolincc_digitalis_metadata.json local/source/tutorial-tutorial-biolincc_digitalis/rawData/
-
-#### remove this if loop is working
 
 # This is not managed by the study loop. 
 aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/hrmn/metadata/dcc_harmonized.json  ./local/source/hrmn/rawData/
 
-#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/columnMeta/columnMeta.csv local/source/columnMeta.csv
-
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
 unset AWS_SESSION_TOKEN
 
-aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
 
-export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-
-unset AWS_ACCESS_KEY_ID
-unset AWS_SECRET_ACCESS_KEY
-unset AWS_SESSION_TOKEN
 
 #### Execute dictionary import
 #build image
@@ -224,15 +189,53 @@ cd &quot;$WORKSPACE&quot;/tagging/output
 ts=$(date &apos;+%m-%d-%y&apos;)
 tar -cvzf dictionary_javabin_${ts}.tar.gz *.javabin 
 
+# get individual dictionaries for qa
+mkdir qa
+aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+aws s3 cp ${managed_inputs} .
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+
+
+csvcut -c 1,2,3,8,9 Managed_Inputs.csv &gt; inputs.csv
+IFS=&apos;,&apos;
+[ ! -f inputs.csv ]
+while read abv_name stdy_id stdy_type data_ready data_processed
+do
+  if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]]; then
+  	if [[ &quot;${data_processed,,}&quot; == &quot;no&quot; ]]; then
+	  jq &apos;to_entries[] | select(.key|startswith(&quot;&apos;${stdy_id}&apos;&quot;))&apos; dictionary.json &gt; qa/${stdy_id}.json
+      export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+      export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+      export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+      aws s3 cp qa/${stdy_id}.json s3://avillach-73-bdcatalyst-etl/${abv_name,,}/qa/${stdy_id}/
+      unset AWS_ACCESS_KEY_ID
+      unset AWS_SECRET_ACCESS_KEY
+      unset AWS_SESSION_TOKEN
+      fi
+   else 
+      echo &quot;$stdy_id $abv_name not ready for processing, skipping qa file build&quot;
+   fi
+done &lt; inputs.csv
+
 aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
 
 export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
-aws s3 --sse=AES256 cp dictionary_javabin_${ts}.tar.gz s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/
+aws s3 --sse=AES256 cp dictionary.json s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/dictionary.json
+
+aws s3 --sse=AES256 cp dictionary_javabin_${ts}.tar.gz s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/dictionary_javabin_${ts}.tar.gz
 
 aws s3 --sse=AES256 cp Missing_Dictionary_Entries.csv s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/Missing_Dictionary_Entries_${ts}.csv
+
+aws s3 --sse=AES256 cp Missing_Dictionary_Entries.csv s3://avillach-73-bdcatalyst-etl/qa/Missing_Dictionary_Entries.csv
 
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
@@ -242,7 +245,7 @@ unset AWS_SESSION_TOKEN</command>
   </builders>
   <publishers/>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.40">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.45">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>
