@@ -1,0 +1,65 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.FileParameterDefinition>
+          <name>BDC Study Program Mapping.csv</name>
+        </hudson.model.FileParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+
+# Specify the CSV file name
+FILE=&quot;BDC Study Program Mapping.csv&quot;
+
+# Check if the file exists
+if [[ ! -f &quot;$FILE&quot; ]]; then
+    echo &quot;File $FILE not found!&quot;
+    exit 1
+fi
+
+# Read the CSV file line by line
+{
+    # Read and discard the header line
+    read
+
+    # Loop through each line of the CSV file
+    while IFS=, read -r study_accession study_name program; do
+        # Sending CURL request for each line
+        response=$(curl -s -o /dev/null -w &quot;%{http_code}&quot; -X PUT &quot;http://172.20.0.2:8086/api/dataset/metadata&quot; \
+        --data-urlencode &quot;datasetRef=$study_accession&quot; --data-urlencode &quot;key=program_name&quot; --data-urlencode \
+        &quot;values=$program&quot;)
+
+        # Check if the request was successful
+        if [[ &quot;$response&quot; -ne 200 &amp;&amp; &quot;$response&quot; -ne 201 ]]; then
+            echo &quot;Failed to update metadata for $study_accession: HTTP $response&quot;
+        else
+            echo &quot;Successfully updated metadata for $study_accession&quot;
+        fi
+    done
+} &lt; &quot;$FILE&quot;</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers/>
+</project>
