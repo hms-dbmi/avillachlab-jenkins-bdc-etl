@@ -8,17 +8,26 @@
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>git_hash</name>
+          <defaultValue>main</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.2.1">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.3.0">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
-        <url>https://github.com/hms-dbmi/picsure-dictionary-etl.git</url>
+        <url>https://github.com/hms-dbmi/picsure-dictionary-etl</url>
       </hudson.plugins.git.UserRemoteConfig>
     </userRemoteConfigs>
     <branches>
       <hudson.plugins.git.BranchSpec>
-        <name>*/main</name>
+        <name>*/${git_hash}</name>
       </hudson.plugins.git.BranchSpec>
     </branches>
     <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
@@ -34,23 +43,29 @@
   <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Shell>
-      <command>echo &apos;POSTGRES_PASSWORD=d.SLkGOGSVLe.1h1tFHc&lt;&lt;POsETG&apos;&gt;&gt; .env
-echo &apos;POSTGRES_HOST=dictionarydb.cljahwnkfisu.us-east-1.rds.amazonaws.com&apos; &gt;&gt; .env</command>
+      <command>### Postgres config
+pw=`aws secretsmanager get-secret-value --secret-id &apos;rds!db-8086eb77-cd6d-48bc-9298-4380892798ca&apos; --region &apos;us-east-1&apos; --query SecretString --output text | jq -r .password`
+echo &quot;POSTGRES_PASSWORD=&apos;${pw}&apos;&quot; &gt;&gt; .env
+echo &apos;POSTGRES_HOST=dictionarydb.cljahwnkfisu.us-east-1.rds.amazonaws.com&apos; &gt;&gt; .env
+</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
     <hudson.tasks.Shell>
       <command>docker compose down
-docker compose build
+docker compose build --no-cache
 docker compose up -d
+#add back only if jenkins container disconnects from network due to restart etc
+#docker network connect etlnetwork jenkins4
 docker network connect etlnetwork dictionaryetl
-docker inspect dictionaryetl | grep &quot;IPAddress&quot;
+docker inspect dictionaryetl | jq -r &apos;.[] | .NetworkSettings.Networks.etlnetwork.IPAddress&apos;
+
 </command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>
   <publishers/>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.45">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>

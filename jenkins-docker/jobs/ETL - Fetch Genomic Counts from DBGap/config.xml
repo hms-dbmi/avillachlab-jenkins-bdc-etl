@@ -1,0 +1,61 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description>Uses the dbgap telemetry to grab sample counts for all in consents in uploaded file then update the sample_count for that consent&#xd;
+File format is csv study_id, version, consent code number</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json metadata.json 
+
+jq &apos;.bio_data_catalyst[] | select(.data_type | contains(&quot;G&quot;)) | select(.study_identifier | contains(&quot;phs&quot;))| {study_identifier: .study_identifier, study_version: .study_version, consent_group_code: (.consent_group_code | .[1:])}&apos; \
+	metadata.json | jq -s | in2csv -f json &gt; study_list.csv
+IFS=&apos;,&apos;
+[ ! -f study_list.csv ]
+while read stdy_id version consent
+do
+#get count from telemetry
+curl --retry 5 --show-error --silent -X &apos;GET&apos; &quot;https://www.ncbi.nlm.nih.gov/gap/sstr/api/v1/study/${stdy_id}.${version}/summary&quot;  -H &apos;accept: application/json&apos; &gt; ${stdy_id}.$consent.response.json
+count=`jq &apos;.study.consent_groups[] | select(.code == &apos;${consent}&apos; ) | .sample_count&apos; ${stdy_id}.$consent.response.json`
+#put count in doc for easy qa
+echo &quot;$stdy_id,$consent, $count&quot; &gt;&gt; genomic_counts.csv
+#update dictionary db
+curl --request PUT --data-urlencode &quot;datasetRef=${stdy_id}&quot; --data-urlencode &quot;consentCode=c${consent}&quot; \
+            --data-urlencode &quot;sampleCount=${count}&quot; http://172.20.0.2:8086/api/consent/counts    
+done &lt; study_list.csv
+
+</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>

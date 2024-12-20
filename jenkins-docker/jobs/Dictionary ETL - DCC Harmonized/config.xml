@@ -1,0 +1,134 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.3.0">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>https://github.com/hms-dbmi/ETL-MissionControl-dbgap-submodule.git</url>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>*/genomicIngestion</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="empty-list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+        
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+mkdir oldData
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/dictionary.json oldData/dictionary.json
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.csv oldData/Managed_Inputs.csv
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+mkdir HRMN
+study_id=&quot;DCC Harmonized data set&quot;
+jq &apos;with_entries(select(.key | contains(&quot;DCC Harmonized data set&quot;)))&apos; oldData/dictionary.json &gt; HRMN/subset_dictionary.json
+api=&apos;http://172.20.0.2:8086/api&apos;
+echo &quot;create dataset entry&quot;
+    curl --show-error --silent --request PUT --data-urlencode &quot;datasetRef=DCC Harmonized data set&quot; --data-urlencode &quot;abv=TOPMed_Harmonized&quot; \
+        --data-urlencode &quot;fullName=Trans-Omics for Precision Medicine (TOPMed) Harmonized Phenotypes&quot; --data-urlencode &quot;desc=Phenotype harmonization was conducted to enable cross-study analyses. The main goals of this process are to provide harmonized phenotypes that are well-documented, reproducible, and as homogeneous across studies as possible.&quot; ${api}/dataset
+	curl --show-error --silent --request PUT --data-urlencode &quot;datasetRef=DCC Harmonized data set&quot; --data-urlencode &quot;key=study_design&quot; \
+                	--data-urlencode &quot;values=Harmonized Set&quot; ${api}/dataset/metadata
+    curl --show-error --silent --request PUT --data-urlencode &quot;datasetRef=DCC Harmonized data set&quot; --data-urlencode &quot;key=study_link&quot; \
+                	--data-urlencode &quot;values=https://topmed.nhlbi.nih.gov/dcc-harmonized-phenotypes&quot; ${api}/dataset/metadata
+echo &quot;create dataset facet&quot;
+   curl --show-error --silent --request PUT --data-urlencode &quot;categoryName=dataset_id&quot; --data-urlencode &quot;name=DCC Harmonized data set&quot; \
+        --data-urlencode &quot;display=TOPMed_Harmonized (DCC Harmonized data set)&quot; --data-urlencode &quot;desc=&quot; --data-urlencode &quot;parentName=&quot; \
+        ${api}/facet
+        
+echo &quot;create consent&quot;
+   curl --show-error --silent --request PUT --data-urlencode &quot;datasetRef=DCC Harmonized data set&quot; --data-urlencode &quot;consentCode=&quot; \
+        --data-urlencode &quot;description=&quot; --data-urlencode &quot;authz=&quot; --data-urlencode &quot;participantCount=207747&quot; --data-urlencode &quot;variableCount=125&quot; --data-urlencode &quot;sampleCount=-1&quot; \
+        ${api}/consent
+echo &quot;create harmonization links&quot;
+csvcut -c 1,2,6,8,9 oldData/Managed_Inputs.csv &gt; inputs.csv
+
+# Generate mappings
+
+cat	inputs.csv
+IFS=&apos;,&apos;
+[ ! -f inputs.csv ]
+while read abv_name stdy_id is_hrmn data_ready data_processed
+do
+	if [[ &quot;${is_hrmn,,}&quot; == &quot;y&quot; ]]; then
+    	curl --show-error --silent --request PUT --data-urlencode &quot;harmonizedDatasetRef=DCC Harmonized data set&quot; \
+        --data-urlencode &quot;sourceDatasetRef=${stdy_id}&quot; ${api}/dataset/harmonization
+    fi
+done&lt;inputs.csv
+
+java -jar jars/NewDictionaryConverter.jar --subsetDir &quot;./HRMN/&quot; --DCC
+
+#concept insert
+csvcut -z 10000000 -t -c 1,2,3,4,5,6 HRMN/concepts.tsv | csvformat -z 10000000 -D &apos;φ&apos; &gt; HRMN/concept_table.tsv
+IFS=&apos;φ&apos;
+
+#core concept entry
+while read datasetRef name display conceptType conceptPath parentPath; do
+    if [[ ${datasetRef} != &apos;datasetRef&apos; ]]; then
+        #add concept
+        curl --show-error --silent --request PUT --data-urlencode &quot;datasetRef=${datasetRef}&quot; --data-urlencode &quot;name=${name}&quot; \
+            --data-urlencode &quot;display=${display}&quot; --data-urlencode &quot;conceptType=${conceptType}&quot; \
+            --data-urlencode &quot;conceptPath=${conceptPath}&quot; --data-urlencode &quot;parentPath=${parentPath}&quot; \
+            ${api}/concept
+        #connect concept to dataset facet
+        curl --show-error --silent --request PUT --data-urlencode &quot;facetName=${datasetRef}&quot; --data-urlencode &quot;conceptPath=${conceptPath}&quot; ${api}/facet/concept
+        #connect concept to data type facet
+        curl --show-error --silent --request PUT --data-urlencode &quot;facetName=${conceptType}&quot; --data-urlencode &quot;conceptPath=${conceptPath}&quot; ${api}/facet/concept
+    fi
+done &lt;HRMN/concept_table.tsv
+
+
+#no i dont know why the snake is necessary but it literally breaks without the snake dont touch the snake
+csvcut -z 10000000 -t -c 5,7- HRMN/concepts.tsv | csvformat -u0 -U3 -Q🐍 -z 10000000 -D &apos;φ&apos; &gt;HRMN/concept_meta_table.tsv
+export columncount=$(csvcut -d &apos;φ&apos; -z 10000000 -n HRMN/concept_meta_table.tsv | wc -l)
+for (( i=2; i&lt;=${columncount}; i++ )); do
+    keyname=$(csvcut -d &apos;φ&apos; -z 10000000 -c ${i} HRMN/concept_meta_table.tsv | csvcut -z 10000000 -n | cut -c6-)
+    echo $keyname
+    csvcut -z 10000000 -d &apos;φ&apos; -u 0 -c 1,${i} HRMN/concept_meta_table.tsv| csvformat -u0 -U3 -Q🐍 -z 10000000 -D &apos;φ&apos; &gt;HRMN/concept_meta_column.tsv
+    while read conceptPath values; do
+    	echo $conceptPath vals $values
+        if [[ ${conceptPath} != &apos;conceptPath&apos; ]]; then
+        	if [[ ! -z ${values} ]]; then
+            	export encodedConceptPath=$(echo -n $conceptPath | jq -sRr @uri)
+            	export encodedKeyName=$(echo -n $keyname | jq -sRr @uri)
+            	echo $values &gt; HRMN/concept_meta_values.txt
+            	curl --show-error --silent --request PUT --header &apos;Content-Type: text/plain&apos; \
+                	--data @HRMN/concept_meta_values.txt &quot;${api}/concept/metadata?conceptPath=${encodedConceptPath}&amp;key=${encodedKeyName}&quot;
+        	fi
+        fi
+    done &lt;HRMN/concept_meta_column.tsv
+done
+
+</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers/>
+</project>

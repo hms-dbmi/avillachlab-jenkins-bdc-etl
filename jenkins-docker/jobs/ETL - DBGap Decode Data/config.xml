@@ -34,7 +34,7 @@ stdy_id = Can be obtained from the Managed Inputs or JIRA ticket
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.2.1">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.3.0">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -54,8 +54,9 @@ stdy_id = Can be obtained from the Managed Inputs or JIRA ticket
   <disabled>false</disabled>
   <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
   <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
   <triggers/>
-  <concurrentBuild>false</concurrentBuild>
+  <concurrentBuild>true</concurrentBuild>
   <builders>
     <hudson.tasks.Shell>
       <command>#!/bin/bash
@@ -85,10 +86,25 @@ aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ ./data/ --recur
 
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
-unset AWS_SESSION_TOKEN
+unset AWS_SESSION_TOKEN</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
 # decode data set
 java -jar jars/DbgapDecodeFiles.jar -dictdir &quot;./data/&quot;
 
+
+
+
+
+
+</command>
+      <configuredLocalRules/>
+      <unstableReturn>255</unstableReturn>
+    </hudson.tasks.Shell>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
 # upload decoded files
 export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
@@ -100,18 +116,13 @@ aws s3 cp completed/ s3://avillach-73-bdcatalyst-etl/${abv_name,,}/decoded_data/
 
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
-unset AWS_SESSION_TOKEN
-
-
-
-
-</command>
+unset AWS_SESSION_TOKEN</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>
   <publishers/>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.45">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>

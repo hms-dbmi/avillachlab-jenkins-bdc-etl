@@ -4,7 +4,7 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@320.v5a_0933a_e7d61">
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
@@ -21,12 +21,20 @@
         <hudson.model.FileParameterDefinition>
           <name>dictionary_control_file.csv</name>
         </hudson.model.FileParameterDefinition>
+        <hudson.model.FileParameterDefinition>
+          <name>managed_inputs.tsv</name>
+          <description>used for dictionary builder</description>
+        </hudson.model.FileParameterDefinition>
         <hudson.model.BooleanParameterDefinition>
           <name>Update_Managed_Inputs</name>
           <defaultValue>true</defaultValue>
         </hudson.model.BooleanParameterDefinition>
         <hudson.model.BooleanParameterDefinition>
           <name>Update_Dictionary_Control_File</name>
+          <defaultValue>true</defaultValue>
+        </hudson.model.BooleanParameterDefinition>
+        <hudson.model.BooleanParameterDefinition>
+          <name>Update_Managed_Inputs_TSV</name>
           <defaultValue>true</defaultValue>
         </hudson.model.BooleanParameterDefinition>
       </parameterDefinitions>
@@ -37,6 +45,7 @@
   <disabled>false</disabled>
   <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
   <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
   <triggers/>
   <concurrentBuild>false</concurrentBuild>
   <builders>
@@ -50,12 +59,7 @@ export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
-#ts=$(date +&quot;%Y-%m-%d_%H-%M-%S&quot;)
-
 if [ &quot;${Update_Managed_Inputs}&quot; = &quot;true&quot; ]; then
-  # don&apos;t need to do this.  already versioned in google sheets and s3.  It&apos;s just making a mess of the s3 bucket.
-  #aws s3 cp s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.csv s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.csv_${ts}
-  
   # not sure why this is duplicated in different s3 buckets.
   aws s3 cp Managed_Input.csv s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.csv
   aws s3 cp s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.csv s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/Managed_Inputs.csv
@@ -66,6 +70,10 @@ if [ &quot;${Update_Dictionary_Control_File}&quot; = &quot;true&quot; ]; then
   aws s3 cp dictionary_control_file.csv s3://avillach-73-bdcatalyst-etl/general/resources/dictionary_control_file.csv
   
   #aws s3 cp Dictionary_Control_File.csv s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.csv s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/Managed_Inputs.csv
+fi
+
+if [ &quot;${Update_Managed_Inputs_TSV}&quot; = &quot;true&quot; ]; then
+aws s3 cp managed_inputs.tsv s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.tsv
 fi</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>

@@ -23,7 +23,7 @@
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.2.1">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.3.0">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -43,6 +43,7 @@
   <disabled>false</disabled>
   <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
   <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
   <triggers/>
   <concurrentBuild>false</concurrentBuild>
   <builders>
@@ -64,6 +65,7 @@ mkdir processing
 find data/ -type f -exec rm -rf {} \;
 find processing/ -type f -exec rm -rf {} \;
 find completed/ -type f -exec rm -rf {} \;
+find logs/ -type f -exec rm -rf {} \;
 rm -rf pic-sure-hpds/
 
 aws s3 cp ${managed_inputs} data/
@@ -84,7 +86,7 @@ while read abv_name stdy_id stdy_type data_ready data_processed has_multi
 do
   if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]] &amp;&amp; [[ ${data_processed,,} == &quot;no&quot; ]]; then
 
-	  if [[ ${has_multi,,} == &quot;yes&quot; ]]; then
+	   if [[ ${stdy_type,,} == &quot;parent&quot; ]] || [[ ${stdy_type,,} == &quot;topmed&quot; ]] || [[ ${stdy_type,,} == &quot;substudy&quot; ]]; then
 
         ### assume etl role
         aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
@@ -100,9 +102,7 @@ do
         java -jar jars/DbgapTreeBuilder3.jar -trialid ${stdy_id} &gt; completed/${stdy_id}_mapping_gen.log 
         cat completed/${stdy_id}_mapping_gen.log
         aws s3 cp completed/${stdy_id}_mapping2.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/mappings/${stdy_id}/mapping2.csv --quiet
-        aws s3 cp completed/${stdy_id}_mapping_gen.log s3://avillach-73-bdcatalyst-etl/${abv_name,,}/mappings/${stdy_id}/${stdy_id}_mapping_gen.log --quiet
-        aws s3 cp completed/${stdy_id}_FilesMissingDictionaries.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/mappings/${stdy_id}/${stdy_id}_FilesMissingDictionaries.csv --quiet
-         
+        
         #find data/ -type f -exec rm -rf {} \;
         
         ### remove role for next iteration
@@ -113,6 +113,7 @@ do
   fi
 done  &lt; inputs.csv</command>
       <configuredLocalRules/>
+      <unstableReturn>255</unstableReturn>
     </hudson.tasks.Shell>
   </builders>
   <publishers/>

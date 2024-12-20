@@ -14,11 +14,6 @@
           <name>study_abv_name</name>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
-        <hudson.model.StringParameterDefinition>
-          <name>bucket_s3_name</name>
-          <description>i.e. nih-nhlbi-topmed-freeze9-batch3-phs001040-c1</description>
-          <trim>false</trim>
-        </hudson.model.StringParameterDefinition>
         <hudson.model.ChoiceParameterDefinition>
           <name>nhlbi_account_number</name>
           <choices class="java.util.Arrays$ArrayList">
@@ -28,6 +23,13 @@
             </a>
           </choices>
         </hudson.model.ChoiceParameterDefinition>
+        <hudson.model.TextParameterDefinition>
+          <name>bucket_s3_names</name>
+          <description>all buckets in this account for this acronym, enter delimited i.e. 
+nih-nhlbi-topmed-freeze9-batch3-phs001040-c1
+nih-nhlbi-topmed-freeze9-batch3-phs001040-c2</description>
+          <trim>false</trim>
+        </hudson.model.TextParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
@@ -36,24 +38,31 @@
   <disabled>false</disabled>
   <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
   <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
   <triggers/>
-  <concurrentBuild>true</concurrentBuild>
+  <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Shell>
       <command>#!/bin/bash
 mkdir downloads
+
+for bucket_s3_name in ${bucket_s3_names};
+do
 aws sts assume-role --role-arn arn:aws:iam::${nhlbi_account_number}:role/nih-nhlbi-TopMed-EC2Access-S3 --role-session-name &quot;get-phenotypic-data&quot; &gt; assume-role-output.txt
 export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-
-aws s3 cp --recursive s3://${bucket_s3_name}/ downloads/ --exclude &quot;*&quot; --include &quot;*.txt*&quot; --include &quot;*.xml*&quot;  --exclude &quot;*/*&quot;
+    
+#uncomment for included nested files (useful if the files are buried) TODO - add flattener to put all in root folder for processing
+#aws s3 cp --recursive s3://${bucket_s3_name}/ downloads/ --exclude &quot;*&quot; --include &quot;*.txt*&quot; --include &quot;*.xml*&quot;
+#uncomment for no nested files (usually wanted)
+aws s3 cp --recursive s3://${bucket_s3_name}/ downloads/ --exclude &quot;*&quot; --include &quot;*.txt*&quot; --include &quot;*.xml*&quot; --exclude &quot;*/*&quot;
 
 
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
 unset AWS_SESSION_TOKEN
-
+done
 
 aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
 
@@ -61,7 +70,6 @@ export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
-#aws s3 rm s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/rawData/ --recursive
 cd downloads/ 
 
 gzip -d *.txt.gz
@@ -71,7 +79,7 @@ aws s3 cp ./ s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/rawData/ --recu
   </builders>
   <publishers/>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.45">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>

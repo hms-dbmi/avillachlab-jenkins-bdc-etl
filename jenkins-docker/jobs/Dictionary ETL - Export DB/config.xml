@@ -1,0 +1,96 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.plugins.copyartifact.CopyArtifactPermissionProperty plugin="copyartifact@757.v05365583a_455">
+      <projectNameList>
+        <string>*</string>
+      </projectNameList>
+    </hudson.plugins.copyartifact.CopyArtifactPermissionProperty>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+conn_user=&apos;postgres&apos;
+conn_pass=`aws secretsmanager get-secret-value --secret-id &apos;rds!db-8086eb77-cd6d-48bc-9298-4380892798ca&apos; --region &apos;us-east-1&apos; --query SecretString --output text | jq -r .password`
+database_psql_host_address=&apos;dictionarydb.cljahwnkfisu.us-east-1.rds.amazonaws.com&apos;
+
+
+PGPASSWORD=&quot;$conn_pass&quot; psql \
+    --host=&quot;$database_psql_host_address&quot; \
+    --port=&quot;5432&quot; \
+    --username=&quot;$conn_user&quot; \
+    --dbname=&quot;dictionary_db&quot; \
+    -c &quot;\q&quot;  # This command tests the connection and exits
+
+if [ $? -ne 0 ]; then
+    echo &quot;Connection test failed!&quot;
+    exit 1
+fi
+
+echo &quot;Connection test successful!&quot;
+
+# Run pg_restore using the dump files provided in the dump_files workspace directory
+PGPASSWORD=&quot;${conn_pass}&quot; \
+pg_dump \
+   --host=&quot;${database_psql_host_address}&quot; \
+   --port=&quot;5432&quot; \
+   --username=&quot;${conn_user}&quot; \
+   --file=&quot;dictionary_db.sql&quot; \
+   --format=d \
+   --jobs=10 \
+   --verbose \
+   --no-owner --no-privileges --no-tablespaces --no-unlogged-table-data --no-comments \
+   --no-publications --no-subscriptions --no-security-labels --no-toast-compression --no-table-access-method \
+   --schema &quot;dict&quot; --schema &quot;dict&quot; &quot;dictionary_db&quot;
+ts=$(date &apos;+%m-%d-%yT%H&apos;)   
+tar -ckvf dictionary_db_${ts}.tar dictionary_db.sql
+
+aws sts assume-role --duration-seconds 1800 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+
+aws s3 cp dictionary_db_${ts}.tar s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/
+
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+echo &quot;s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/dictionary_db_${ts}.tar&quot; &gt; db_dump_name.txt</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers>
+    <hudson.tasks.ArtifactArchiver>
+      <artifacts>db_dump_name.txt</artifacts>
+      <allowEmptyArchive>false</allowEmptyArchive>
+      <onlyIfSuccessful>true</onlyIfSuccessful>
+      <fingerprint>false</fingerprint>
+      <defaultExcludes>true</defaultExcludes>
+      <caseSensitive>true</caseSensitive>
+      <followSymlinks>false</followSymlinks>
+    </hudson.tasks.ArtifactArchiver>
+  </publishers>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>

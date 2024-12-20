@@ -1,12 +1,10 @@
 <?xml version='1.1' encoding='UTF-8'?>
 <project>
   <actions/>
-  <description>This job will generate Global allConcepts file that contains all global vars.&#xd;
-&#xd;
-global vars are identified by first character being an underscore.</description>
+  <description>This job will generate all files needed to build the global allconcepts for all studies with a subject multi</description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@320.v5a_0933a_e7d61">
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
@@ -20,7 +18,7 @@ global vars are identified by first character being an underscore.</description>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.2.0">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.3.0">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -40,12 +38,12 @@ global vars are identified by first character being an underscore.</description>
   <disabled>false</disabled>
   <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
   <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
   <triggers/>
   <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Shell>
       <command>#!/bin/bash
-
 # Managed Inputs
 
 aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
@@ -55,14 +53,12 @@ export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apo
 
 mkdir data
 mkdir completed
+mkdir completed_study_consents
 mkdir hierarchies
 mkdir processing
 
-find data/ -type f -name &quot;phs*&quot; -exec rm -rf {} \;
-find processing/ -type f -exec rm -rf {} \;
-find completed -type f -exec rm -rf {} \;
-
 aws s3 cp ${managed_inputs} data/
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/resources/Genomic_Managed_Inputs.csv data/
 
 aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/metadata.json data/
 
@@ -70,46 +66,32 @@ csvcut -c 1,2,3,8,9,15 data/Managed_Inputs.csv &gt; inputs.csv
 
 rm -rf uniq_ids.txt
 
-echo &quot;testing&quot;
-unset AWS_ACCESS_KEY_ID
-unset AWS_SECRET_ACCESS_KEY
-unset AWS_SESSION_TOKEN
 # Generate mappings
 cat	inputs.csv
 IFS=&apos;,&apos;
 [ ! -f inputs.csv ]
 while read abv_name stdy_id stdy_type data_ready data_processed has_multi
 do
-  if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]]; then
+	
+  	if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]]; then
 
 	   if [[ ${has_multi,,} == &quot;yes&quot; ]]; then
         echo &quot;pulling data for $abv_name&quot;
-        aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
-        
-        export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-        export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-        export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
          
-        aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ data/ --recursive --exclude &quot;*&quot; --include &quot;${stdy_id}*subject.multi*&quot; --include &quot;${stdy_id}*Subject.Multi*&quot; --include &quot;${stdy_id}*Subject.MULTI*&quot; --quiet
+        aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ data/ --recursive --exclude &quot;*&quot; --include &quot;${stdy_id}*subject.multi*&quot; --include &quot;${stdy_id}*Subject.Multi*&quot; --include &quot;${stdy_id}*Subject.MULTI*&quot; --include &quot;${stdy_id}*sample.multi*&quot; --include &quot;${stdy_id}*Sample.Multi*&quot; --include &quot;${stdy_id}*Sample.MULTI*&quot; --quiet
         
-        aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ data/ --recursive --exclude &quot;*&quot; --include &quot;${stdy_id}*sample.multi*&quot; --include &quot;${stdy_id}*Sample.Multi*&quot; --include &quot;${stdy_id}*Sample.MULTI*&quot; --quiet
+		aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/decoded_data/ data/decoded/ --recursive --exclude &quot;*&quot; --include &quot;${stdy_id}*subject.multi*&quot; --include &quot;${stdy_id}*Subject.Multi*&quot; --include &quot;${stdy_id}*Subject.MULTI*&quot; --include &quot;${stdy_id}*sample.multi*&quot; --include &quot;${stdy_id}*Sample.Multi*&quot; --include &quot;${stdy_id}*Sample.MULTI*&quot; --quiet
         
-        aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/data/${abv_name^^}_PatientMapping.v2.csv data/ --quiet
+		aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/data/${abv_name^^}_PatientMapping.v2.csv data/ --quiet
         
-        unset AWS_ACCESS_KEY_ID
-        unset AWS_SECRET_ACCESS_KEY
-        unset AWS_SESSION_TOKEN
+        #clean out old study consents so malformed/outdated consents dont get re-added
+        aws s3 rm s3://avillach-73-bdcatalyst-etl/general/globalvars/study_consents/ --recursive --exclude &quot;*&quot; --include &quot;${abv_name}_${stdy_id}*&quot;
       fi
    else 
-      echo &quot;$abv_name not ready for processing&quot;
+      echo &quot;$abv_name not ready for processing or does not have multi files&quot;
    fi
 done &lt; inputs.csv
 
-aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
-
-export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 echo &quot;pulling harmonized data set&quot;
 aws s3 cp s3://avillach-73-bdcatalyst-etl/hrmn/completed/HRMN_allConcepts.csv data/ --quiet
 
@@ -118,8 +100,7 @@ aws s3 cp s3://avillach-73-bdcatalyst-etl/hrmn/data/HRMN_PatientMapping.v2.csv d
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
 unset AWS_SESSION_TOKEN
-echo &quot;generating sample id data&quot;
-java -jar jars/SampleIdGenerator.jar 
+
 echo &quot;generating consent group data&quot;
 java -jar jars/ConsentGroupGenerator.jar
 echo &quot;generating phs id data&quot;
@@ -128,6 +109,12 @@ echo &quot;generating rootnode data&quot;
 java -jar jars/RootNodeGenerator.jar
 echo &quot;generating genomic sample id global var data&quot;
 java -jar jars/GenomicSampIdGlobalVarGenerator.jar
+echo &quot;generating studies consents&quot;
+java -jar jars/StudiesConsentsGenerator.jar -writedir ./completed_study_consents/
+
+#TODO - figure out best way to rewrite this so it pulls from what exists from other job runs rather than final global var file
+#echo &quot;generating sample id data&quot;
+#java -jar jars/SampleIdGenerator.jar 
 
 aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
 
@@ -144,11 +131,18 @@ cat completed/SampleId_mapping.csv &gt;&gt; mappings/mapping.csv
 cat completed/rootnode_mapping.csv &gt;&gt; mappings/mapping.csv
 
 aws s3 cp mappings/mapping.csv s3://avillach-73-bdcatalyst-etl/general/mappings/mapping.postrootnodes.csv
-
+aws s3 cp completed_study_consents/ s3://avillach-73-bdcatalyst-etl/general/globalvars/study_consents/ --recursive
 </command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>
   <publishers/>
-  <buildWrappers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
 </project>

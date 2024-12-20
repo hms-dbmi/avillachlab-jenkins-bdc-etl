@@ -43,6 +43,7 @@
   <disabled>false</disabled>
   <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
   <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
   <triggers/>
   <concurrentBuild>false</concurrentBuild>
   <builders>
@@ -66,6 +67,7 @@ fi
 
 # don&apos;t archive this as a move as we want to keep current mappings.  Only remove if dbgap subject ids have changed in newer version
 aws s3 cp s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/data/${study_abv_name^^}_PatientMapping.v2.csv  s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/oldData/${study_accession,,}/${version}.${participant_set}/data/
+#aws s3 mv s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/data/${study_abv_name^^}_PatientMapping.v2.csv  s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/oldData/${study_accession,,}/${version}.${participant_set}/data/
 
 aws s3 mv s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/completed/${study_accession,,}/  s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/oldData/${study_accession,,}/${version}.${participant_set}/completed/ --recursive
 

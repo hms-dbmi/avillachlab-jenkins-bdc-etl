@@ -24,7 +24,7 @@ Pre-reqs: ingestion pipeline should be run</description>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.2.1">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.3.0">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -44,6 +44,7 @@ Pre-reqs: ingestion pipeline should be run</description>
   <disabled>false</disabled>
   <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
   <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
   <triggers/>
   <concurrentBuild>false</concurrentBuild>
   <builders>
@@ -59,6 +60,7 @@ export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apo
 
 aws s3 cp ${metadata_file} metadata_new_search.json
 aws s3 cp ${s3_bucket}/general/data/consents.csv consents.csv
+aws s3 cp ${s3_bucket}/general/hpds/javabin/columnMeta/columnMeta.csv columnMeta.csv
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
 unset AWS_SESSION_TOKEN
@@ -72,7 +74,10 @@ do
     export consent=`jq -r &apos;.bio_data_catalyst[&apos;$i&apos;] | .consent_group_code&apos; metadata_new_search.json`
     export abv=`jq -r &apos;.bio_data_catalyst[&apos;$i&apos;] | .abbreviated_name&apos; metadata_new_search.json`
     export datatype=`jq -r &apos;.bio_data_catalyst[&apos;$i&apos;] | .data_type&apos; metadata_new_search.json`
+    
     echo $id $consent $abv
+    mkdir ${id,,}
+    
     aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
 	export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 	export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
@@ -84,11 +89,12 @@ do
         export participantcount=`wc -l &lt; ${id,,}/${abv^^}_PatientMapping.v2.csv`
     fi
 	echo &quot;Participant count &quot; $participantcount    
-    aws s3 cp ${s3_bucket}/${abv,,}/mappings/${id,,}/mapping2_post_analyzer.csv ./${id,,}/mapping2_post_analyzer.csv
-    export varcount=$((`wc -l &lt; ${id,,}/mapping2_post_analyzer.csv`))
+
+
+    grep &quot;\\\\${id,,}\\\\&quot; columnMeta.csv | grep -v &quot;\\\\_&quot; &gt; ${id,,}/vars.csv
+    export varcount=$((`wc -l &lt; ${id,,}/vars.csv`))
     echo &quot;Variable count &quot; $varcount
-
-
+    
 	#update the fields with the values received
 	jq -r &apos;. | .bio_data_catalyst[&apos;$i&apos;].clinical_variable_count|=&apos;$varcount&apos; | .bio_data_catalyst[&apos;$i&apos;].raw_clinical_variable_count|=&apos;$varcount&apos; | .bio_data_catalyst[&apos;$i&apos;].raw_clinical_sample_size|=&apos;$participantcount&apos; | .bio_data_catalyst[&apos;$i&apos;].clinical_sample_size|=&apos;$participantcount metadata_new_search.json &gt; out.json
     mv -f out.json metadata_new_search.json
@@ -103,6 +109,7 @@ export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut 
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
 aws s3 cp metadata_new_search.json s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json
+
 
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
