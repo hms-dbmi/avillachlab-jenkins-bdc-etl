@@ -1,4 +1,4 @@
-FROM jenkins/jenkins:lts
+FROM jenkins/jenkins:latest-jdk11
 
 ARG S3_BUCKET
 
@@ -10,33 +10,31 @@ COPY scriptApproval.xml /var/jenkins_home/scriptApproval.xml
 
 COPY hudson.tasks.Maven.xml /var/jenkins_home/hudson.tasks.Maven.xml
 
-USER root 
+USER root
 
 RUN echo "s/stack_s3_bucket_var/$S3_BUCKET/"
 
 RUN sed -i "s/stack_s3_bucket_var/$S3_BUCKET/" /var/jenkins_home/config.xml
 
-RUN echo deb http://deb.debian.org/debian stretch-backports main >> /etc/apt/sources.list
+RUN apt-get update -y
 
-RUN apt-get update
+RUN apt-get -y install apt-transport-https \
+    python3-pip \
+    wget
 
-RUN apt-get -y install apt-transport-https
-
-RUN apt-get -y install python3-pip
-
-RUN pip3 install --no-input awscli --upgrade
+RUN pip3 install --no-input awscli --upgrade --break-system-packages
 
 RUN curl -fsSL https://get.docker.com | sh
 
-RUN docker --version 
+RUN docker --version
 
-RUN wget https://www-us.apache.org/dist/maven/maven-3/3.6.3/binaries/apache-maven-3.6.3-bin.tar.gz -P /opt
+RUN wget https://downloads.apache.org/maven/maven-3/3.8.8/binaries/apache-maven-3.8.8-bin.tar.gz -P /opt
 
-RUN apt-get -y -t stretch-backports install openjdk-11-jdk
+#RUN apt-get -y -t stretch-backports install openjdk-11-jdk
 
-RUN tar -xvzf /opt/apache-maven-3.6.3-bin.tar.gz -C /opt
+RUN tar -xvzf /opt/apache-maven-3.8.8-bin.tar.gz -C /opt
 
-RUN rm /opt/apache-maven-3.6.3-bin.tar.gz
+RUN rm /opt/apache-maven-3.8.8-bin.tar.gz
 
 RUN apt-get install jq -y
 
