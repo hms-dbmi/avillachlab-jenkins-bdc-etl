@@ -100,7 +100,10 @@ echo "user-data progress finished docker install enabling docker service"
 sudo systemctl enable docker
 echo "user-data progress finished enabling docker service starting docker"
 sudo service docker start
+sudo mkdir -p /home/centos/jenkins/
 cd /home/centos/jenkins
+sudo git clone https://github.com/hms-dbmi/avillachlab-jenkins-bdc-etl.git
+sudo git checkout ${git-commit}
 sudo mkdir -p /var/jenkins_home/jobs/
 sudo mkdir -p /var/log/jenkins-docker-logs
 cp -r jobs/* /var/jenkins_home/jobs/
