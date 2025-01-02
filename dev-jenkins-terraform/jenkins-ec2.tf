@@ -5,6 +5,11 @@ resource "tls_private_key" "provisioning-key" {
 output "provisioning-private-key" {
   value = tls_private_key.provisioning-key.private_key_pem
 }
+resource "aws_key_pair" "generated_key" {
+  key_name   = "jenkins-provisioning-key-etl-${var.git-commit}"
+  public_key = tls_private_key.provisioning-key.public_key_openssh
+}
+
 
 data "template_file" "jenkins-user_data" {
   template = file("install-docker.sh")
@@ -19,13 +24,6 @@ data "template_file" "jenkins-user_data" {
 data "template_file" "jenkins-config-xml" {
   template = file("../jenkins-docker/${var.config-xml-filename}")
   vars = {
-    okta_saml_app_id = var.okta-app-id
-    aws_account_app = var.aws-account-app
-    arn_role_app = var.arn-role-app
-    arn_role_cnc = var.arn-role-cnc
-    arn_role_data = var.arn-role-data
-    git_branch_avillachlab_jenkins_dev_release_control = var.git-branch-avillachlab-jenkins-dev-release-control
-    avillachlab_release_control_repo = var.avillachlab-release-control-repo
     stack_s3_bucket = var.stack-s3-bucket
     jenkins_role_admin_name = var.jenkins-role-admin-name
   }
@@ -47,6 +45,7 @@ resource "aws_instance" "dev-jenkins" {
   ami = var.cis-centos-linux-ami-id
   instance_type = "m5.2xlarge"
   associate_public_ip_address = true
+  key_name = aws_key_pair.generated_key.key_name
 
   iam_instance_profile = var.instance-profile-name
 
