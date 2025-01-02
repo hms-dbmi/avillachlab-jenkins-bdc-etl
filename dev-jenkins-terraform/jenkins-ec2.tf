@@ -43,27 +43,6 @@ resource "aws_instance" "dev-jenkins" {
   }
 
 
-
-  provisioner "file" {
-    source      = "../jenkins-docker"
-    destination = "/home/centos/jenkins"
-    connection {
-      type     = "ssh"
-      user     = "centos"
-      host = self.private_ip
-    }
-  }
-
-  provisioner "file" {
-    content = data.template_file.jenkins-config-xml.rendered
-    destination = "/home/centos/jenkins/config.xml"
-    connection {
-      type     = "ssh"
-      user     = "centos"
-      host = self.private_ip
-    }
-  }
-
   vpc_security_group_ids = [
     aws_security_group.inbound-jenkins-from-lma.id,
     aws_security_group.outbound-jenkins-to-internet.id

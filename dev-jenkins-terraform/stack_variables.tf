@@ -1,6 +1,6 @@
 variable "stack-id" {
 	type = string
-	default = "test"
+	default = "etl"
 }
 
 variable "git-commit" {
