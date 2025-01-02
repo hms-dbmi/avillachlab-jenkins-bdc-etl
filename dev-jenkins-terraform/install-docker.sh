@@ -74,7 +74,7 @@ echo "
             {
                \"file_path\":\"/var/log/jenkins-docker-logs/*\",
                \"log_group_name\":\"jenkins-logs\",
-               \"log_stream_name\":\"{instance_id} ${stack_id} jenkins-app-logs\",
+               \"log_stream_name\":\"{instance_id} jenkins-app-logs\",
                \"timestamp_format\":\"UTC\"
             }
          ]
@@ -95,14 +95,15 @@ sudo yum -y install epel-release
 echo "user-data progress finished epel-release adding docker-ce repo"
 sudo yum-config-manager  --add-repo https://download.docker.com/linux/centos/docker-ce.repo
 echo "user-data progress added docker-ce repo starting docker install"
-sudo yum -y install docker-ce docker-ce-cli containerd.io
+sudo yum -y install docker-ce docker-ce-cli containerd.io git
 echo "user-data progress finished docker install enabling docker service"
 sudo systemctl enable docker
 echo "user-data progress finished enabling docker service starting docker"
 sudo service docker start
 sudo mkdir -p /home/centos/jenkins/
-cd /home/centos/jenkins
+cd /home/centos/
 sudo git clone https://github.com/hms-dbmi/avillachlab-jenkins-bdc-etl.git
+cd avillachlab-jenkins-bdc-etl/jenkins-docker
 sudo git checkout ${git-commit}
 sudo mkdir -p /var/jenkins_home/jobs/
 sudo mkdir -p /var/log/jenkins-docker-logs
@@ -114,5 +115,5 @@ echo "setup script finished"
 sudo docker logs -f jenkins > /var/log/jenkins-docker-logs/jenkins.log &
 
 INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")" --silent http://169.254.169.254/latest/meta-data/instance-id)
-sudo docker exec jenkins /usr/local/bin/aws --region=us-east-1 ec2 create-tags --resources $${INSTANCE_ID} --tags Key=InitComplete,Value=true
+sudo docker exec jenkins /usr/local/bin/aws --region=us-east-1 ec2 create-tags --resources ${INSTANCE_ID} --tags Key=InitComplete,Value=true
 

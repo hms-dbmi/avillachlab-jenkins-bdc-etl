@@ -31,7 +31,7 @@ data "template_cloudinit_config" "config" {
 
 resource "aws_instance" "dev-jenkins" {
   ami = var.cis-centos-linux-ami-id
-  instance_type = "m5.2xlarge"
+  instance_type = "r5.4xlarge"
   associate_public_ip_address = true
 
   iam_instance_profile = var.instance-profile-name
