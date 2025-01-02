@@ -1,16 +1,3 @@
-resource "tls_private_key" "provisioning-key" {
-  algorithm = "RSA"
-  rsa_bits  = 4096
-}
-output "provisioning-private-key" {
-  value = tls_private_key.provisioning-key.private_key_pem
-}
-resource "aws_key_pair" "generated_key" {
-  key_name   = "jenkins-provisioning-key-etl-${var.git-commit}"
-  public_key = tls_private_key.provisioning-key.public_key_openssh
-}
-
-
 data "template_file" "jenkins-user_data" {
   template = file("install-docker.sh")
   vars = {
@@ -45,7 +32,6 @@ resource "aws_instance" "dev-jenkins" {
   ami = var.cis-centos-linux-ami-id
   instance_type = "m5.2xlarge"
   associate_public_ip_address = true
-  key_name = aws_key_pair.generated_key.key_name
 
   iam_instance_profile = var.instance-profile-name
 
@@ -63,7 +49,6 @@ resource "aws_instance" "dev-jenkins" {
     connection {
       type     = "ssh"
       user     = "centos"
-      private_key = tls_private_key.provisioning-key.private_key_pem
       host = self.private_ip
     }
   }
@@ -74,7 +59,6 @@ resource "aws_instance" "dev-jenkins" {
     connection {
       type     = "ssh"
       user     = "centos"
-      private_key = tls_private_key.provisioning-key.private_key_pem
       host = self.private_ip
     }
   }
