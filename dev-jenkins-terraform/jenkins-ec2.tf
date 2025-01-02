@@ -5,11 +5,6 @@ resource "tls_private_key" "provisioning-key" {
 output "provisioning-private-key" {
   value = tls_private_key.provisioning-key.private_key_pem
 }
-resource "aws_key_pair" "generated_key" {
-  key_name   = "jenkins-provisioning-key-${var.stack-id}-${var.git-commit}"
-  public_key = tls_private_key.provisioning-key.public_key_openssh
-}
-
 
 data "template_file" "jenkins-user_data" {
   template = file("install-docker.sh")
@@ -52,7 +47,6 @@ resource "aws_instance" "dev-jenkins" {
   ami = var.cis-centos-linux-ami-id
   instance_type = "m5.2xlarge"
   associate_public_ip_address = true
-  key_name = aws_key_pair.generated_key.key_name
 
   iam_instance_profile = var.instance-profile-name
 
