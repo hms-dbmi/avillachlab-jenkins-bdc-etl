@@ -29,7 +29,7 @@
     </userRemoteConfigs>
     <branches>
       <hudson.plugins.git.BranchSpec>
-        <name>*/genomicIngestion</name>
+        <name>*/master</name>
       </hudson.plugins.git.BranchSpec>
     </branches>
     <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
@@ -65,7 +65,7 @@ unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
 unset AWS_SESSION_TOKEN
 
-csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Data Type&quot;,&quot;Data ready to process&quot;,&quot;Data processed&quot; data/Managed_Inputs.csv &gt; genomic_inputs.csv
+csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Data Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot; data/Managed_Inputs.csv &gt; genomic_inputs.csv
 
 
 IFS=&apos;,&apos;

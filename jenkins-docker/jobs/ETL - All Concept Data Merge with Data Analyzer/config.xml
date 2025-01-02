@@ -32,7 +32,7 @@
     </userRemoteConfigs>
     <branches>
       <hudson.plugins.git.BranchSpec>
-        <name>*/genomicIngestion</name>
+        <name>*/master</name>
       </hudson.plugins.git.BranchSpec>
     </branches>
     <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
@@ -69,7 +69,7 @@ aws s3 cp ${managed_inputs} data/
 
 aws s3 cp --quiet s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json data/
 
-csvcut -c 1,2,3,8,9 data/Managed_Inputs.csv &gt; inputs.csv
+csvcut -c "Study Abbreviated Name","Study Identifier","Study Type","Data is ready to process","Data Processed" data/Managed_Inputs.csv &gt; inputs.csv
 
 rm -rf uniq_ids.txt
 

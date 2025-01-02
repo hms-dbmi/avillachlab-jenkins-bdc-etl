@@ -27,7 +27,7 @@
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
-        <url>https://github.com/hms-dbmi/ETLToolSuite-MissionControl</url>
+        <url>https://github.com/hms-dbmi/ETL-MissionControl-dbgap-submodule</url>
       </hudson.plugins.git.UserRemoteConfig>
     </userRemoteConfigs>
     <branches>
@@ -83,7 +83,7 @@ unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
 unset AWS_SESSION_TOKEN
 
-csvcut -c 1,2,3,8,9,15 data/Managed_Inputs.csv &gt; inputs.csv
+csvcut -c "Study Abbreviated Name","Study Identifier","Study Type","Data is ready to process","Data Processed","Has Multi" data/Managed_Inputs.csv &gt; inputs.csv
 
 # Generate mappings
 cat	inputs.csv
@@ -137,8 +137,7 @@ do
         bash runpartition.sh -j 8 -m 4g -c &apos;config.part*.config&apos; -r resources/
         
         java -jar MergePartitions.jar -propertiesfile resources/job.config
-           
-        #java -jar jars/GenerateAllConcepts.jar &gt; completed/${stdy_id}_mapping_gen.log 
+
         if [[ ! -s completed/${abv_name^^}_allConcepts.csv ]]; then
         	echo &quot;ALLCONCEPTS for ${abv_name} is empty!&quot;
         	exit 255

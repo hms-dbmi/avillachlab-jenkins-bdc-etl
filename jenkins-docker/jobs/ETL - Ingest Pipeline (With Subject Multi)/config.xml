@@ -42,13 +42,13 @@ pipeline {
                     def inputCount = 0
                     inputs.each() {
                         inputCount+=1
-                        if  (it[7] == &apos;Yes&apos; &amp; it[8] == &apos;No&apos; &amp; it[14] == &apos;Yes&apos;) {
-                             def stdy_id = it[1]
+                        if  (inputs[${inputCount}].get('Data is ready to process') == &apos;Yes&apos; &amp; inputs[${inputCount}].get('Data Processed') == &apos;No&apos; &amp; inputs[${inputCount}].get('Has Multi') == &apos;Yes&apos;) {
+                             def stdy_id = inputs[${inputCount}].get('Study Identifier')
                              decodeRuns[&quot;decodeRuns${stdy_id}&quot;] = {
                                 build job: &apos;ETL - DBGap Decode Data&apos;,
                                     parameters: [
-                                        string(name: &apos;abv_name&apos;, value: it[0]), 
-                                        string(name: &apos;stdy_id&apos;, value: it[1])
+                                        string(name: &apos;abv_name&apos;, value: inputs[${inputCount}].get('Study Abbreviated Name')),
+                                        string(name: &apos;stdy_id&apos;, value: inputs[${inputCount}].get('Study Identifier'))
                                     ]
                              }
                         }
@@ -69,7 +69,7 @@ pipeline {
                     def inputCount = 0
                     inputs.each() {
                         inputCount+=1
-                        if  (it[7] == &apos;Yes&apos; &amp; it[8] == &apos;No&apos; &amp; it[14] == &apos;Yes&apos;) {
+                        if  (inputs[${inputCount}].get('Data is ready to process') == &apos;Yes&apos; &amp; inputs[${inputCount}].get('Data Processed') == &apos;No&apos; &amp; inputs[${inputCount}].get('Has Multi') == &apos;Yes&apos;) {
                             echo &apos;Sequencing patients for &apos; + it[1]
                              sequenceRuns[&quot;sequenceRuns${inputCount}&quot;] = {
                                 build job: &apos;ETL - DBGap Sequence Patients&apos;, 
