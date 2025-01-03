@@ -1,4 +1,4 @@
-FROM jenkins/jenkins:latest-jdk11
+FROM jenkins/jenkins:2.448
 
 ARG S3_BUCKET
 
@@ -38,6 +38,6 @@ RUN rm /opt/apache-maven-3.8.8-bin.tar.gz
 
 RUN apt-get install jq -y
 
-RUN `/usr/local/bin/install-plugins.sh < /usr/share/jenkins/ref/plugins.txt` || echo "Some errors occurred during plugin installation."
+RUN /bin/jenkins-plugin-cli -f /usr/share/jenkins/ref/plugins.txt || echo "Some errors occurred during plugin installation."
 
 RUN wget https://releases.hashicorp.com/terraform/0.12.31/terraform_0.12.31_linux_amd64.zip && unzip terraform_0.12.31_linux_amd64.zip && mv terraform /usr/local/bin/
