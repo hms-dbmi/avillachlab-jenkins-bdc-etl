@@ -1,0 +1,104 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.FileParameterDefinition>
+          <name>managed_inputs.tsv</name>
+        </hudson.model.FileParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.3.0">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>https://github.com/hms-dbmi/ETL-MissionControl-dbgap-submodule.git</url>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>*/master</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="empty-list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+        
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+mkdir oldData
+#aws s3 cp s3://avillach-73-bdcatalyst-etl/newDictionary/metadata.json oldData/metadata.json
+#aws s3 cp s3://avillach-73-bdcatalyst-etl/newDictionary/dictionary.json oldData/dictionary.json
+#aws s3 cp s3://avillach-73-bdcatalyst-etl/newDictionary/managed_inputs.csv oldData/managed_inputs.csv
+
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json oldData/metadata.json
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/dictionary.json oldData/dictionary.json
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.tsv oldData/managed_inputs.tsv
+#mv managed_inputs.tsv oldData/managed_inputs.tsv
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+
+csvcut -t -c "Study Abbreviated Name","Study Identifier","Study Full Name","Data Type","Study Type","Subject Type(s)","BDC Program(s)","Data is ready to process","Data Processed","Version","Phase","More Info Link","Additional Information Link (URL)","Additional Information Link (Label)","Request Access Text","BDC Program(s)" oldData/managed_inputs.tsv | csvformat -z 10000000 -D &apos;φ&apos; &gt; inputs.csv
+IFS=&apos;φ&apos;
+[ ! -f inputs.csv ]
+while read study_abv study_id study_name data_type study_type subject_types program_name data_ready data_processed version phase more_info_link additional_info_link additional_info request_text program_name
+do
+  if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]] &amp;&amp; [[ &quot;${data_processed,,}&quot; == &quot;no&quot; ]]; then
+	mkdir ${study_id}
+    mkdir ${study_id}/output
+    echo &apos;refφfull_nameφabbreviationφdescriptionφdata_typeφstudy_typeφsubject_typesφprogram_nameφversionφphaseφadditional_info_linkφadditional_infoφstudy_accessionφstudy_linkφrequest_access_textφprogram_name&apos; &gt;&gt; ${study_id}/output/datasets.csv
+	echo &quot;${study_id}φ${study_name}φ${study_abv}φφ${data_type}φ${study_type}φ${subject_types}φ${program_name}φ${version}φ${phase}φ${additional_info_link}φ${additional_info}φ${study_id}.${version}.${phase}φ${more_info_link}φ${request_text}φ${program_name}&quot; &gt;&gt; ${study_id}/output/datasets.csv
+	jq &apos;with_entries(select(.key | contains(&quot;&apos;${study_id}&apos;&quot;)))&apos; oldData/dictionary.json &gt; ${study_id}/subset_dictionary.json
+	jq &apos;[.bio_data_catalyst[] | select(.&quot;study_identifier&quot;==&quot;&apos;${study_id}&apos;&quot;)]&apos; oldData/metadata.json &gt; ${study_id}/subset_metadata.json
+
+	java -jar jars/NewDictionaryConverter.jar --subsetDir &quot;./${study_id}/&quot;
+    #do not touch the snake it breaks without the snake just trust me here
+    csvformat -t -u0 -U3 -Q🐍 -z 10000000 -D &apos;φ&apos; ./${study_id}/concepts.tsv &gt;${study_id}/output/concepts.csv
+	csvformat -t -z 10000000 -D &apos;φ&apos; ./${study_id}/consents.tsv &gt; ${study_id}/output/consents.csv
+	export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+	export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+	export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+    	aws s3 rm s3://avillach-73-bdcatalyst-etl/newDictionary/${study_id}/ --recursive --exclude &apos;*&apos; --include &apos;*.csv&apos;
+		aws s3 cp ./${study_id}/output/ s3://avillach-73-bdcatalyst-etl/newDictionary/${study_id}/ --recursive --exclude &apos;*&apos; --include &apos;*.csv&apos;
+	unset AWS_ACCESS_KEY_ID
+	unset AWS_SECRET_ACCESS_KEY
+	unset AWS_SESSION_TOKEN
+  fi
+done  &lt; inputs.csv
+
+</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>

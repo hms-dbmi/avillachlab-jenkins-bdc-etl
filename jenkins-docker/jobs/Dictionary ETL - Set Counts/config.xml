@@ -1,0 +1,110 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description>Job to adjust the variable/subject counts for each study to reflect what is available in pic-sure&#xd;
+Pre-reqs: ingestion pipeline should be run</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>metadata_file</name>
+          <defaultValue>s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>s3_bucket</name>
+          <defaultValue>s3://avillach-73-bdcatalyst-etl</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.3.0">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>https://github.com/hms-dbmi/ETL-MissionControl-dbgap-submodule</url>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>*/master</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="empty-list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+
+### assume etl role
+aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+
+aws s3 cp ${metadata_file} metadata_new_search.json
+aws s3 cp ${s3_bucket}/general/data/consents.csv consents.csv
+aws s3 cp ${s3_bucket}/general/hpds/javabin/columnMeta/columnMeta.csv columnMeta.csv
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+#TO DO - change to get list of datasets/consents from api instead of old metadata
+export LENGTH=$((`jq &apos;.[] | length&apos; metadata_new_search.json`-1))
+
+for i in $(seq 0 ${LENGTH});
+do
+    export id=`jq -r &apos;.bio_data_catalyst[&apos;$i&apos;] | .study_identifier&apos; metadata_new_search.json`
+    export consent=`jq -r &apos;.bio_data_catalyst[&apos;$i&apos;] | .consent_group_code&apos; metadata_new_search.json`
+    export abv=`jq -r &apos;.bio_data_catalyst[&apos;$i&apos;] | .abbreviated_name&apos; metadata_new_search.json`
+    echo $id $consent
+    
+    #TO DO - find easier way to do this one
+    aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+	export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+	export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+	export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+    export participantcount=`grep -i $id.$consent consents.csv | wc -l`
+    if [[ $participantcount == 0 ]]; then
+   		 	##consider the study noncompliant, get patient count from patient mapping for study
+        aws s3 cp ${s3_bucket}/${abv,,}/data/${abv^^}_PatientMapping.v2.csv ./${id,,}/${abv^^}_PatientMapping.v2.csv
+        export participantcount=`wc -l &lt; ${id,,}/${abv^^}_PatientMapping.v2.csv`
+    fi
+	echo &quot;Participant count &quot; $participantcount
+    
+    
+    grep &quot;\\\\${id,,}\\\\&quot; columnMeta.csv | grep -v &quot;\\\\_&quot; &gt; ${id,,}/vars.csv
+    export varcount=$((`wc -l &lt; ${id,,}/vars.csv`))
+    echo &quot;Variable count &quot; $varcount
+    
+	#update the fields with the values received
+    
+     curl --show-error --silent --request PUT --data-urlencode &quot;datasetRef=${id,,}&quot; --data-urlencode &quot;consentCode=${consent}&quot; \
+            --data-urlencode &quot;participantCount=${participantCount}&quot; --data-urlencode &quot;variableCount=${variableCount}&quot; http://172.20.0.2:8086/api/consent/counts
+    
+    unset AWS_ACCESS_KEY_ID
+	unset AWS_SECRET_ACCESS_KEY
+	unset AWS_SESSION_TOKEN
+done
+#TODO - Add sample count here too</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers/>
+</project>

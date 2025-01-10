@@ -1,0 +1,165 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job@1400.v7fd111b_ec82f">
+  <actions>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobAction plugin="pipeline-model-definition@2.2218.v56d0cda_37c72"/>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction plugin="pipeline-model-definition@2.2218.v56d0cda_37c72">
+      <jobProperties/>
+      <triggers/>
+      <parameters/>
+      <options/>
+    </org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction>
+  </actions>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.plugins.copyartifact.CopyArtifactPermissionProperty plugin="copyartifact@757.v05365583a_455">
+      <projectNameList>
+        <string>*</string>
+      </projectNameList>
+    </hudson.plugins.copyartifact.CopyArtifactPermissionProperty>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+  </properties>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@4000.v5198556e9cea_">
+    <script>pipeline {
+    agent any
+    
+    stages {
+        
+        stage(&apos;Start Dictionary Container&apos;) {
+            steps {
+                build &apos;Dictionary ETL - Start Docker Container&apos;
+            }
+        } 
+        
+        stage(&apos;Ingest Newly Processed Studies From CSVs&apos;) {
+            steps {
+                withAWS(role:&apos;dbgap-etl&apos;, roleAccount:&apos;736265540791&apos;, duration: 3600, roleSessionName: &apos;dictionary-pipeline&apos;) {
+                    s3Download(file:&apos;Managed_Inputs.csv&apos;, bucket:&apos;avillach-73-bdcatalyst-etl&apos;, path:&apos;general/resources/Managed_Inputs.csv&apos;, force:true)
+                }
+                
+                script {
+                    def inputs = readCSV file: &apos;Managed_Inputs.csv&apos;, format: CSVFormat.DEFAULT.withHeader()
+                    def ingestRuns = [:]
+                    def inputCount = 0
+                    inputs.each() {
+                        inputCount+=1
+                        if  (it[&apos;Data is ready to process&apos;] == &apos;Yes&apos; &amp; it[&apos;Data Processed&apos;] == &apos;No&apos;) {
+                            echo &apos;Building dictionary job config for &apos; + it[&apos;Study Identifier&apos;]
+                             ingestRuns[&quot;updateRuns${inputCount}&quot;] = {
+                                build job: &apos;Dictionary ETL - Update DB from Ingest CSVs&apos;, 
+                                    parameters: [
+                                        string(name: &apos;api&apos;, value: &apos;http://172.20.0.2:8086/api&apos;), 
+                                        string(name: &apos;datasetId&apos;, value: it[&apos;Study Identifier&apos;])
+                                    ]
+                             }
+                        }
+                    }
+                    parallel ingestRuns
+                }
+                
+            }
+        }
+        stage(&apos;Refresh Dictionaries For Noncompliant Studies&apos;) {
+            steps {
+                withAWS(role:&apos;dbgap-etl&apos;, roleAccount:&apos;736265540791&apos;, duration: 3600, roleSessionName: &apos;dictionary-pipeline&apos;) {
+                    s3Download(file:&apos;Managed_Inputs.csv&apos;, bucket:&apos;avillach-73-bdcatalyst-etl&apos;, path:&apos;general/resources/Managed_Inputs.csv&apos;, force:true)
+                }
+                
+                script {
+                    def inputs = readCSV file: &apos;Managed_Inputs.csv&apos;, format: CSVFormat.DEFAULT.withHeader()
+                    def updateRuns = [:]
+                    def inputCount = 0
+                    inputs.each() {
+                        inputCount+=1
+                        if  (it[&apos;Data is ready to process&apos;] == &apos;Yes&apos; &amp; it[&apos;Data Processed&apos;] == &apos;No&apos; &amp; it[&apos;Study Type&apos;] != &apos;TOPMED&apos; &amp; it[&apos;Study Type&apos;] != &apos;PARENT&apos; &amp; it[&apos;Study Type&apos;] != &apos;SUBSTUDY&apos;) {
+                            echo &apos;Fetching curated dictionary and updating db for &apos; + [&apos;Study Identifier&apos;]
+                             updateRuns[&quot;updateRuns${inputCount}&quot;] = {
+                                build job: &apos;Dictionary ETL - Curated metadata.json to dictionary db&apos;, propagate:false,
+                                    parameters: [
+                                        string(name: &apos;api&apos;, value: &apos;http://172.20.0.2:8086/api&apos;), 
+                                        string(name: &apos;stdy_id&apos;, value: it[&apos;Study Identifier&apos;]),
+                                        string(name: &apos;abv&apos;, value: it[&apos;Study Abbreviated Name&apos;])
+                                    ]
+                             }
+                        }
+                    }
+                    parallel updateRuns
+                }
+                
+            }
+        }
+        
+        stage(&apos;Refresh Stigvars on DB&apos;){
+            steps {
+                script {
+                    build job: &apos;Dictionary ETL - Stigvar Loader&apos;
+                }
+            }
+        }
+        stage(&apos;Update study info from FHIR&apos;){
+            steps {
+                script {
+                    build job: &apos;Dictionary ETL - FHIR ( NIH ) Ingest&apos;
+                }
+            }
+        }
+        stage(&apos;Update Genomic Counts&apos;){
+            steps {
+                script {
+                    build job: &apos;ETL - Fetch Genomic Counts from DBGap&apos;
+                }
+            }
+        }
+        stage(&apos;Create Files For Stigvar Identification&apos;) {
+            steps {
+                withAWS(role:&apos;dbgap-etl&apos;, roleAccount:&apos;736265540791&apos;, duration: 3600, roleSessionName: &apos;dictionary-pipeline&apos;) {
+                    s3Download(file:&apos;Managed_Inputs.csv&apos;, bucket:&apos;avillach-73-bdcatalyst-etl&apos;, path:&apos;general/resources/Managed_Inputs.csv&apos;, force:true)
+                }
+                
+                script {
+                    def inputs = readCSV file: &apos;Managed_Inputs.csv&apos;, format: CSVFormat.DEFAULT.withHeader()
+                    def fileGenRuns = [:]
+                    def inputCount = 0
+                    inputs.each() {
+                        inputCount+=1
+                        if  (it[&apos;Data is ready to process&apos;] == &apos;Yes&apos; &amp; it[&apos;Data Processed&apos;] == &apos;No&apos;) {
+                            echo &apos;Building dictionary job config for &apos; + it[&apos;Study Identifier&apos;]
+                             fileGenRuns[&quot;fileGenRuns${inputCount}&quot;] = {
+                                build job: &apos;Dictionary ETL - Create Files For Stigvar Identification&apos;, 
+                                    parameters: [
+                                        string(name: &apos;api&apos;, value: &apos;http://172.20.0.2:8086/api&apos;), 
+                                        string(name: &apos;datasetId&apos;, value: it[&apos;Study Identifier&apos;])
+                                    ]
+                             }
+                        }
+                    }
+                    parallel fileGenRuns
+                }
+                
+            }
+        }
+        stage(&apos;Build PGDump Tar File&apos;){
+            steps {
+                script {
+                    build job: &apos;Dictionary ETL - Export DB&apos;
+                    
+                }
+                copyArtifacts(projectName: &apos;Dictionary ETL - Export DB&apos;);
+            }
+        }
+    }
+    post{
+        success {
+            archiveArtifacts artifacts: &apos;db_dump_name.txt&apos;, followSymlinks: false;
+        }
+    }
+}
+</script>
+    <sandbox>true</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>

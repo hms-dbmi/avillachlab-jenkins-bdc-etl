@@ -4,7 +4,7 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@320.v5a_0933a_e7d61">
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
@@ -23,7 +23,7 @@
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.2.0">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.3.0">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -43,6 +43,7 @@
   <disabled>false</disabled>
   <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
   <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
   <triggers/>
   <concurrentBuild>false</concurrentBuild>
   <builders>
@@ -60,10 +61,12 @@ mkdir data
 mkdir completed
 mkdir hierarchies
 mkdir processing
+mkdir logs
 
 find data/ -type f -exec rm -rf {} \;
 find processing/ -type f -exec rm -rf {} \;
 find completed/ -type f -exec rm -rf {} \;
+find logs/ -type f -exec rm -rf {} \;
 rm -rf pic-sure-hpds/
 
 aws s3 cp ${managed_inputs} .
@@ -72,13 +75,13 @@ unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
 unset AWS_SESSION_TOKEN
 
-csvcut -c 1,2,3,8,9,15 Managed_Inputs.csv &gt; inputs.csv
+csvcut -c "Study Abbreviated Name","Study Identifier","Study Type","Data is ready to process","Data Processed","Has Multi","Use Manual Table Methods" Managed_Inputs.csv &gt; inputs.csv
 
 # Generate mappings
 cat	inputs.csv
 IFS=&apos;,&apos;
 [ ! -f inputs.csv ]
-while read abv_name stdy_id stdy_type data_ready data_processed has_multi
+while read abv_name stdy_id stdy_type data_ready data_processed has_multi has_tables
 do
   if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]] &amp;&amp; [[ &quot;${data_processed,,}&quot; == &quot;no&quot; ]]; then
 
@@ -94,15 +97,18 @@ do
         aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/decoded_data/ data/ --recursive --exclude &quot;*&quot; --include &quot;*.csv&quot;
         
         sed -i &apos;1s/^\xEF\xBB\xBF//&apos; data/*
+        if [[ ${has_tables,,} == &apos;yes&apos; ]]; then
+        echo &apos;Mapping with datatables enabled &apos; ${stdy_id}
+        java -jar jars/GenericMappingGenerator.jar -trialid ${stdy_id} -hasDataTables &gt; logs/${stdy_id}_mapping_gen1.log 
+        else
+        echo &apos;Mapping with datatables disabled for &apos; ${stdy_id}
+        java -jar jars/GenericMappingGenerator.jar -trialid ${stdy_id} &gt; logs/${stdy_id}_mapping_gen1.log 
+        fi
         
-        java -jar jars/GenericMappingGenerator.jar -trialid ${stdy_id} &gt; completed/${stdy_id}_mapping_gen1.log 
-        #cat completed/${stdy_id}_mapping_gen.log
 
-        #aws s3 cp completed/${stdy_id}_mapping_gen.log s3://avillach-73-bdcatalyst-etl/${abv_name,,}/mappings/${stdy_id}/${stdy_id}_mapping_gen.log --quiet
-        #aws s3 cp completed/${stdy_id}_FilesMissingDictionaries.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/mappings/${stdy_id}/${stdy_id}_FilesMissingDictionaries.csv --quiet
         if [[ ${has_multi} ]]; then
             aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ data/ --recursive --exclude=&quot;*&quot; --include=&quot;${stdy_id}*&quot; --quiet
-        	java -jar jars/DbgapTreeBuilder3.jar -trialid ${stdy_id} &gt; completed/${stdy_id}_mapping_gen2.log 
+        	java -jar jars/DbgapTreeBuilder3.jar -trialid ${stdy_id} &gt; logs/${stdy_id}_mapping_gen2.log 
             cat completed/${stdy_id}_mapping2.csv &gt;&gt; completed/${stdy_id}_mapping.csv
         fi 
         find data/ -type f -exec rm -rf {} \;
@@ -115,11 +121,12 @@ do
   fi
 done  &lt; inputs.csv</command>
       <configuredLocalRules/>
+      <unstableReturn>255</unstableReturn>
     </hudson.tasks.Shell>
   </builders>
   <publishers/>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.40">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>

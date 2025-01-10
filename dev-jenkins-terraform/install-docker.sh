@@ -74,7 +74,7 @@ echo "
             {
                \"file_path\":\"/var/log/jenkins-docker-logs/*\",
                \"log_group_name\":\"jenkins-logs\",
-               \"log_stream_name\":\"{instance_id} ${stack_id} jenkins-app-logs\",
+               \"log_stream_name\":\"{instance_id} jenkins-app-logs\",
                \"timestamp_format\":\"UTC\"
             }
          ]
@@ -95,12 +95,16 @@ sudo yum -y install epel-release
 echo "user-data progress finished epel-release adding docker-ce repo"
 sudo yum-config-manager  --add-repo https://download.docker.com/linux/centos/docker-ce.repo
 echo "user-data progress added docker-ce repo starting docker install"
-sudo yum -y install docker-ce docker-ce-cli containerd.io
+sudo yum -y install docker-ce docker-ce-cli containerd.io git
 echo "user-data progress finished docker install enabling docker service"
 sudo systemctl enable docker
 echo "user-data progress finished enabling docker service starting docker"
 sudo service docker start
-cd /home/centos/jenkins
+sudo mkdir -p /home/centos/jenkins/
+cd /home/centos/
+sudo git clone https://github.com/hms-dbmi/avillachlab-jenkins-bdc-etl.git
+cd avillachlab-jenkins-bdc-etl/jenkins-docker
+sudo git checkout ${git-commit}
 sudo mkdir -p /var/jenkins_home/jobs/
 sudo mkdir -p /var/log/jenkins-docker-logs
 cp -r jobs/* /var/jenkins_home/jobs/

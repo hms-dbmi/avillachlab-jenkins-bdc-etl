@@ -1,0 +1,52 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.FileParameterDefinition>
+          <name>anvil.tsv</name>
+          <description>A TSV file that contains the AnVIL data. This file can be downloaded from our team google drive. The file name is &quot;AnVIL studies&quot;.</description>
+        </hudson.model.FileParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>ETL_HOST</name>
+          <description>Ensure you correctly provide the IP Address value. This should usually be the value.</description>
+          <defaultValue>172.20.0.2</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command># Print the directory to show the file
+ls
+
+# Ensure the file has been uploaded.
+if [ -e &quot;anvil.tsv&quot; ]; then
+	echo &quot;anvil.tsv file exists.&quot;
+else
+	echo &quot;anvil.tsv file does not exists.&quot;
+    exit 1;
+fi
+
+curl -X POST -H &quot;Content-Type: text/plain&quot; --data-binary @anvil.tsv http://$ETL_HOST:8086/anvil/upload-tsv</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers/>
+</project>

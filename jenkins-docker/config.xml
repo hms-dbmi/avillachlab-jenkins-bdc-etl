@@ -1,72 +1,26 @@
 <?xml version='1.1' encoding='UTF-8'?>
 <hudson>
   <disabledAdministrativeMonitors>
-    <string>jenkins.diagnostics.RootUrlNotSetMonitor</string>
     <string>jenkins.diagnostics.SecurityIsOffMonitor</string>
+    <string>jenkins.diagnostics.ControllerExecutorsNoAgents</string>
+    <string>jenkins.diagnostics.RootUrlNotSetMonitor</string>
+    <string>OldData</string>
+    <string>jenkins.model.BuiltInNodeMigration</string>
+    <string>hudson.util.DoubleLaunchChecker</string>
+    <string>jenkins.monitor.JavaVersionRecommendationAdminMonitor-11-2024-09-30-DANGER</string>
+    <string>jenkins.security.s2m.MasterKillSwitchWarning</string>
   </disabledAdministrativeMonitors>
-  <version>2.204.2</version>
-  <installStateName>RUNNING</installStateName>
-  <numExecutors>5</numExecutors>
+  <version>2.448</version>
+  <numExecutors>200</numExecutors>
   <mode>NORMAL</mode>
   <useSecurity>true</useSecurity>
-  <authorizationStrategy class="com.michelin.cio.hudson.plugins.rolestrategy.RoleBasedAuthorizationStrategy">
-    <roleMap type="globalRoles">
-      <role name="admin" pattern=".*">
-        <permissions>
-          <permission>hudson.model.View.Delete</permission>
-          <permission>hudson.model.Computer.Connect</permission>
-          <permission>hudson.model.Run.Delete</permission>
-          <permission>com.cloudbees.plugins.credentials.CredentialsProvider.ManageDomains</permission>
-          <permission>hudson.model.Computer.Create</permission>
-          <permission>hudson.model.View.Configure</permission>
-          <permission>hudson.model.Computer.Build</permission>
-          <permission>hudson.model.Item.Configure</permission>
-          <permission>hudson.model.Hudson.Administer</permission>
-          <permission>hudson.model.Item.Cancel</permission>
-          <permission>hudson.model.Item.Read</permission>
-          <permission>com.cloudbees.plugins.credentials.CredentialsProvider.View</permission>
-          <permission>hudson.model.Computer.Delete</permission>
-          <permission>hudson.model.Item.Build</permission>
-          <permission>org.jenkins.plugins.lockableresources.LockableResourcesManager.Unlock</permission>
-          <permission>hudson.scm.SCM.Tag</permission>
-          <permission>hudson.model.Item.Move</permission>
-          <permission>hudson.model.Item.Discover</permission>
-          <permission>hudson.model.Hudson.Read</permission>
-          <permission>com.cloudbees.plugins.credentials.CredentialsProvider.Update</permission>
-          <permission>hudson.model.Item.Create</permission>
-          <permission>hudson.model.Item.Workspace</permission>
-          <permission>com.cloudbees.plugins.credentials.CredentialsProvider.Delete</permission>
-          <permission>hudson.model.Computer.Provision</permission>
-          <permission>hudson.model.Run.Replay</permission>
-          <permission>hudson.model.View.Read</permission>
-          <permission>org.jenkins.plugins.lockableresources.LockableResourcesManager.View</permission>
-          <permission>hudson.model.View.Create</permission>
-          <permission>hudson.model.Item.Delete</permission>
-          <permission>hudson.model.Computer.Configure</permission>
-          <permission>com.cloudbees.plugins.credentials.CredentialsProvider.Create</permission>
-          <permission>hudson.model.Computer.Disconnect</permission>
-          <permission>org.jenkins.plugins.lockableresources.LockableResourcesManager.Reserve</permission>
-          <permission>hudson.model.Run.Update</permission>
-        </permissions>
-        <assignedSIDs>
-          <sid>jenkins_role_BDC_dev_admin</sid>
-        </assignedSIDs>
-      </role>
-      <role name="readonly" pattern=".*">
-        <permissions>
-          <permission>hudson.model.Hudson.Read</permission>
-          <permission>hudson.model.Item.Read</permission>
-          <permission>com.cloudbees.plugins.credentials.CredentialsProvider.View</permission>
-          <permission>hudson.model.View.Read</permission>
-        </permissions>
-        <assignedSIDs>
-          <sid>jenkins_role_BDC_dev_readonly</sid>
-        </assignedSIDs>
-      </role>
-    </roleMap>
-    <roleMap type="slaveRoles"/>
-    <roleMap type="projectRoles"/>
+  <authorizationStrategy class="hudson.security.FullControlOnceLoggedInAuthorizationStrategy">
+    <denyAnonymousReadAccess>true</denyAnonymousReadAccess>
   </authorizationStrategy>
+  <securityRealm class="hudson.security.HudsonPrivateSecurityRealm">
+    <disableSignup>true</disableSignup>
+    <enableCaptcha>false</enableCaptcha>
+  </securityRealm>
   <disableRememberMe>false</disableRememberMe>
   <projectNamingStrategy class="jenkins.model.ProjectNamingStrategy$DefaultProjectNamingStrategy"/>
   <workspaceDir>$JENKINS_HOME/workspace/$ITEM_FULL_NAME</workspaceDir>
@@ -78,11 +32,20 @@
       <home>/usr/lib/jvm/java-11-openjdk-amd64/</home>
       <properties/>
     </jdk>
+    <jdk>
+      <name>JDK-17</name>
+      <home></home>
+      <properties>
+        <hudson.tools.InstallSourceProperty>
+          <installers/>
+        </hudson.tools.InstallSourceProperty>
+      </properties>
+    </jdk>
   </jdks>
   <viewsTabBar class="hudson.views.DefaultViewsTabBar"/>
   <myViewsTabBar class="hudson.views.DefaultMyViewsTabBar"/>
   <clouds/>
-  <quietPeriod>5</quietPeriod>
+  <quietPeriod>0</quietPeriod>
   <scmCheckoutRetryCount>0</scmCheckoutRetryCount>
   <views>
     <hudson.model.AllView>
@@ -94,15 +57,22 @@
     </hudson.model.AllView>
     <listView>
       <owner class="hudson" reference="../../.."/>
-      <name>PIC-SURE Builds</name>
+      <name>Jobs - Phenotypic Ingestion Without Subject Multi</name>
+      <description>For non-compliant Dbgap studies.  Data curation will vary.  This view contain any jobs needed to prepare data for the data ingestion pipeline.</description>
       <filterExecutors>false</filterExecutors>
       <filterQueue>false</filterQueue>
       <properties class="hudson.model.View$PropertyList"/>
       <jobNames>
-        <comparator class="hudson.util.CaseInsensitiveComparator"/>
-        <string>Import_and_Rekey_HPDS_Data</string>
-        <string>Import HPDS VCF Data</string>
-        <string>PIC-SURE Pipeline</string>
+        <comparator class="java.lang.String$CaseInsensitiveComparator"/>
+        <string>ETL - Generate Non-compliant Metadata</string>
+        <string>ETL - Generate Non-DBGAP Global All Concepts</string>
+        <string>ETL - HPDS Javabin generation pipeline</string>
+        <string>ETL - Ingest Pipeline (Without Subject Multi)</string>
+        <string>ETL - Non Compliant Sequence Patients</string>
+        <string>ETL - Update Managed Inputs</string>
+        <string>ETL - Update Meta Counts For All Consents</string>
+        <string>ETL - Upload stigmatizing variable files from git to s3</string>
+        <string>SWB FailSafe - Upload Decoded Data Set to s3</string>
       </jobNames>
       <jobFilters/>
       <columns>
@@ -118,15 +88,58 @@
     </listView>
     <listView>
       <owner class="hudson" reference="../../.."/>
-      <name>Deployment</name>
+      <name>Jobs - Phenotypic Ingestion With Subject Multi</name>
+      <description>Jobs Included In the Ingest With Subject Multi Pipeline</description>
       <filterExecutors>false</filterExecutors>
       <filterQueue>false</filterQueue>
       <properties class="hudson.model.View$PropertyList"/>
       <jobNames>
-        <comparator class="hudson.util.CaseInsensitiveComparator"/>
-        <string>Check For Updates</string>
-        <string>Deployment Pipeline</string>
-        <string>Swap Stacks</string>
+        <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
+        <string>ETL - DBGap Decode Data</string>
+        <string>ETL - DBGap Sequence Patients</string>
+        <string>ETL - Fetch Genomic Counts from DBGap</string>
+        <string>ETL - Generate DBGAP Global All Concepts</string>
+        <string>ETL - Generate DBGAP Global Variables</string>
+        <string>ETL - Generate DBGAP Mapping Files</string>
+        <string>ETL - Generate DBGAP Studies Consents Generator</string>
+        <string>ETL - Generate Genomic Index Files For Newly Ingested Studies</string>
+        <string>ETL - Generate Metadata</string>
+        <string>ETL - Generate Non-DBGap All Concepts with Data Type Analyzer</string>
+        <string>ETL - Generate Non-DBGAP Global All Concepts</string>
+        <string>ETL - Generate Non_DBGAP Mapping Files</string>
+        <string>ETL - Import Metadata From git</string>
+        <string>ETL - Ingest Pipeline (With Subject Multi)</string>
+        <string>ETL - Pull Data from NHLBI S3</string>
+        <string>ETL - Update Managed Inputs</string>
+        <string>ETL - Update Meta Counts For All Consents</string>
+      </jobNames>
+      <jobFilters/>
+      <columns>
+        <hudson.views.StatusColumn/>
+        <hudson.views.JobColumn/>
+        <hudson.views.LastSuccessColumn/>
+        <hudson.views.LastFailureColumn/>
+        <hudson.views.LastDurationColumn/>
+        <hudson.views.BuildButtonColumn/>
+      </columns>
+      <recurse>false</recurse>
+    </listView>
+    <listView>
+      <owner class="hudson" reference="../../.."/>
+      <name>Jobs - Stigvar and Metadata.json updates</name>
+      <filterExecutors>false</filterExecutors>
+      <filterQueue>false</filterQueue>
+      <properties class="hudson.model.View$PropertyList"/>
+      <jobNames>
+        <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
+        <string>Dictionary ETL - Start Docker Container</string>
+        <string>Dictionary ETL - Stigvar Loader</string>
+        <string>ETL - Fetch Genomic Counts from DBGap</string>
+        <string>ETL - Generate HPDS Data Dictionary Javabin</string>
+        <string>ETL - Update Meta Counts For All Consents</string>
+        <string>ETL - Update Metadata.json on s3 with uploaded file</string>
+        <string>ETL - Update static files in javabins</string>
+        <string>ETL - Upload stigmatizing variable files from git to s3</string>
       </jobNames>
       <jobFilters/>
       <columns>
@@ -142,23 +155,35 @@
     </listView>
     <listView>
       <owner class="hudson" reference="../../.."/>
-      <name>Configuration</name>
+      <name>Jobs - Dictionary ETL</name>
       <filterExecutors>false</filterExecutors>
       <filterQueue>false</filterQueue>
       <properties class="hudson.model.View$PropertyList"/>
       <jobNames>
-        <comparator class="hudson.util.CaseInsensitiveComparator"/>
-        <string>Create stack_variables.tf Files</string>
-        <string>Docker-AWSCLI</string>
-        <string>Update Fence Client Credentials</string>
-        <string>Update HTTPD Certs and Key</string>
-        <string>Update PIC-SURE Token Introspection Token</string>
-        <string>Update VPC Settings</string>
+        <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
+        <string>Dictionary ETL - AnVIL TSV Ingest</string>
+        <string>Dictionary ETL - Back Fill Study Programs</string>
+        <string>Dictionary ETL - BDC Ingest Pipeline</string>
+        <string>Dictionary ETL - Create Files For Stigvar Identification</string>
+        <string>Dictionary ETL - Curated metadata.json to dictionary db</string>
+        <string>Dictionary ETL - DCC Harmonized</string>
+        <string>Dictionary ETL - Delete Dataset</string>
+        <string>Dictionary ETL - Export DB</string>
+        <string>Dictionary ETL - FHIR ( NIH ) Ingest</string>
+        <string>Dictionary ETL - Fix Values</string>
+        <string>Dictionary ETL - Manually Upload DB Dump Files</string>
+        <string>Dictionary ETL - Set Counts</string>
+        <string>Dictionary ETL - Start Docker Container</string>
+        <string>Dictionary ETL - Stigvar Loader</string>
+        <string>Dictionary ETL - Update concepts from Ingest CSVs(Manual Upload)</string>
+        <string>Dictionary ETL - Update DB from Ingest CSVs</string>
+        <string>Dictionary ETL - Update Facets From Lists</string>
+        <string>Dictionary ETL - Upload Dictionary Ingest Files to S3</string>
+        <string>Old JSON Dictionary to New Dictionary Input Files</string>
       </jobNames>
       <jobFilters/>
       <columns>
         <hudson.views.StatusColumn/>
-        <hudson.views.WeatherColumn/>
         <hudson.views.JobColumn/>
         <hudson.views.LastSuccessColumn/>
         <hudson.views.LastFailureColumn/>
@@ -169,29 +194,123 @@
     </listView>
     <listView>
       <owner class="hudson" reference="../../.."/>
-      <name>Supporting Jobs</name>
+      <name>Jobs - Curation Utilities</name>
       <filterExecutors>false</filterExecutors>
       <filterQueue>false</filterQueue>
       <properties class="hudson.model.View$PropertyList"/>
       <jobNames>
-        <comparator class="hudson.util.CaseInsensitiveComparator"/>
-        <string>Await Initialization</string>
-        <string>Backup Jenkins Home</string>
-        <string>biodatacatalyst-ui</string>
-        <string>Create new Jenkins Server</string>
-        <string>Create stack_variables.tf Files</string>
-        <string>Destroy Old Jenkins Server</string>
-        <string>List Instance Profiles</string>
-        <string>PIC-SURE Auth Micro-App Build</string>
-        <string>PIC-SURE Wildfly Image Build</string>
-        <string>PIC-SURE-API Build</string>
-        <string>PIC-SURE-HPDS Build</string>
-        <string>PIC-SURE-HPDS-UI Docker Build</string>
-        <string>Retrieve Build Spec</string>
-        <string>Retrieve Deployment State</string>
-        <string>Teardown and Rebuild Stage Environment</string>
-        <string>Update Bucket Policy</string>
-        <string>Move Prod DNS Pointer</string>
+        <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
+        <string>ETL - Pull Data from NHLBI S3 (Decoding)</string>
+        <string>Get Harmonized HPDS Patient Maps</string>
+        <string>Utility - Upload to rawData from local</string>
+      </jobNames>
+      <jobFilters/>
+      <columns>
+        <hudson.views.StatusColumn/>
+        <hudson.views.JobColumn/>
+        <hudson.views.LastSuccessColumn/>
+        <hudson.views.LastFailureColumn/>
+        <hudson.views.LastDurationColumn/>
+        <hudson.views.BuildButtonColumn/>
+      </columns>
+      <recurse>false</recurse>
+    </listView>
+    <listView>
+      <owner class="hudson" reference="../../.."/>
+      <name>Pipeline - Phenotype Ingestion With Subject Multi</name>
+      <description>Everything you need for ingest with a subject multi. Remember to update Managed Inputs and run necessary archive jobs first before running pipeline
+1) Update Managed Inputs
+2) Archive Previous Versions (If Necessary)
+3) Ingest Pipeline
+4) HPDS Pipeline</description>
+      <filterExecutors>false</filterExecutors>
+      <filterQueue>false</filterQueue>
+      <properties class="hudson.model.View$PropertyList"/>
+      <jobNames>
+        <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
+        <string>ETL - Archive Previous Study Version</string>
+        <string>ETL - HPDS Javabin generation pipeline</string>
+        <string>ETL - Ingest Pipeline (With Subject Multi)</string>
+        <string>ETL - Update Managed Inputs</string>
+        <string>Update Git With Latest Jobs and Config</string>
+      </jobNames>
+      <jobFilters/>
+      <columns>
+        <hudson.views.StatusColumn/>
+        <hudson.views.JobColumn/>
+        <hudson.views.LastSuccessColumn/>
+        <hudson.views.LastFailureColumn/>
+        <hudson.views.LastDurationColumn/>
+        <hudson.views.BuildButtonColumn/>
+      </columns>
+      <recurse>false</recurse>
+    </listView>
+    <listView>
+      <owner class="hudson" reference="../../.."/>
+      <name>Pipeline - Phenotype Ingestion Without Subject Multi</name>
+      <description>1) Update Managed Inputs
+2) Archive Previous Study Version (If Necessary)
+3) Sequence Patients
+4) Generate Access Metadata
+5) Generate Global Variables
+6) Ingest Pipeline
+7) HPDS Pipeline</description>
+      <filterExecutors>false</filterExecutors>
+      <filterQueue>false</filterQueue>
+      <properties class="hudson.model.View$PropertyList"/>
+      <jobNames>
+        <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
+        <string>ETL - Archive Previous Study Version</string>
+        <string>ETL - Generate Non-compliant Metadata</string>
+        <string>ETL - Generate Non-DBGAP Global All Concepts</string>
+        <string>ETL - HPDS Javabin generation pipeline</string>
+        <string>ETL - Ingest Pipeline (Without Subject Multi)</string>
+        <string>ETL - Non Compliant Sequence Patients</string>
+        <string>ETL - Update Managed Inputs</string>
+      </jobNames>
+      <jobFilters/>
+      <columns>
+        <hudson.views.StatusColumn/>
+        <hudson.views.JobColumn/>
+        <hudson.views.LastSuccessColumn/>
+        <hudson.views.LastFailureColumn/>
+        <hudson.views.LastDurationColumn/>
+        <hudson.views.BuildButtonColumn/>
+      </columns>
+      <recurse>false</recurse>
+    </listView>
+    <listView>
+      <owner class="hudson" reference="../../.."/>
+      <name>Pipeline - Update Metadata.json</name>
+      <description>For updates to study type or authz for fence mapping. First upload new file, then run update. Values should also be updated in managed inputs</description>
+      <filterExecutors>false</filterExecutors>
+      <filterQueue>false</filterQueue>
+      <properties class="hudson.model.View$PropertyList"/>
+      <jobNames>
+        <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
+        <string>ETL - Update Metadata.json on s3 with uploaded file</string>
+        <string>ETL - Update static files in javabins</string>
+      </jobNames>
+      <jobFilters/>
+      <columns>
+        <hudson.views.StatusColumn/>
+        <hudson.views.JobColumn/>
+        <hudson.views.LastSuccessColumn/>
+        <hudson.views.LastFailureColumn/>
+        <hudson.views.LastDurationColumn/>
+        <hudson.views.BuildButtonColumn/>
+      </columns>
+      <recurse>false</recurse>
+    </listView>
+    <listView>
+      <owner class="hudson" reference="../../.."/>
+      <name>Pipeline - Update Stigmatizing Variables</name>
+      <filterExecutors>false</filterExecutors>
+      <filterQueue>false</filterQueue>
+      <properties class="hudson.model.View$PropertyList"/>
+      <jobNames>
+        <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
+        <string>ETL - Update Stigmatizing Variables in Existing Dataset</string>
       </jobNames>
       <jobFilters/>
       <columns>
@@ -206,7 +325,7 @@
       <recurse>false</recurse>
     </listView>
   </views>
-  <primaryView>Deployment</primaryView>
+  <primaryView>Pipeline - Phenotype Ingestion With Subject Multi</primaryView>
   <slaveAgentPort>50000</slaveAgentPort>
   <label></label>
   <crumbIssuer class="hudson.security.csrf.DefaultCrumbIssuer">
@@ -219,26 +338,34 @@
         <unserializable-parents/>
         <tree-map>
           <default>
-            <comparator class="hudson.util.CaseInsensitiveComparator"/>
+            <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../../../../views/listView/jobNames/comparator"/>
           </default>
-          <int>7</int>
+          <int>11</int>
           <string>arn_role_app</string>
-          <string></string>
+          <string>arn:aws:iam::900561893673:role/hms-dbmi-cnc-role</string>
           <string>arn_role_cnc</string>
-          <string></string>
+          <string>arn:aws:iam::900561893673:role/system/jenkins-s3-role</string>
           <string>arn_role_data</string>
-          <string></string>
-          <string>stack_s3_bucket</string>
-          <string>avillach-biodatacatalyst-deployments-3drb48r</string>
+          <string> arn:aws:iam::736265540791:role/curated-datasets-s3-role</string>
+          <string>arn_sm_crowdstrike</string>
+          <string>arn:aws:secretsmanager:us-east-1:900561893673:secret:integration/security/hmsCrowdStrike-n7Xap8</string>
+          <string>arn_sm_general</string>
+          <string>arn:aws:secretsmanager:us-east-1:900561893673:secret:integration/general/info-OyvwEh</string>
           <string>avillachlab_release_control_repo</string>
           <string>https://github.com/hms-dbmi/avillachlab-jenkins-dev-release-control-integration</string>
+          <string>aws_account_app</string>
+          <string>900561893673</string>
+          <string>CI_terraform_distro</string>
+          <string>https://releases.hashicorp.com/terraform/0.12.31/terraform_0.12.31_linux_amd64.zip</string>
           <string>git_branch_avillachlab_jenkins_dev_release_control</string>
           <string>paul-non-FISMA</string>
-          <string>aws_account_app</string>
-          <string></string>
-
+          <string>jenkins_config_s3_location</string>
+          <string>s3://${stack_s3_bucket}/jenkins_config/migrating_config.xml</string>
+          <string>stack_s3_bucket</string>
+          <string>avillach-biodatacatalyst-deployments-3drb48r</string>
         </tree-map>
       </envVars>
     </hudson.slaves.EnvironmentVariablesNodeProperty>
   </globalNodeProperties>
+  <nodeRenameMigrationNeeded>true</nodeRenameMigrationNeeded>
 </hudson>

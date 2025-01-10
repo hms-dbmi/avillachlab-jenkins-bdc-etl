@@ -1,0 +1,75 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job@1400.v7fd111b_ec82f">
+  <actions>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobAction plugin="pipeline-model-definition@2.2218.v56d0cda_37c72"/>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction plugin="pipeline-model-definition@2.2218.v56d0cda_37c72">
+      <jobProperties/>
+      <triggers/>
+      <parameters/>
+      <options/>
+    </org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction>
+  </actions>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>S3_DATA_SET_TAR_NAME</name>
+          <description>tar file name of dataset to be rebuilt. I.e. biodatacatalyst_javabins_data_analyzer_12-18-24.tar</description>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@4000.v5198556e9cea_">
+    <script>pipeline {
+    agent any
+
+    stages {
+        stage(&apos;Upload stigmatizing variable files from git to s3&apos;) {
+            steps {
+                script {
+                    build job: &apos;ETL - Upload stigmatizing variable files from git to s3&apos;
+                }
+            }
+        }
+        stage(&apos;Dictionary Stigvar Loader&apos;) {
+            steps {
+                script {
+                    build job: &apos;Dictionary ETL - Start Docker Container&apos;
+                    build job: &apos;Dictionary ETL - Stigvar Loader&apos;
+                    build job: &apos;Dictionary ETL - Export DB&apos;
+                }
+            }
+        }
+        stage(&apos;Update stigvars in javabins&apos;) {
+            steps {
+                script {
+                    build job: &apos;ETL - Update static files in javabins&apos;, parameters: [
+                        string(name: &apos;S3_DATA_SET_TAR_NAME&apos;, value: params.S3_DATA_SET_TAR_NAME),
+                         booleanParam(name: &apos;updateStigvars&apos;, value: true), booleanParam(name: &apos;updateStudyMeta&apos;, value: true)]
+                }
+            }
+        }
+        
+    }
+    post{
+        success {
+            copyArtifacts(projectName: &apos;Dictionary ETL - Export DB&apos;);
+            copyArtifacts(projectName: &apos;ETL - Update static files in javabins&apos;);
+            archiveArtifacts artifacts: &apos;db_dump_name.txt&apos;, followSymlinks: false;
+            archiveArtifacts artifacts: &apos;data_analyzer_javabin_file_name.txt&apos;, followSymlinks: false;
+        }
+    }
+}
+</script>
+    <sandbox>true</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>

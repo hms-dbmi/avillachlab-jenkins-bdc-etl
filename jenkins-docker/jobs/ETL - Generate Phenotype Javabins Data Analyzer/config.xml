@@ -4,10 +4,12 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <hudson.plugins.copyartifact.CopyArtifactPermissionProperty plugin="copyartifact@1.46.2">
-      <projectNameList/>
+    <hudson.plugins.copyartifact.CopyArtifactPermissionProperty plugin="copyartifact@757.v05365583a_455">
+      <projectNameList>
+        <string>*</string>
+      </projectNameList>
     </hudson.plugins.copyartifact.CopyArtifactPermissionProperty>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@320.v5a_0933a_e7d61">
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
@@ -15,13 +17,13 @@
       <parameterDefinitions>
         <hudson.model.StringParameterDefinition>
           <name>git_hash</name>
-          <defaultValue>metadata-counts-update</defaultValue>
+          <defaultValue>genomicIngestion</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@4.10.3">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.5.2">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -41,11 +43,12 @@
   <disabled>false</disabled>
   <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
   <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
   <triggers/>
   <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Maven>
-      <targets>clean install -DskipTests</targets>
+      <targets>-U clean install -DskipTests</targets>
       <mavenName>Maven 3.6.3</mavenName>
       <usePrivateRepository>false</usePrivateRepository>
       <settings class="jenkins.mvn.DefaultSettingsProvider"/>
@@ -54,6 +57,7 @@
     </hudson.tasks.Maven>
     <hudson.tasks.Shell>
       <command>#!/bin/bash
+
 
 GIT_BRANCH_SHORT=`echo ${GIT_BRANCH} | cut -d &quot;/&quot; -f 2` 
 GIT_COMMIT_SHORT=`echo ${GIT_COMMIT} | cut -c1-7`
@@ -92,7 +96,6 @@ unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
 unset AWS_SESSION_TOKEN
 
-
 aws sts assume-role --duration-seconds 1800 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
 export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
@@ -107,11 +110,11 @@ aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json 
 
 aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/conceptsToRemove.txt .
 
-docker run -i -v &quot;$(pwd)&quot;:/opt/local/hpds -eLOADER_NAME=UpdateClinicalVariableCounts $HPDS_ETL_IMAGE
+#docker run -i -v &quot;$(pwd)&quot;:/opt/local/hpds -eLOADER_NAME=UpdateClinicalVariableCounts $HPDS_ETL_IMAGE
 
-tar zcf biodatacatalyst_javabins_data_analyzer_${ts}.tar.gz columnMeta.csv *.javabin encryption_key metadata.json conceptsToRemove.txt
+tar -cf biodatacatalyst_javabins_data_analyzer_${ts}.tar columnMeta.csv *.javabin encryption_key metadata.json conceptsToRemove.txt
 
-aws s3 cp biodatacatalyst_javabins_data_analyzer_${ts}.tar.gz s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/
+aws s3 cp biodatacatalyst_javabins_data_analyzer_${ts}.tar s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/
 
 aws s3 cp columnMeta.csv s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/columnMeta/columnMeta.csv
 
@@ -119,13 +122,23 @@ unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
 unset AWS_SESSION_TOKEN
 
-</command>
+echo &quot;s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/biodatacatalyst_javabins_data_analyzer_${ts}.tar&quot; &gt; data_analyzer_javabin_file_name.txt</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>
-  <publishers/>
+  <publishers>
+    <hudson.tasks.ArtifactArchiver>
+      <artifacts>docker/pic-sure-hpds-etl/hpds/data_analyzer_javabin_file_name.txt</artifacts>
+      <allowEmptyArchive>false</allowEmptyArchive>
+      <onlyIfSuccessful>false</onlyIfSuccessful>
+      <fingerprint>false</fingerprint>
+      <defaultExcludes>true</defaultExcludes>
+      <caseSensitive>true</caseSensitive>
+      <followSymlinks>false</followSymlinks>
+    </hudson.tasks.ArtifactArchiver>
+  </publishers>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.40">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>

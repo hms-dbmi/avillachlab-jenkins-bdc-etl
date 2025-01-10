@@ -1,8 +1,8 @@
 <?xml version='1.1' encoding='UTF-8'?>
-<flow-definition plugin="workflow-job@1316.vd2290d3341a_f">
+<flow-definition plugin="workflow-job@1400.v7fd111b_ec82f">
   <actions>
-    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobAction plugin="pipeline-model-definition@1.9.3"/>
-    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction plugin="pipeline-model-definition@1.9.3">
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobAction plugin="pipeline-model-definition@2.2218.v56d0cda_37c72"/>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction plugin="pipeline-model-definition@2.2218.v56d0cda_37c72">
       <jobProperties/>
       <triggers/>
       <parameters/>
@@ -12,20 +12,29 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@320.v5a_0933a_e7d61">
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
   </properties>
-  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@3705.va_6a_c2775a_c17">
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@4000.v5198556e9cea_">
     <script>import groovy.json.JsonSlurper;
 pipeline {
     agent any 
     stages {
+        
         stage(&apos;merge global concepts&apos;) { 
             steps {
                 script {
                     build job: &apos;ETL - Merge Global Concepts&apos;
+                }
+            }
+        }
+        
+        stage(&apos;Pull latest stigvars from git&apos;) { 
+            steps {
+                script {
+                    build job: &apos;ETL - Upload stigmatizing variable files from git to s3&apos;
                 }
             }
         }
@@ -46,6 +55,36 @@ pipeline {
                     build job: &apos;ETL - Generate HPDS Data Dictionary Javabin&apos;
                 }
             }
+        }
+        stage(&apos;Get updated study counts from hpds&apos;) { 
+            steps {
+                script {
+                    build job: &apos;ETL - Update Meta Counts For All Consents&apos;
+                }
+            }
+        }
+        stage(&apos;Convert from dictionary json to new dictionary input&apos;){
+            steps {
+                script {
+                    build job: &apos;Old JSON Dictionary to New Dictionary Input Files&apos;
+                }
+            }
+        }
+        stage(&apos;Dictionary DB Ingest&apos;){
+            steps {
+                script {
+                    build job: &apos;Dictionary ETL - BDC Ingest Pipeline&apos;
+                }
+            }
+        } 
+        
+    }
+    post{
+        success {
+            copyArtifacts(projectName: &apos;Dictionary ETL - Export DB&apos;);
+            copyArtifacts(projectName: &apos;ETL - Generate Phenotype Javabins Data Analyzer&apos;);
+            archiveArtifacts artifacts: &apos;db_dump_name.txt&apos;, followSymlinks: false;
+            archiveArtifacts artifacts: &apos;docker/pic-sure-hpds-etl/hpds/data_analyzer_javabin_file_name.txt&apos;, followSymlinks: false;
         }
     }
 }</script>

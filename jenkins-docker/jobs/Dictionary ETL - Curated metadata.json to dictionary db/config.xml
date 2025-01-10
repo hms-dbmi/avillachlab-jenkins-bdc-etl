@@ -1,0 +1,94 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>api</name>
+          <defaultValue>http://172.20.0.2:8086/api</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>stdy_id</name>
+          <defaultValue>phs003565</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>abv</name>
+          <defaultValue>BIOLINCC_HFN-RELAX</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>true</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${stdy_id}/metadata/${abv,,}_metadata.json ${abv,,}_metadata.json
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+
+
+export phs=`jq -r &apos;.[0].study_phs_number&apos; ${abv,,}_metadata.json`
+echo &quot;phs in metadata.json is ${phs}&quot;
+if [[ -z $phs ]]; then
+	echo &quot;unable to fetch phs number from dictionary. Verify location of study dictionary on s3 is s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${stdy_id}/metadata/&quot;
+	exit -1
+else
+	echo &quot;phs in metadata.json is ${phs}&quot;
+fi
+
+jq &apos;.[0] | (&quot;\\&quot; + .&quot;study_phs_number&quot; + &quot;\\&quot;)  as $studyidpath | &apos;\
+&apos;.&quot;study_phs_number&quot; as $ref | .form_group[] | (if .form_group == &quot;N/A&quot; then &quot;&quot; else (.form_group + &quot;\\&quot;) end) as $formgroup | &apos;\
+&apos;.form[] | (if .form_name == &quot;N/A&quot; then &quot;&quot; else (.form_name + &quot;\\&quot;) end) as $formname | &apos;\
+&apos;.variable_group[] | (if .variable_group_name == &quot;N/A&quot; then &quot;&quot; else (.variable_group_name+ &quot;\\&quot;) end) as $vargroup | &apos;\
+&apos;.variable[] | (.derived_variable_level_data[]|.) as $derived_meta | &apos;\
+&apos;{dataset_ref: $ref, &apos;\
+&apos;name: .variable_id, &apos;\
+&apos;display: .variable_name, &apos;\
+&apos;concept_path: ($studyidpath + .variable_id + &quot;\\&quot;), &apos;\
+&apos;parent_concept_path: ($studyidpath), &apos;\
+&apos;metadata: ({ &apos;\
+&apos;description: .variable_description, &apos;\
+&apos;drs_uri: .drs_uri} &apos;\
+&apos;+ $derived_meta) &apos;\
+&apos;}&apos; ${abv,,}_metadata.json | jq -s &gt; ${abv,,}_output.json 
+
+curl --request PUT --header &apos;Content-Type: text/json&apos; \
+      --data @${abv,,}_output.json &quot;${api}/concept/curated&quot;
+</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>

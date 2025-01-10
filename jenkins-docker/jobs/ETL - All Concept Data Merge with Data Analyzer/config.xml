@@ -4,7 +4,7 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@1.33">
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
@@ -23,7 +23,7 @@
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@4.10.3">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.5.2">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -43,6 +43,7 @@
   <disabled>false</disabled>
   <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
   <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
   <triggers/>
   <concurrentBuild>false</concurrentBuild>
   <builders>
@@ -66,9 +67,9 @@ find processing/ -type f -exec rm -rf {} \;
 find completed -type f -exec rm -rf {} \;
 aws s3 cp ${managed_inputs} data/
 
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/metadata.json data/
+aws s3 cp --quiet s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json data/
 
-csvcut -c 1,2,3,8,9 data/Managed_Inputs.csv &gt; inputs.csv
+csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Study Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot; data/Managed_Inputs.csv &gt; inputs.csv
 
 rm -rf uniq_ids.txt
 
@@ -78,44 +79,32 @@ unset AWS_SECRET_ACCESS_KEY
 unset AWS_SESSION_TOKEN
 # Generate mappings
 cat	inputs.csv
+aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+        
+        export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+        export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+        export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 IFS=&apos;,&apos;
 [ ! -f inputs.csv ]
 while read abv_name stdy_id stdy_type data_ready data_processed
 do
   if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]]; then
-
+	
 	  #if [[ ${stdy_type,,} == &quot;topmed&quot; ]] || [[ ${stdy_type,,} == &quot;parent&quot; ]]; then
-   		aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
-        
-        export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-        export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-        export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-
-   		aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/completed/${stdy_id}/${abv_name^^}_allConcepts_new_search_with_data_analyzer.csv data/${stdy_id}_allConcepts_new_search_with_data_analyzer.csv --quiet
+   	
+		
+   		aws s3 cp --quiet s3://avillach-73-bdcatalyst-etl/${abv_name,,}/completed/${stdy_id}/${stdy_id,,}_allConcepts_new_search_with_data_analyzer.csv data/${stdy_id}_allConcepts_new_search_with_data_analyzer.csv --quiet
    
-       unset AWS_ACCESS_KEY_ID
-       unset AWS_SECRET_ACCESS_KEY
-       unset AWS_SESSION_TOKEN
-
-        unset AWS_ACCESS_KEY_ID
-        unset AWS_SECRET_ACCESS_KEY
-        unset AWS_SESSION_TOKEN
-      #fi
+       
+   
    else 
       echo &quot;$abv_name not ready for processing&quot;
    fi
 done &lt; inputs.csv
 
-aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+aws s3 cp --quiet s3://avillach-73-bdcatalyst-etl/hrmn/completed/HRMN_allConcepts_new_search_with_data_analyzer.csv data/HRMN_allConcepts.csv --quiet
 
-export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-
-
-aws s3 cp s3://avillach-73-bdcatalyst-etl/hrmn/completed/HRMN_allConcepts_new_search_with_data_analyzer.csv data/HRMN_allConcepts.csv --quiet
-
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/completed/GLOBAL_allConcepts_merged.csv data/GLOBAL_allConcepts.csv --quiet
+aws s3 cp --quiet s3://avillach-73-bdcatalyst-etl/general/completed/GLOBAL_allConcepts_merged.csv data/GLOBAL_allConcepts.csv --quiet
 
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
@@ -132,31 +121,13 @@ aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791
 export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+aws s3 cp --quiet completed/Patient_Count_Per_Consents.csv s3://avillach-73-bdcatalyst-etl/general/completed/
 
-aws s3 cp completed/Patient_Count_Per_Consents.csv s3://avillach-73-bdcatalyst-etl/general/completed/
-
-aws s3 cp processing/allConcepts.csv s3://avillach-73-bdcatalyst-etl/general/completed/allConcepts_data_analyzer.csv
+aws s3 cp --quiet processing/allConcepts.csv s3://avillach-73-bdcatalyst-etl/general/completed/allConcepts_data_analyzer.csv
 
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
 unset AWS_SESSION_TOKEN
-#aws s3 cp completed/allConcepts.csv s3://avillach-73-bdcatalyst-etl/general/completed/
-
-#sed -i &apos;s/µ/\\/g&apos; completed/allConcepts.csv
-
-#git clone https://github.com/hms-dbmi/pic-sure-hpds
-
-
-#mv completed/allConcepts.csv pic-sure-hpds/docker/pic-sure-hpds-etl/hpds/allConcepts.csv
-
-
-#cd pic-sure-hpds/docker/pic-sure-hpds-etl/
-
-#cat /dev/urandom | tr -dc &apos;a-zA-Z0-9&apos; | fold -w 32 | head -n 1 &gt; hpds/encryption_key
-
-#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/resources/docker-compose-csv-loader.yml .
-
-#docker-compose -f docker-compose-csv-loader.yml up
 
 
 
@@ -165,12 +136,5 @@ unset AWS_SESSION_TOKEN
     </hudson.tasks.Shell>
   </builders>
   <publishers/>
-  <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.40">
-      <deleteDirs>false</deleteDirs>
-      <cleanupParameter></cleanupParameter>
-      <externalDelete></externalDelete>
-      <disableDeferredWipeout>false</disableDeferredWipeout>
-    </hudson.plugins.ws__cleanup.PreBuildCleanup>
-  </buildWrappers>
+  <buildWrappers/>
 </project>

@@ -1,0 +1,136 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>api</name>
+          <description>the url for the api calls</description>
+          <defaultValue>http://172.20.0.2:8086/api</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.BooleanParameterDefinition>
+          <name>update_categories</name>
+          <defaultValue>false</defaultValue>
+        </hudson.model.BooleanParameterDefinition>
+        <hudson.model.FileParameterDefinition>
+          <name>facet_categories.csv</name>
+        </hudson.model.FileParameterDefinition>
+        <hudson.model.BooleanParameterDefinition>
+          <name>update_facets</name>
+          <defaultValue>false</defaultValue>
+        </hudson.model.BooleanParameterDefinition>
+        <hudson.model.FileParameterDefinition>
+          <name>facets.csv</name>
+        </hudson.model.FileParameterDefinition>
+        <hudson.model.BooleanParameterDefinition>
+          <name>update_facet_concept_rels</name>
+          <defaultValue>false</defaultValue>
+        </hudson.model.BooleanParameterDefinition>
+        <hudson.model.FileParameterDefinition>
+          <name>facet_concept_lists.csv</name>
+        </hudson.model.FileParameterDefinition>
+        <hudson.model.BooleanParameterDefinition>
+          <name>update_facet_dataset_rels</name>
+          <defaultValue>false</defaultValue>
+        </hudson.model.BooleanParameterDefinition>
+        <hudson.model.FileParameterDefinition>
+          <name>facet_study_lists.csv</name>
+        </hudson.model.FileParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>true</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+
+#category inserts/updates
+if (${update_categories}) then
+csvcut -c 1,2,3 ./facet_categories.csv &gt; facet_category_table.csv
+IFS=&apos;,&apos;
+while read name display desc; do
+	if [[ ${desc} != &apos;description&apos; ]]; then
+    	curl --silent --show-error --request PUT --data-urlencode &quot;name=${name}&quot; --data-urlencode &quot;display=${display}&quot; \
+        --data-urlencode &quot;description=${desc}&quot; ${api}/facetCategory
+    fi
+done &lt;facet_category_table.csv
+fi
+#to do - add facet category meta column parsing
+
+
+#facet inserts/updates
+if (${update_facets}) then
+csvcut -c 1,2,3,4,5 ./facets.csv &gt; facets_table.csv
+IFS=&apos;,&apos;
+while read category name display desc parent; do
+	if [[ ${desc} != &apos;description&apos; ]]; then
+    	curl --silent --show-error --request PUT --data-urlencode &quot;categoryName=${category}&quot; --data-urlencode &quot;name=${name}&quot; \
+    		--data-urlencode &quot;display=${display}&quot; --data-urlencode &quot;desc=${desc}&quot; --data-urlencode &quot;parentName=${parent}&quot; \
+    		${api}/facet
+    fi
+done &lt;facets_table.csv
+fi
+
+#to do - add facet meta column parsing
+
+#facet concept relationship mapping
+if (${update_facet_concept_rels}) then
+export columncount=$(csvcut -n facet_concept_lists.csv | wc -l)
+IFS=&apos;,&apos;
+for ((i = 1; i &lt; ${columncount} + 1; i++)); do
+	facetname=$(csvcut -c ${i} facet_concept_lists.csv | csvcut -n | cut -c6-)
+    echo &quot;${facetname}&quot;
+    csvcut -c ${i} -x ./facet_concept_lists.csv &gt; facet_concept_${facetname}.csv
+    while read concept; do
+    	if [[ ${concept} != ${facetname} ]]; then
+        	echo &quot;${facetname} to ${concept}&quot;
+        	curl --request PUT --data-urlencode &quot;facetName=${facetname}&quot; --data-urlencode &quot;conceptPath=${concept}&quot; ${api}/facet/concept
+        fi
+    done&lt;facet_concept_${facetname}.csv
+done
+fi
+
+#facet dataset relationship mapping
+if (${update_facet_dataset_rels}) then
+export columncount=$(csvcut -n facet_study_lists.csv | wc -l)
+IFS=&apos;,&apos;
+for ((i = 1; i &lt; ${columncount} + 1; i++)); do
+	facetname=$(csvcut -c ${i} facet_study_lists.csv | csvcut -n | cut -c6-)
+    csvcut -c ${i} -x ./facet_study_lists.csv &gt; facet_study_${facetname}.csv
+    while read datasetRef; do
+    	if [[ ${datasetRef} != ${facetname} ]]; then
+        	echo &quot;${facetname} ${datasetRef}&quot;
+        	curl --silent --show-error --request PUT --data-urlencode &quot;facetName=${facetname}&quot; --data-urlencode &quot;datasetRef=${datasetRef}&quot; ${api}/facet/dataset
+        fi
+    done&lt;facet_study_${facetname}.csv
+done
+fi
+</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>
