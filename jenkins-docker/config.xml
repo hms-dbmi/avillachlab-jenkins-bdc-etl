@@ -37,11 +37,7 @@
       <home></home>
       <properties>
         <hudson.tools.InstallSourceProperty>
-          <installers>
-            <io.jenkins.plugins.adoptopenjdk.AdoptOpenJDKInstaller plugin="adoptopenjdk@1.5">
-              <id>jdk-17.0.12+7</id>
-            </io.jenkins.plugins.adoptopenjdk.AdoptOpenJDKInstaller>
-          </installers>
+          <installers/>
         </hudson.tools.InstallSourceProperty>
       </properties>
     </jdk>
@@ -254,10 +250,11 @@
       <name>Pipeline - Phenotype Ingestion Without Subject Multi</name>
       <description>1) Update Managed Inputs
 2) Archive Previous Study Version (If Necessary)
-3) Generate Access Metadata
-4) Generate Global Variables
-5) Ingest Pipeline
-6) HPDS Pipeline</description>
+3) Sequence Patients
+4) Generate Access Metadata
+5) Generate Global Variables
+6) Ingest Pipeline
+7) HPDS Pipeline</description>
       <filterExecutors>false</filterExecutors>
       <filterQueue>false</filterQueue>
       <properties class="hudson.model.View$PropertyList"/>

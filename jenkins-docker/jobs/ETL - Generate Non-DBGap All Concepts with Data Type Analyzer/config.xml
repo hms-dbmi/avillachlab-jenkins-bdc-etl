@@ -23,7 +23,7 @@
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.3.0">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.5.2">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -84,7 +84,7 @@ unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
 unset AWS_SESSION_TOKEN
 
-csvcut -c "Study Abbreviated Name","Study Identifier","Study Type","Data is ready to process","Data Processed","Has Multi" data/Managed_Inputs.csv &gt; inputs.csv
+csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Study Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot;,&quot;Has Multi&quot; data/Managed_Inputs.csv &gt; inputs.csv
 # Generate mappings
 cat	inputs.csv
 IFS=&apos;,&apos;
@@ -132,18 +132,18 @@ do
   
         echo &quot;Numeric mappings before Analyzer $(grep &quot;NUMERIC&quot; data/mapping2.csv | wc -l)&quot;
         echo &quot;Text mappings before Analyzer $(grep &quot;TEXT&quot; data/mapping2.csv | wc -l)&quot;
-        java -jar DataAnalyzer.jar -propertiesfile resources/job.config -mappingskipheaders N -trialid ${abv_name^^}
+        java -jar jars/DataAnalyzer.jar -propertiesfile resources/job.config -mappingskipheaders N -trialid ${abv_name^^}
         
         cp completed/mapping.csv data/mapping2.csv
 
         echo &quot;Numeric mappings after Analyzer $(grep &quot;NUMERIC&quot; data/mapping2.csv | wc -l)&quot;
         echo &quot;Text mappings after Analyzer $(grep &quot;TEXT&quot; data/mapping2.csv | wc -l)&quot;
         
-        java -jar Partitioner.jar -propertiesfile resources/job.config -mappingskipheaders N -trialid ${abv_name^^}
+        java -jar jars/Partitioner.jar -propertiesfile resources/job.config -mappingskipheaders N -trialid ${abv_name^^}
         
         bash runpartition.sh -j 31 -m 7g -c &apos;config.part*.config&apos; -r resources/
         
-        java -jar MergePartitions.jar -propertiesfile resources/job.config
+        java -jar jars/MergePartitions.jar -propertiesfile resources/job.config
            
         if ! [ -s completed/${abv_name^^}_allConcepts.csv ]; then
         	echo &quot;ALLCONCEPTS for ${abv_name} is empty!&quot;
@@ -162,7 +162,7 @@ do
         
         aws s3 cp data/mapping2.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/mappings/${stdy_id}/mapping2_post_analyzer.csv
 
-        aws s3 cp completed/${abv_name^^}_allConcepts.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/completed/${stdy_id}/${abv_name^^}_allConcepts_new_search_with_data_analyzer.csv
+        aws s3 cp completed/${abv_name^^}_allConcepts.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/completed/${stdy_id}/${stdy_id,,}_allConcepts_new_search_with_data_analyzer.csv
          
         #find data/ -type f -exec rm -rf {} \;
         
@@ -179,7 +179,7 @@ done  &lt; inputs.csv</command>
   </builders>
   <publishers/>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>

@@ -18,7 +18,7 @@
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.3.0">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.5.2">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -43,7 +43,8 @@
   <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Shell>
-      <command>### Postgres config
+      <command>#!/bin/bash
+### Postgres config
 pw=`aws secretsmanager get-secret-value --secret-id &apos;rds!db-8086eb77-cd6d-48bc-9298-4380892798ca&apos; --region &apos;us-east-1&apos; --query SecretString --output text | jq -r .password`
 echo &quot;POSTGRES_PASSWORD=&apos;${pw}&apos;&quot; &gt;&gt; .env
 echo &apos;POSTGRES_HOST=dictionarydb.cljahwnkfisu.us-east-1.rds.amazonaws.com&apos; &gt;&gt; .env
@@ -54,18 +55,16 @@ echo &apos;POSTGRES_HOST=dictionarydb.cljahwnkfisu.us-east-1.rds.amazonaws.com&a
       <command>docker compose down
 docker compose build --no-cache
 docker compose up -d
-#add back only if jenkins container disconnects from network due to restart etc
-#docker network connect etlnetwork jenkins4
-docker network connect etlnetwork dictionaryetl
-docker inspect dictionaryetl | jq -r &apos;.[] | .NetworkSettings.Networks.etlnetwork.IPAddress&apos;
 
+docker inspect dictionaryetl | jq -r &apos;.[] | .NetworkSettings.Networks.&quot;etlnetwork&quot;.IPAddress&apos;
+docker inspect jenkins | jq -r &apos;.[] | .NetworkSettings.Networks.&quot;etlnetwork&quot;.IPAddress&apos;
 </command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>
   <publishers/>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>

@@ -1,8 +1,8 @@
 <?xml version='1.1' encoding='UTF-8'?>
 <flow-definition plugin="workflow-job@1400.v7fd111b_ec82f">
   <actions>
-    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobAction plugin="pipeline-model-definition@2.2205.vc9522a_9d5711"/>
-    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction plugin="pipeline-model-definition@2.2205.vc9522a_9d5711">
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobAction plugin="pipeline-model-definition@2.2218.v56d0cda_37c72"/>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction plugin="pipeline-model-definition@2.2218.v56d0cda_37c72">
       <jobProperties/>
       <triggers/>
       <parameters/>
@@ -22,7 +22,7 @@
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
   </properties>
-  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@3943.v3519a_3260660">
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@4000.v5198556e9cea_">
     <script>pipeline {
     agent any
     
@@ -41,18 +41,18 @@
                 }
                 
                 script {
-                    def inputs = readCSV file: &apos;Managed_Inputs.csv&apos; format: CSVFormat.DEFAULT.withHeader()
+                    def inputs = readCSV file: &apos;Managed_Inputs.csv&apos;, format: CSVFormat.DEFAULT.withHeader()
                     def ingestRuns = [:]
                     def inputCount = 0
                     inputs.each() {
                         inputCount+=1
-                        if  (inputs[${inputCount}].get('Data is ready to process') == &apos;Yes&apos; &amp; inputs[${inputCount}].get('Data Processed') == &apos;No&apos;) {
-                            echo &apos;Building dictionary job config for &apos; + inputs[${inputCount}]
+                        if  (it[&apos;Data is ready to process&apos;] == &apos;Yes&apos; &amp; it[&apos;Data Processed&apos;] == &apos;No&apos;) {
+                            echo &apos;Building dictionary job config for &apos; + it[&apos;Study Identifier&apos;]
                              ingestRuns[&quot;updateRuns${inputCount}&quot;] = {
                                 build job: &apos;Dictionary ETL - Update DB from Ingest CSVs&apos;, 
                                     parameters: [
                                         string(name: &apos;api&apos;, value: &apos;http://172.20.0.2:8086/api&apos;), 
-                                        string(name: &apos;datasetId&apos;, value: inputs[${inputCount}].get('Study Identifier'))
+                                        string(name: &apos;datasetId&apos;, value: it[&apos;Study Identifier&apos;])
                                     ]
                              }
                         }
@@ -69,19 +69,19 @@
                 }
                 
                 script {
-                    def inputs = readCSV file: &apos;Managed_Inputs.csv&apos;
+                    def inputs = readCSV file: &apos;Managed_Inputs.csv&apos;, format: CSVFormat.DEFAULT.withHeader()
                     def updateRuns = [:]
                     def inputCount = 0
                     inputs.each() {
                         inputCount+=1
-                        if  (inputs[${inputCount}].get('Data is ready to process') == &apos;Yes&apos; &amp; inputs[${inputCount}].get('Data Processed') == &apos;No&apos; &amp; inputs[${inputCount}].get('Study Type') != &apos;TOPMED&apos; &amp; inputs[${inputCount}].get('Study Type') != &apos;PARENT&apos; &amp; inputs[${inputCount}].get('Study Type') != &apos;SUBSTUDY&apos;) {
-                            echo &apos;Fetching curated dictionary and updating db for &apos; + it[1]
+                        if  (it[&apos;Data is ready to process&apos;] == &apos;Yes&apos; &amp; it[&apos;Data Processed&apos;] == &apos;No&apos; &amp; it[&apos;Study Type&apos;] != &apos;TOPMED&apos; &amp; it[&apos;Study Type&apos;] != &apos;PARENT&apos; &amp; it[&apos;Study Type&apos;] != &apos;SUBSTUDY&apos;) {
+                            echo &apos;Fetching curated dictionary and updating db for &apos; + [&apos;Study Identifier&apos;]
                              updateRuns[&quot;updateRuns${inputCount}&quot;] = {
                                 build job: &apos;Dictionary ETL - Curated metadata.json to dictionary db&apos;, propagate:false,
                                     parameters: [
                                         string(name: &apos;api&apos;, value: &apos;http://172.20.0.2:8086/api&apos;), 
-                                        string(name: &apos;stdy_id&apos;, value: inputs[${inputCount}].get('Study Identifier')),
-                                        string(name: &apos;abv&apos;, value: inputs[${inputCount}].get('Study Abbreviated Name')))
+                                        string(name: &apos;stdy_id&apos;, value: it[&apos;Study Identifier&apos;]),
+                                        string(name: &apos;abv&apos;, value: it[&apos;Study Abbreviated Name&apos;])
                                     ]
                              }
                         }
@@ -106,6 +106,13 @@
                 }
             }
         }
+        stage(&apos;Update Genomic Counts&apos;){
+            steps {
+                script {
+                    build job: &apos;ETL - Fetch Genomic Counts from DBGap&apos;
+                }
+            }
+        }
         stage(&apos;Create Files For Stigvar Identification&apos;) {
             steps {
                 withAWS(role:&apos;dbgap-etl&apos;, roleAccount:&apos;736265540791&apos;, duration: 3600, roleSessionName: &apos;dictionary-pipeline&apos;) {
@@ -113,18 +120,18 @@
                 }
                 
                 script {
-                    def inputs = readCSV file: &apos;Managed_Inputs.csv&apos;
+                    def inputs = readCSV file: &apos;Managed_Inputs.csv&apos;, format: CSVFormat.DEFAULT.withHeader()
                     def fileGenRuns = [:]
                     def inputCount = 0
                     inputs.each() {
                         inputCount+=1
-                        if  (inputs[${inputCount}].get('Data is ready to process') == &apos;Yes&apos; &amp; inputs[${inputCount}].get('Data Processed') == &apos;No&apos;) {
-                            echo &apos;Building dictionary job config for &apos; + inputs[${inputCount}].get('Study Identifier')
+                        if  (it[&apos;Data is ready to process&apos;] == &apos;Yes&apos; &amp; it[&apos;Data Processed&apos;] == &apos;No&apos;) {
+                            echo &apos;Building dictionary job config for &apos; + it[&apos;Study Identifier&apos;]
                              fileGenRuns[&quot;fileGenRuns${inputCount}&quot;] = {
                                 build job: &apos;Dictionary ETL - Create Files For Stigvar Identification&apos;, 
                                     parameters: [
                                         string(name: &apos;api&apos;, value: &apos;http://172.20.0.2:8086/api&apos;), 
-                                        string(name: &apos;datasetId&apos;, value: inputs[${inputCount}].get('Study Identifier'))
+                                        string(name: &apos;datasetId&apos;, value: it[&apos;Study Identifier&apos;])
                                     ]
                              }
                         }

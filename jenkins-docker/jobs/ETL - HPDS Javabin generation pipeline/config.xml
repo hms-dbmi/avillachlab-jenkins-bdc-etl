@@ -1,8 +1,8 @@
 <?xml version='1.1' encoding='UTF-8'?>
 <flow-definition plugin="workflow-job@1400.v7fd111b_ec82f">
   <actions>
-    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobAction plugin="pipeline-model-definition@2.2205.vc9522a_9d5711"/>
-    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction plugin="pipeline-model-definition@2.2205.vc9522a_9d5711">
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobAction plugin="pipeline-model-definition@2.2218.v56d0cda_37c72"/>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction plugin="pipeline-model-definition@2.2218.v56d0cda_37c72">
       <jobProperties/>
       <triggers/>
       <parameters/>
@@ -17,7 +17,7 @@
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
   </properties>
-  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@3943.v3519a_3260660">
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@4000.v5198556e9cea_">
     <script>import groovy.json.JsonSlurper;
 pipeline {
     agent any 
@@ -34,7 +34,7 @@ pipeline {
         stage(&apos;Pull latest stigvars from git&apos;) { 
             steps {
                 script {
-                    build job: &apos;ETL - Upload Destigmatizing variables to s3&apos;
+                    build job: &apos;ETL - Upload stigmatizing variable files from git to s3&apos;
                 }
             }
         }
@@ -56,7 +56,7 @@ pipeline {
                 }
             }
         }
-        stage(&apos;Get updated study counts&apos;) { 
+        stage(&apos;Get updated study counts from hpds&apos;) { 
             steps {
                 script {
                     build job: &apos;ETL - Update Meta Counts For All Consents&apos;

@@ -39,7 +39,7 @@
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.3.0">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.5.2">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -127,7 +127,7 @@ export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apo
 
 aws s3 cp ${managed_inputs} .
 
-csvcut -c "Study Abbreviated Name","Study Identifier","Study Type","Data is ready to process","Data Processed" Managed_Inputs.csv &gt; inputs.csv
+csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Study Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot; Managed_Inputs.csv &gt; inputs.csv
 
 cat Managed_Inputs.csv
 
@@ -178,40 +178,6 @@ cd &quot;$WORKSPACE&quot;/tagging/output
 ts=$(date &apos;+%m-%d-%y&apos;)
 tar -cvzf dictionary_javabin_${ts}.tar.gz *.javabin 
 
-# get individual dictionaries for qa
-mkdir qa
-aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
-
-export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-aws s3 cp ${managed_inputs} .
-unset AWS_ACCESS_KEY_ID
-unset AWS_SECRET_ACCESS_KEY
-unset AWS_SESSION_TOKEN
-
-
-csvcut -c "Study Abbreviated Name","Study Identifier","Study Type","Data is ready to process","Data Processed" Managed_Inputs.csv &gt; inputs.csv
-IFS=&apos;,&apos;
-[ ! -f inputs.csv ]
-while read abv_name stdy_id stdy_type data_ready data_processed
-do
-  if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]]; then
-  	if [[ &quot;${data_processed,,}&quot; == &quot;no&quot; ]]; then
-	  jq &apos;to_entries[] | select(.key|startswith(&quot;&apos;${stdy_id}&apos;&quot;))&apos; dictionary.json &gt; qa/${stdy_id}.json
-      export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-      export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-      export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-      aws s3 cp qa/${stdy_id}.json s3://avillach-73-bdcatalyst-etl/${abv_name,,}/qa/${stdy_id}/
-      unset AWS_ACCESS_KEY_ID
-      unset AWS_SECRET_ACCESS_KEY
-      unset AWS_SESSION_TOKEN
-      fi
-   else 
-      echo &quot;$stdy_id $abv_name not ready for processing, skipping qa file build&quot;
-   fi
-done &lt; inputs.csv
-
 aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
 
 export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
@@ -234,7 +200,7 @@ unset AWS_SESSION_TOKEN</command>
   </builders>
   <publishers/>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>
