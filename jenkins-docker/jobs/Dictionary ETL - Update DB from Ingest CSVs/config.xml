@@ -61,13 +61,13 @@ while read datasetRef fullName abv desc; do
     if [[ ${datasetRef} != &apos;ref&apos; ]]; then
     	echo &quot;Creating Dataset&quot;
         #create dataset entry
-        curl --show-error --silent --request PUT --data-urlencode &quot;datasetRef=${datasetRef}&quot; --data-urlencode &quot;abv=${abv}&quot; \
-            --data-urlencode &quot;fullName=${fullName}&quot; --data-urlencode &quot;desc=${desc}&quot; ${api}/dataset
+        curl --retry 5 --retry-connrefused  --retry-delay 0   --show-error --silent --request PUT --data-urlencode &quot;datasetRef=${datasetRef}&quot; --data-urlencode &quot;abv=${abv}&quot; \
+            --data-urlencode &quot;fullName=${fullName}&quot; --data-urlencode &quot;desc=${desc}&quot; ${api}/dataset || { echo &apos;dataset curl --retry 5 --retry-connrefused  --retry-delay 0   failed&apos; ; exit 1; }
         #create dataset facet
         echo &quot;Creating Dataset Facet&quot;
-        curl --show-error --silent --request PUT --data-urlencode &quot;categoryName=dataset_id&quot; --data-urlencode &quot;name=${datasetRef}&quot; \
+        curl --retry 5 --retry-connrefused  --retry-delay 0   --show-error --silent --request PUT --data-urlencode &quot;categoryName=dataset_id&quot; --data-urlencode &quot;name=${datasetRef}&quot; \
             --data-urlencode &quot;display=${abv} (${datasetRef})&quot; --data-urlencode &quot;desc=${fullName}&quot; --data-urlencode &quot;parentName=&quot; \
-            ${api}/facet
+            ${api}/facet || { echo &apos;facet curl --retry 5 --retry-connrefused  --retry-delay 0   failed&apos; ; exit 1; }
     fi
 done &lt;${datasetId}/dataset_table.csv
 
@@ -82,8 +82,8 @@ for ((i = 2; i &lt; ${columncount} + 1; i++)); do
     while read datasetRef values; do
         if [[ ${datasetRef} != &apos;ref&apos; ]]; then
         	if [[ ! -z ${values} ]]; then
-            	curl --show-error --silent --request PUT --data-urlencode &quot;datasetRef=${datasetRef}&quot; --data-urlencode &quot;key=${keyname}&quot; \
-                	--data-urlencode &quot;values=${values}&quot; ${api}/dataset/metadata
+            	curl --retry 5 --retry-connrefused  --retry-delay 0   --show-error --silent --request PUT --data-urlencode &quot;datasetRef=${datasetRef}&quot; --data-urlencode &quot;key=${keyname}&quot; \
+                	--data-urlencode &quot;values=${values}&quot; ${api}/dataset/metadata || { echo &apos;dataset meta curl --retry 5 --retry-connrefused  --retry-delay 0   failed&apos; ; exit 1; }
             fi
         fi
     done &lt;${datasetId}/dataset_meta_column.csv
@@ -96,10 +96,10 @@ while read datasetRef consentCode description participantCount variableCount sam
     echo description $description
     echo participantCount $participantCount
     if [[ ${datasetRef} != &apos;datasetRef&apos; ]]; then
-        curl --show-error --silent --request PUT --data-urlencode &quot;datasetRef=${datasetRef}&quot; --data-urlencode &quot;consentCode=${consentCode}&quot; \
+        curl --retry 5 --retry-connrefused  --retry-delay 0   --show-error --silent --request PUT --data-urlencode &quot;datasetRef=${datasetRef}&quot; --data-urlencode &quot;consentCode=${consentCode}&quot; \
             --data-urlencode &quot;description=${description}&quot; --data-urlencode &quot;authz=${authz}&quot; \
             --data-urlencode &quot;participantCount=${participantCount}&quot; --data-urlencode &quot;variableCount=${variableCount}&quot; --data-urlencode &quot;sampleCount=${sampleCount}&quot; \
-            ${api}/consent
+            ${api}/consent || { echo &apos;consent curl --retry 5 --retry-connrefused  --retry-delay 0   failed&apos; ; exit 1; }
     fi
 done &lt;${datasetId}/consents.csv
 
@@ -112,22 +112,22 @@ while read datasetRef name display conceptType conceptPath parentPath; do
     	if [[ ${parentPath} != &apos;//global_variables//&apos; ]]; then     
         #add concept
         echo datasetRef $datasetRef name $name
-        curl --show-error --silent --request PUT --data-urlencode &quot;datasetRef=${datasetRef}&quot; --data-urlencode &quot;name=${name}&quot; \
+        curl --retry 5 --retry-connrefused  --retry-delay 0   --show-error --silent --request PUT --data-urlencode &quot;datasetRef=${datasetRef}&quot; --data-urlencode &quot;name=${name}&quot; \
             --data-urlencode &quot;display=${display}&quot; --data-urlencode &quot;conceptType=${conceptType}&quot; \
             --data-urlencode &quot;conceptPath=${conceptPath}&quot; --data-urlencode &quot;parentPath=${parentPath}&quot; \
             ${api}/concept | jq -r &apos;.conceptNodeId&apos; &gt;&gt; ${datasetId}/concept_node_ids.txt
         #connect concept to dataset facet
-        curl --show-error --silent --request PUT --data-urlencode &quot;facetName=${datasetRef}&quot; --data-urlencode &quot;conceptPath=${conceptPath}&quot; ${api}/facet/concept
+        curl --retry 5 --retry-connrefused  --retry-delay 0   --show-error --silent --request PUT --data-urlencode &quot;facetName=${datasetRef}&quot; --data-urlencode &quot;conceptPath=${conceptPath}&quot; ${api}/facet/concept || { echo &apos;concept facet curl --retry 5 --retry-connrefused  --retry-delay 0   failed&apos; ; exit 1; }
         #connect concept to data type facet
-        curl --show-error --silent --request PUT --data-urlencode &quot;facetName=${conceptType}&quot; --data-urlencode &quot;conceptPath=${conceptPath}&quot; ${api}/facet/concept
+        curl --retry 5 --retry-connrefused  --retry-delay 0   --show-error --silent --request PUT --data-urlencode &quot;facetName=${conceptType}&quot; --data-urlencode &quot;conceptPath=${conceptPath}&quot; ${api}/facet/concept || { echo &apos;concept facet curl --retry 5 --retry-connrefused  --retry-delay 0   failed&apos; ; exit 1; }
     	fi
     fi
 done &lt;${datasetId}/concept_table.csv
 #checks id list from ingest against existing dictionary entries for dataset. If a concept exists in dictionary but not in the dataset, removes that concept
 if [[ $removeObsoleteConcepts ]]; then
 	csvcut ${datasetId}/concept_node_ids.txt &gt; ${datasetId}/current_concept_nodes.txt
-	curl --request DELETE --header &apos;Content-Type: text/plain&apos; \
-    --data-binary @${datasetId}/current_concept_nodes.txt &quot;${api}/concept/obsolete?datasetRef=${datasetId}&quot;
+	curl --retry 5 --retry-connrefused  --retry-delay 0   --show-error --silent --request DELETE --header &apos;Content-Type: text/plain&apos; \
+    --data-binary @${datasetId}/current_concept_nodes.txt &quot;${api}/concept/obsolete?datasetRef=${datasetId}&quot; || { echo &apos;remove obsolete vars curl --retry 5 --retry-connrefused  --retry-delay 0   failed&apos; ; exit 1; }
 fi
 
 #concept meta entry
@@ -143,8 +143,8 @@ for ((i = 2; i &lt; ${columncount} + 1; i++)); do
             	export encodedConceptPath=$(echo -n $conceptPath | jq -sRr @uri)
             	export encodedKeyName=$(echo -n $keyname | jq -sRr @uri)
             	echo $values &gt; ${datasetId}/concept_meta_values.txt
-            	curl --show-error --silent --request PUT --header &apos;Content-Type: text/plain&apos; \
-                	--data @${datasetId}/concept_meta_values.txt &quot;${api}/concept/metadata?conceptPath=${encodedConceptPath}&amp;key=${encodedKeyName}&quot;
+            	curl --retry 5 --retry-connrefused  --retry-delay 0   --show-error --silent --request PUT --header &apos;Content-Type: text/plain&apos; \
+                	--data @${datasetId}/concept_meta_values.txt &quot;${api}/concept/metadata?conceptPath=${encodedConceptPath}&amp;key=${encodedKeyName}&quot; || { echo &apos;concept meta curl --retry 5 --retry-connrefused  --retry-delay 0   failed&apos; ; exit 1; }
         	fi
         fi
     done &lt;${datasetId}/concept_meta_column.csv
@@ -154,7 +154,7 @@ done</command>
   </builders>
   <publishers/>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>

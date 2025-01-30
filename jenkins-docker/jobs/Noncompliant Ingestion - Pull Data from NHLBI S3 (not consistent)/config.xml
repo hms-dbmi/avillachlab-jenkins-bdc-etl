@@ -10,12 +10,9 @@
     </com.sonyericsson.rebuild.RebuildSettings>
     <hudson.model.ParametersDefinitionProperty>
       <parameterDefinitions>
-        <hudson.model.StringParameterDefinition>
-          <name>study_abv_name</name>
-          <trim>false</trim>
-        </hudson.model.StringParameterDefinition>
         <hudson.model.ChoiceParameterDefinition>
           <name>nhlbi_account_number</name>
+          <description>use 7</description>
           <choices class="java.util.Arrays$ArrayList">
             <a class="string-array">
               <string>600168050588</string>
@@ -30,6 +27,11 @@ nih-nhlbi-topmed-freeze9-batch3-phs001040-c1
 nih-nhlbi-topmed-freeze9-batch3-phs001040-c2</description>
           <trim>false</trim>
         </hudson.model.TextParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>target_directory</name>
+          <defaultValue>development_imaging</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
@@ -52,21 +54,23 @@ aws sts assume-role --role-arn arn:aws:iam::${nhlbi_account_number}:role/nih-nhl
 export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-bucket_s3_name=`echo ${bucket_s3_name} | awk &apos;{$1=$1}1&apos;`    
+    
 #uncomment for included nested files (useful if the files are buried) TODO - add flattener to put all in root folder for processing
 #aws s3 cp --recursive s3://${bucket_s3_name}/ downloads/ --exclude &quot;*&quot; --include &quot;*.txt*&quot; --include &quot;*.xml*&quot;
 #uncomment for no nested files (usually wanted)
-aws s3 cp --recursive s3://${bucket_s3_name}/ downloads/ --exclude &quot;*&quot; --include &quot;*.txt*&quot; --include &quot;*.xml*&quot; --exclude &quot;*/*&quot;
+#aws s3 cp --recursive s3://${bucket_s3_name}/Ledger/PostCloning_Inventories/ downloads/ --exclude &quot;*&quot; --inlcude &quot;*schema.sas7bdat&quot; --exclude &quot;*/*&quot;
+#aws s3 cp --recursive s3://${bucket_s3_name}/Ledger/Ensembles/ downloads/ --exclude &quot;*&quot; --inlcude &quot;*dataset.sas7bdat&quot; --exclude &quot;*/*&quot;
+#aws s3 cp --recursive s3://${bucket_s3_name} V1/ --exclude &quot;*&quot; --include &quot;*.xml&quot;
+#aws s3 cp --recursive s3://${bucket_s3_name} V5/ --exclude &quot;*&quot; --include &quot;*.xml&quot;
+#aws s3 cp --recursive s3://${bucket_s3_name} bdc_templates/ --exclude &quot;*&quot; --include &quot;.tsv&quot;
 
+aws s3 cp --recursive s3://${bucket_s3_name} / --exclude &quot;*&quot; --include &quot;*.csv&quot;
 
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
 unset AWS_SESSION_TOKEN
 done
-if [[ -z downloads ]] then
-echo &quot;No files found for study ${study_abv_name,,}&quot;
-exit 255;
-fi
+
 aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
 
 export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
@@ -75,8 +79,8 @@ export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apo
 
 cd downloads/ 
 
-gzip -d *.txt.gz
-aws s3 cp ./ s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/rawData/ --recursive</command>
+#gzip -d *.sas7bdat
+aws s3 cp ../../../../*.csv s3://avillach-73-bdcatalyst-etl/${target_directory}/rawData/ --recursive</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>

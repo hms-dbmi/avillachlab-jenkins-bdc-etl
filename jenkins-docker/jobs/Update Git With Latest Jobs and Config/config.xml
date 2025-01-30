@@ -1,7 +1,8 @@
 <?xml version='1.1' encoding='UTF-8'?>
 <project>
   <actions/>
-  <description></description>
+  <description>Pushes to avillachlab-jenkins-bdc-etl  branch jenkins-backup with up-to-date job configurations, config.xml (views), and scriptApprovals.xml&#xd;
+note - new plugins will need to be manually added to plugins.txt and are not automatically backed up</description>
   <keepDependencies>false</keepDependencies>
   <properties>
     <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
@@ -12,7 +13,7 @@
       <parameterDefinitions>
         <hudson.model.StringParameterDefinition>
           <name>branch</name>
-          <defaultValue>sharra-backup</defaultValue>
+          <defaultValue>managed-inputs-update</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
@@ -23,13 +24,13 @@
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.3.0">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.5.2">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
         <name>origin</name>
         <url>https://github.com/hms-dbmi/avillachlab-jenkins-bdc-etl.git</url>
-        <credentialsId>git</credentialsId>
+        <credentialsId>sharra git</credentialsId>
       </hudson.plugins.git.UserRemoteConfig>
     </userRemoteConfigs>
     <branches>
@@ -51,16 +52,16 @@
   <builders>
     <hudson.tasks.Shell>
       <command>#!/bin/bash
+ts=$(date &apos;+%m-%d-%yT%H:%M&apos;)
 git config user.email &quot;${user_email}&quot;
-git branch jenkins-backup
-git checkout jenkins-backup
+git branch jenkins-backup-${ts}
+git checkout jenkins-backup-${ts}
 cd jenkins-docker
 rm -f -r jobs jobs_old 
 find ${JENKINS_HOME}/jobs -name &quot;*config.xml&quot; -exec cp --parents {} . \;
 mv .${JENKINS_HOME}/jobs ./jobs -f
 rm -f -r ./var
 cp ${JENKINS_HOME}/config.xml .
-cp ${JENKINS_HOME}/plugins.txt .
 cp ${JENKINS_HOME}/scriptApproval.xml .
 git add --all .
 git commit -m &quot;Git push from jenkins. Branch from ${branch}&quot;
@@ -70,7 +71,7 @@ git commit -m &quot;Git push from jenkins. Branch from ${branch}&quot;
     </hudson.tasks.Shell>
   </builders>
   <publishers>
-    <hudson.plugins.git.GitPublisher plugin="git@5.3.0">
+    <hudson.plugins.git.GitPublisher plugin="git@5.5.2">
       <configVersion>2</configVersion>
       <pushMerge>true</pushMerge>
       <pushOnlyIfSuccess>true</pushOnlyIfSuccess>
@@ -83,9 +84,23 @@ git commit -m &quot;Git push from jenkins. Branch from ${branch}&quot;
         </hudson.plugins.git.GitPublisher_-BranchToPush>
       </branchesToPush>
     </hudson.plugins.git.GitPublisher>
+    <hudson.plugins.ws__cleanup.WsCleanup plugin="ws-cleanup@0.47">
+      <patterns class="empty-list"/>
+      <deleteDirs>false</deleteDirs>
+      <skipWhenFailed>false</skipWhenFailed>
+      <cleanWhenSuccess>true</cleanWhenSuccess>
+      <cleanWhenUnstable>true</cleanWhenUnstable>
+      <cleanWhenFailure>true</cleanWhenFailure>
+      <cleanWhenNotBuilt>true</cleanWhenNotBuilt>
+      <cleanWhenAborted>true</cleanWhenAborted>
+      <notFailBuild>false</notFailBuild>
+      <cleanupMatrixParent>false</cleanupMatrixParent>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.WsCleanup>
   </publishers>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>

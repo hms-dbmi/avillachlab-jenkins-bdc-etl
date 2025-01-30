@@ -16,18 +16,13 @@
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
-          <name>metadata_file</name>
-          <defaultValue>s3://avillach-73-bdcatalyst-etl/general/data/metadata.json</defaultValue>
-          <trim>false</trim>
-        </hudson.model.StringParameterDefinition>
-        <hudson.model.StringParameterDefinition>
           <name>abv_name</name>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.3.0">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.5.2">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -53,6 +48,7 @@
   <builders>
     <hudson.tasks.Shell>
       <command>#!/bin/bash
+
 ### assume etl role
 aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
 
@@ -65,19 +61,14 @@ mkdir data/decoded
 mkdir completed
 mkdir hierarchies
 mkdir processing
+mkdir logs
 
-find data/ -type f -exec rm -rf {} \;
-find processing/ -type f -exec rm -rf {} \;
-find completed/ -type f -exec rm -rf {} \;
-rm -rf pic-sure-hpds/
 
 aws s3 cp ${managed_inputs} data/Managed_Inputs.csv
-
-grep -i ${abv_name^^}, data/Managed_Inputs.csv &gt; data/Managed_Inputs.csv2
+head -n 1 data/Managed_Inputs.csv &gt;&gt; data/Managed_Inputs.csv2
+grep -i ${abv_name^^}, data/Managed_Inputs.csv &gt;&gt; data/Managed_Inputs.csv2
 
 mv data/Managed_Inputs.csv2 data/Managed_Inputs.csv
-
-aws s3 cp ${metadata_file} data/metadata.json
 
 aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/PatientPool.txt data/
 
@@ -98,24 +89,36 @@ aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ beforeConversio
         --include &quot;${stdy_id}*Sample.MULTI*&quot;
 
 for  file  in  beforeConversion/*; do
-echo &quot;$file&quot;
+echo &quot;File: $file&quot;
 FILE_ENCODING=$(file -i $file)
 iconv -f 8859_1 -t UTF-8//TRANSLIT &quot;$file&quot; -o data/decoded/$(basename $file)
 done
-
 cp data/* data/decoded/
 
-java -jar jars/HPDSPatientNumTracker.jar
 
-aws s3 cp data/${abv_name^^}_PatientMapping.v2.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/data/${abv_name^^}_PatientMapping.v2.csv
-aws s3 cp data/PatientPool.txt s3://avillach-73-bdcatalyst-etl/general/data/PatientPool.txt
+java -jar jars/HPDSPatientNumTracker.jar 2&gt; logs/patient_seq_logs.txt 
+if [ -s logs/patient_seq_logs.txt ];
+then
+	echo &quot;Errors in patient sequencing&quot;
+	cat logs/patient_seq_logs.txt
+	exit 255
+	
+else
+	echo &quot;Patient sequence successful - copying new mapping&quot;
+	aws s3 cp data/${abv_name^^}_PatientMapping.v2.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/data/${abv_name^^}_PatientMapping.v2.csv
+	aws s3 cp data/PatientPool.txt s3://avillach-73-bdcatalyst-etl/general/data/PatientPool.txt
+fi
+
+
+
 </command>
       <configuredLocalRules/>
+      <unstableReturn>255</unstableReturn>
     </hudson.tasks.Shell>
   </builders>
   <publishers/>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>

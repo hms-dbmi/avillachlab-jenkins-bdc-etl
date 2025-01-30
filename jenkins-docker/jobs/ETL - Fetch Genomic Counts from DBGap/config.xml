@@ -28,7 +28,7 @@ export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut 
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
 aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json metadata.json 
-
+#TODO - change this job to dictionary api job
 jq &apos;.bio_data_catalyst[] | select(.data_type | contains(&quot;G&quot;)) | select(.study_identifier | contains(&quot;phs&quot;))| {study_identifier: .study_identifier, study_version: .study_version, consent_group_code: (.consent_group_code | .[1:])}&apos; \
 	metadata.json | jq -s | in2csv -f json &gt; study_list.csv
 IFS=&apos;,&apos;
@@ -51,7 +51,7 @@ done &lt; study_list.csv
   </builders>
   <publishers/>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>

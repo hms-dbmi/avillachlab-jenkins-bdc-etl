@@ -43,7 +43,7 @@ export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apo
 
 mkdir sstr
 
-tar -zvxf decoded_data.tar.gz -C &quot;${WORKSPACE}&quot;/sstr/
+tar -zvxf sstr.tar.gz -C &quot;${WORKSPACE}&quot;/sstr/
 
 aws s3 cp &quot;${WORKSPACE}&quot;/sstr/ ${s3_location} --recursive
 </command>
@@ -52,7 +52,7 @@ aws s3 cp &quot;${WORKSPACE}&quot;/sstr/ ${s3_location} --recursive
   </builders>
   <publishers/>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>

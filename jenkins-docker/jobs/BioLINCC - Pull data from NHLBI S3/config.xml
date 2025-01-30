@@ -45,6 +45,7 @@ mkdir downloads
 
 for bucket_s3_name in ${bucket_s3_names};
 do
+echo &quot;Bucket: ${bucket_s3_name}&quot;
 aws sts assume-role --role-arn arn:aws:iam::${nhlbi_account_number}:role/nih-nhlbi-TopMed-EC2Access-S3 --role-session-name &quot;get-phenotypic-data&quot; &gt; assume-role-output.txt
 export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
@@ -79,7 +80,7 @@ aws s3 cp ./ s3://avillach-73-bdcatalyst-etl/development_biolincc/rawData/ --rec
   </builders>
   <publishers/>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>

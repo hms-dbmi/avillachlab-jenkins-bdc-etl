@@ -17,10 +17,15 @@
           <defaultValue>s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.csv</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>git_hash</name>
+          <defaultValue>*/master</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.3.0">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.5.2">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -29,7 +34,7 @@
     </userRemoteConfigs>
     <branches>
       <hudson.plugins.git.BranchSpec>
-        <name>*/master</name>
+        <name>${git_hash}</name>
       </hudson.plugins.git.BranchSpec>
     </branches>
     <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
@@ -94,10 +99,17 @@ fi
 done &lt; genomic_inputs.csv
 
 java -jar jars/IndexFileGenerator.jar
-#aws s3 cp completed/ s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/ingestion-indexes/ --recursive --exclude &quot;*.csv&quot;</command>
+aws s3 cp completed/ s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/ingestion-indexes/ --recursive --exclude &quot;*.csv&quot;</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>
   <publishers/>
-  <buildWrappers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
 </project>

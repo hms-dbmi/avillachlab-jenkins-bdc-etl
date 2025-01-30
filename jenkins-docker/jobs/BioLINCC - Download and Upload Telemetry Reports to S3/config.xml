@@ -1,0 +1,200 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description>This job should be used to upload SSTR files in batch for BioLINCC studies.</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>s3_location</name>
+          <defaultValue>s3://avillach-73-bdcatalyst-etl/development_biolincc/rawData/sstr</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.FileParameterDefinition>
+          <name>study_list.tsv</name>
+        </hudson.model.FileParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+
+### assume etl role
+aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+
+REQUEST_DELAY=5
+MAX_RETRIES=3
+RETRY_BASE_DELAY=3
+STUDY_LIST=&quot;study_list.tsv&quot;
+
+download_with_retries() {
+    local url=$1
+    local dest_file=$2
+    local retries=0
+    local max_retries=5
+    local retry_delay=5
+    local curl_opts=(
+        --silent
+        --show-error
+        --location
+        --connect-timeout 300
+        --max-time 3600
+        --retry 2
+        --retry-delay 5
+        --user-agent &quot;Mozilla/5.0 (X11; Linux x86_64) JenkinsBioLINCC/1.0&quot;
+    )
+
+	if [[ -f $dest_file &amp;&amp; -s $dest_file ]]; then
+        echo &quot;√ Using existing file: $(basename $dest_file) ($(stat -c%s $dest_file) bytes)&quot;
+        return 0
+    fi
+
+    echo &quot;\n$(printf &apos;=%.0s&apos; {1..60})&quot;
+    echo &quot;Downloading: $(basename &quot;$dest_file&quot;)&quot;
+    echo &quot;Target path: $dest_file&quot;
+
+    mkdir -p &quot;$(dirname &quot;$dest_file&quot;)&quot;
+
+    while [[ $retries -le $max_retries ]]; do
+        echo &quot;Attempt $((retries + 1))/$((max_retries + 1))&quot;
+        
+        # Clear previous partial files on new attempts
+        [[ $retries -gt 0 ]] &amp;&amp; rm -f &quot;$dest_file&quot;
+        
+        http_code=$(curl &quot;${curl_opts[@]}&quot; \
+            -o &quot;$dest_file&quot; \
+            -w &quot;%{http_code}&quot; \
+            &quot;$url&quot;)
+
+        status=$?
+
+        # Success condition
+        if [[ $status -eq 0 &amp;&amp; $http_code -eq 200 ]]; then
+            echo &quot;✓ Downloaded: $(stat -c%s &quot;$dest_file&quot;) bytes&quot;
+            return 0
+        fi
+
+        # Handle specific errors
+        case &quot;$http_code&quot; in
+            502|503|504)
+                echo &quot;⚠ Server-side error ($http_code), retrying...&quot;
+                ;;
+            *)
+                echo &quot;✗ Fatal error: HTTP $http_code (curl $status)&quot;
+                return 1
+                ;;
+        esac
+
+        # Progressive backoff
+        delay=$((retry_delay * (2 ** retries)))
+        echo &quot;↻ Retrying in $delay seconds...&quot;
+        sleep $delay
+        retries=$((retries + 1))
+    done
+
+    echo &quot;✗ Maximum retries exhausted ($max_retries attempts)&quot;
+    return 1
+}
+
+process_study() {
+    local study_phs=$1
+    local study_ps_abv=$2
+
+    echo &quot;\n$(printf &apos;=%.0s&apos; {1..60})&quot;
+    echo &quot;Processing study: $study_phs&quot;
+
+    study_dir=&quot;../../$(echo $study_ps_abv | tr &apos;[:upper:]&apos; &apos;[:lower:&apos;])&quot;
+    mkdir -p $study_dir/decoded_data $study_dir/rawData
+
+    telemetry_url=&quot;https://www.ncbi.nlm.nih.gov/gap/sstr/report/study/${study_phs}.v1.p1/subjects/download?study_accession_version=${study_phs}.v1.p1&amp;order_col=0&amp;order_dir=asc&amp;filter_text=&amp;data_format=row&amp;columns=SUBJECT_ID%20%2C%20SAMPLE_ID%20%2C%20CONSENT%2C%20SEX%2C%20consent_abbreviation%2C%20dbgap_subject_repository%20%2C%20dbgap_subject_id%20%2C%20dbgap_sample_id%20%2C%20biosample_id%20%2C%20molecular_sample_use%20%2C%20sequence_sample_use%20%2C%20sequence_data_details%2C%20images&quot;
+    telemetry_path=&quot;${study_phs}.v1.p1.txt&quot;
+
+    if ! download_with_retries $telemetry_url $telemetry_path; then
+        echo &quot;X Skipping further processing for $study_phs&quot;
+        return 1
+    fi
+
+    return 0
+}
+
+process_all_studies() {
+    echo &quot;$(printf &apos;=%.0s&apos; {1..60})&quot;
+    echo &quot;Starting processing of $(wc -l &lt; $STUDY_LIST) studies&quot;
+
+    successful_studies=()
+    failed_studies=()
+
+    while IFS=$&apos;\t&apos; read -r ps_abv phs dmc_abv consent_list focus design ful_name consent || [ -n &quot;$ps_abv&quot; ]; do
+        ps_abv=&quot;${ps_abv%$&apos;\r&apos;}&quot;
+        phs=&quot;${phs%$&apos;\r&apos;}&quot;
+
+        echo &quot;Process Study PHS: $phs PHS_ABV: $ps_abv&quot;
+
+        if process_study &quot;$phs&quot; &quot;$ps_abv&quot;; then
+            successful_studies+=(&quot;$phs&quot;)
+        else
+            failed_studies+=(&quot;$phs&quot;)
+        fi
+        sleep &quot;$REQUEST_DELAY&quot;
+    done &lt; &lt;(tail -n +2 &quot;$STUDY_LIST&quot;)
+
+    echo &quot;\n$(printf &apos;=%.0s&apos; {1..60})&quot;
+    echo &quot;Processing complete&quot;
+
+    if [[ ${#failed_studies[@]} -gt 0 ]]; then
+        echo &quot;\n$(printf &apos;-%.0s&apos; {1..60})&quot;
+        echo &quot;Removed ${#failed_studies[@]} failed studies from list:&quot;
+        printf &apos;%s\n&apos; &quot;${failed_studies[@]}&quot;
+        printf &apos;%s\n&apos; &quot;${failed_studies[@]}&quot; &gt; failed_studies.tsv
+        echo &quot;\nFailed study list saved to: failed_studies.tsv&quot;
+    fi
+
+    if [[ ${#successful_studies[@]} -eq 0 ]]; then
+        echo &quot;\n$(printf &apos;!%.0s&apos; {1..60})&quot;
+        echo &quot;All studies failed processing - no remaining studies to process&quot;
+        return 1
+    fi
+
+    echo &quot;\n$(printf &apos;-%.0s&apos; {1..60})&quot;
+    echo &quot;Continuing with ${#successful_studies[@]} successful studies&quot;
+
+    for study in &quot;${successful_studies[@]}&quot;; do
+        study_dir=&quot;../../$(echo $study | tr &apos;[:upper:]&apos; &apos;[:lower:&apos;])&quot;
+        aws s3 cp ${study}.v1.p1.txt ${s3_location}/${study}.v1.p1.txt
+    done
+
+    return 0
+}
+
+process_all_studies</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>

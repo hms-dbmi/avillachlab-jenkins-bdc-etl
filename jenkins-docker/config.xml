@@ -37,11 +37,7 @@
       <home></home>
       <properties>
         <hudson.tools.InstallSourceProperty>
-          <installers>
-            <io.jenkins.plugins.adoptopenjdk.AdoptOpenJDKInstaller plugin="adoptopenjdk@1.5">
-              <id>jdk-17.0.12+7</id>
-            </io.jenkins.plugins.adoptopenjdk.AdoptOpenJDKInstaller>
-          </installers>
+          <installers/>
         </hudson.tools.InstallSourceProperty>
       </properties>
     </jdk>
@@ -101,15 +97,12 @@
         <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
         <string>ETL - DBGap Decode Data</string>
         <string>ETL - DBGap Sequence Patients</string>
-        <string>ETL - Fetch Genomic Counts from DBGap</string>
         <string>ETL - Generate DBGAP Global All Concepts</string>
         <string>ETL - Generate DBGAP Global Variables</string>
         <string>ETL - Generate DBGAP Mapping Files</string>
-        <string>ETL - Generate DBGAP Studies Consents Generator</string>
         <string>ETL - Generate Genomic Index Files For Newly Ingested Studies</string>
         <string>ETL - Generate Metadata</string>
         <string>ETL - Generate Non-DBGap All Concepts with Data Type Analyzer</string>
-        <string>ETL - Generate Non-DBGAP Global All Concepts</string>
         <string>ETL - Generate Non_DBGAP Mapping Files</string>
         <string>ETL - Import Metadata From git</string>
         <string>ETL - Ingest Pipeline (With Subject Multi)</string>
@@ -254,10 +247,11 @@
       <name>Pipeline - Phenotype Ingestion Without Subject Multi</name>
       <description>1) Update Managed Inputs
 2) Archive Previous Study Version (If Necessary)
-3) Generate Access Metadata
-4) Generate Global Variables
-5) Ingest Pipeline
-6) HPDS Pipeline</description>
+3) Sequence Patients
+4) Generate Access Metadata
+5) Generate Global Variables
+6) Ingest Pipeline
+7) HPDS Pipeline</description>
       <filterExecutors>false</filterExecutors>
       <filterQueue>false</filterQueue>
       <properties class="hudson.model.View$PropertyList"/>
@@ -314,6 +308,56 @@
       <jobNames>
         <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
         <string>ETL - Update Stigmatizing Variables in Existing Dataset</string>
+      </jobNames>
+      <jobFilters/>
+      <columns>
+        <hudson.views.StatusColumn/>
+        <hudson.views.WeatherColumn/>
+        <hudson.views.JobColumn/>
+        <hudson.views.LastSuccessColumn/>
+        <hudson.views.LastFailureColumn/>
+        <hudson.views.LastDurationColumn/>
+        <hudson.views.BuildButtonColumn/>
+      </columns>
+      <recurse>false</recurse>
+    </listView>
+    <listView>
+      <owner class="hudson" reference="../../.."/>
+      <name>Server Utils</name>
+      <filterExecutors>false</filterExecutors>
+      <filterQueue>false</filterQueue>
+      <properties class="hudson.model.View$PropertyList"/>
+      <jobNames>
+        <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
+        <string>Create new Jenkins Server</string>
+        <string>New Server Setup</string>
+        <string>PIC-SURE-API Build</string>
+        <string>Update Git With Latest Jobs and Config</string>
+      </jobNames>
+      <jobFilters/>
+      <columns>
+        <hudson.views.StatusColumn/>
+        <hudson.views.WeatherColumn/>
+        <hudson.views.JobColumn/>
+        <hudson.views.LastSuccessColumn/>
+        <hudson.views.LastFailureColumn/>
+        <hudson.views.LastDurationColumn/>
+        <hudson.views.BuildButtonColumn/>
+      </columns>
+      <recurse>false</recurse>
+    </listView>
+    <listView>
+      <owner class="hudson" reference="../../.."/>
+      <name>BioLINCC</name>
+      <filterExecutors>false</filterExecutors>
+      <filterQueue>false</filterQueue>
+      <properties class="hudson.model.View$PropertyList"/>
+      <jobNames>
+        <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
+        <string>BioLINCC - Download and Upload Telemetry Reports to S3</string>
+        <string>BioLINCC - Pull data from NHLBI S3</string>
+        <string>BioLINCC - Push Studies to Metadata Curation Repo</string>
+        <string>BioLINCC - Upload Telemetry Reports</string>
       </jobNames>
       <jobFilters/>
       <columns>

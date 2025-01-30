@@ -35,6 +35,11 @@
           <description>Select false if working with a study where the phs num is not in the file name</description>
           <defaultValue>true</defaultValue>
         </hudson.model.BooleanParameterDefinition>
+        <hudson.model.BooleanParameterDefinition>
+          <name>delete_prev_subject_mappings</name>
+          <description>Only for when subject mappings/consent codes have changed (makes subject mapping job longer)</description>
+          <defaultValue>false</defaultValue>
+        </hudson.model.BooleanParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
@@ -64,10 +69,12 @@ aws s3 mv s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/rawData/  s3://avi
 aws s3 mv s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/decoded_data/  s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/oldData/${study_accession,,}/${version}.${participant_set}/decoded_data/ --recursive
 fi
 
-
+if (${delete_prev_subject_mappings}) then
+aws s3 mv s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/data/${study_abv_name^^}_PatientMapping.v2.csv  s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/oldData/${study_accession,,}/${version}.${participant_set}/data/
+else
 # don&apos;t archive this as a move as we want to keep current mappings.  Only remove if dbgap subject ids have changed in newer version
 aws s3 cp s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/data/${study_abv_name^^}_PatientMapping.v2.csv  s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/oldData/${study_accession,,}/${version}.${participant_set}/data/
-#aws s3 mv s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/data/${study_abv_name^^}_PatientMapping.v2.csv  s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/oldData/${study_accession,,}/${version}.${participant_set}/data/
+fi
 
 aws s3 mv s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/completed/${study_accession,,}/  s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/oldData/${study_accession,,}/${version}.${participant_set}/completed/ --recursive
 
