@@ -1,23 +1,27 @@
+version: "3.8"
+
 services:
   jenkins-init:
-    image: alpine
+    image: amazon/aws-cli
     container_name: jenkins-init
     profiles: ["init"]
+    networks:
+      - jenkins_network
     volumes:
       - jenkins_data:/var/jenkins_home
-      - ./jenkins-docker/jobs/:/tmp/jobs:ro
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        apk add --no-cache rsync
-        mkdir -p /var/jenkins_home/jobs
-        rsync -av --progress /tmp/jobs/ /var/jenkins_home/jobs/        
-        chown -R 1000:1000 /var/jenkins_home
+    command: >
+      sh -c "
+      aws s3 sync s3://my-jenkins-jobs/jobs/ /var/jenkins_home/jobs/ --delete &&
+      echo 'Sync complete. Fixing permissions...' &&
+      chown -R 1000:1000 /var/jenkins_home/jobs
+      "
     restart: "no"
 
   jenkins:
     image: jenkins/jenkins:latest-jdk17
-    container_name: jenkins-etl
+    container_name: jenkins
+    depends_on:
+      - jenkins-init
     networks:
       - jenkins_network
     volumes:
@@ -26,11 +30,13 @@ services:
     ports:
       - "80:8080"
     restart: unless-stopped
-    user: '1000:1000'
+    user: "1000:1000"
 
 volumes:
   jenkins_data:
 
+# isolate on a private network
 networks:
   jenkins_network:
     driver: bridge
+    internal: true
