@@ -1,0 +1,126 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description>Performs one of the following actions:&#xd;
+&#xd;
+- LIST: Lists all S3 object versions (including delete markers) in a clean table format.&#xd;
+- FETCH: Promotes a specific version of an object to the latest by copying it back to the same key.&#xd;
+</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.ChoiceParameterDefinition>
+          <name>ACTION</name>
+          <description>- LIST: View all available versions of an S3 object.
+- Fetch: Download a specific version of an object to a local path.
+</description>
+          <choices class="java.util.Arrays$ArrayList">
+            <a class="string-array">
+              <string>LIST</string>
+              <string>FETCH</string>
+            </a>
+          </choices>
+        </hudson.model.ChoiceParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>BUCKET</name>
+          <defaultValue>avillach-73-bdcatalyst-etl</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>KEY</name>
+          <description>full object key path in bucket</description>
+          <defaultValue>general/hpds/javabin/file.tar.gz</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>VERSION_ID</name>
+          <description>VERSION_ID to rollback.  
+Hint: Use LIST to find what you are looking for.</description>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+set -euo pipefail
+
+# Assume role
+aws sts assume-role \
+  --duration-seconds 1800 \
+  --role-arn arn:aws:iam::736265540791:role/dbgap-etl \
+  --role-session-name &quot;s3-fetch-restore&quot; &gt; assume-role-output.txt
+
+export AWS_ACCESS_KEY_ID=$(grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &apos;s/[ ,&quot;]//g&apos;)
+export AWS_SECRET_ACCESS_KEY=$(grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &apos;s/[ ,&quot;]//g&apos;)
+export AWS_SESSION_TOKEN=$(grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &apos;s/[ ,&quot;]//g&apos;)
+
+if [[ &quot;$ACTION&quot; == &quot;LIST&quot; ]]; then
+  echo -e &quot;\nListing versions for s3://$BUCKET/$KEY...\n&quot;
+  aws s3api list-object-versions \
+    --bucket &quot;$BUCKET&quot; \
+    --prefix &quot;$KEY&quot; \
+    --query &quot;Versions[?Key==&apos;$KEY&apos;]&quot; \
+    --output table
+
+elif [[ &quot;$ACTION&quot; == &quot;FETCH&quot; ]]; then
+  if [[ -z &quot;$VERSION_ID&quot; ]]; then
+    echo &quot;VERSION_ID required for FETCH&quot;
+    exit 1
+  fi
+
+  echo -e &quot;\nAttempting server-side promotion via copy-object...\n&quot;
+
+  if aws s3api copy-object \
+    --bucket &quot;$BUCKET&quot; \
+    --key &quot;$KEY&quot; \
+    --copy-source &quot;${BUCKET}/${KEY}?versionId=${VERSION_ID}&quot;; then
+
+    echo &quot;Version $VERSION_ID promoted via server-side copy.&quot;
+  else
+    echo -e &quot;\nFalling back to download and re-upload due to size or limitation...\n&quot;
+
+    TMP_FILE=&quot;/tmp/$(basename &quot;$KEY&quot;)&quot;
+
+    aws s3api get-object \
+      --bucket &quot;$BUCKET&quot; \
+      --key &quot;$KEY&quot; \
+      --version-id &quot;$VERSION_ID&quot; \
+      &quot;$TMP_FILE&quot;
+
+    aws s3 cp &quot;$TMP_FILE&quot; &quot;s3://$BUCKET/$KEY&quot;
+    rm -f &quot;$TMP_FILE&quot;
+
+    echo &quot;Version $VERSION_ID promoted via re-upload.&quot;
+  fi
+
+else
+  echo &quot;ERROR: Invalid ACTION: $ACTION&quot;
+  exit 1
+fi
+
+# Cleanup
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+rm -f assume-role-output.txt</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers/>
+</project>

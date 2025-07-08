@@ -25,12 +25,13 @@ docker network connect etlnetwork jenkins</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
     <hudson.tasks.Shell>
-      <command>#setup postgres
+      <command>#setup libraries/commands
+apt-get update -y
 apt-get install -y postgresql-common
 /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
-apt-get update -y
 apt-get install -y postgresql-client-16
 psql --version
+apt-get install file
 </command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>

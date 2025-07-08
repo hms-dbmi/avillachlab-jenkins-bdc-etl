@@ -50,80 +50,65 @@
     <hudson.tasks.Shell>
       <command>#!/bin/bash
 
-# Managed Inputs
+mkdir beforeRemoval || find beforeRemoval -type f -exec rm -rf {} \;
+mkdir data || find data/ -type f -exec rm -rf {} \;
+mkdir completed || find processing/ -type f -exec rm -rf {} \;
+mkdir processing || find completed -type f -exec rm -rf {} \;
 
-aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
-export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
-mkdir data
-mkdir completed
-mkdir hierarchies
-mkdir processing
-
-find data/ -type f -exec rm -rf {} \;
-find processing/ -type f -exec rm -rf {} \;
-find completed -type f -exec rm -rf {} \;
-aws s3 cp ${managed_inputs} data/
-
-aws s3 cp --quiet s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json data/
-
-csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Study Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot; data/Managed_Inputs.csv &gt; inputs.csv
-
-rm -rf uniq_ids.txt
-
-echo &quot;testing&quot;
-unset AWS_ACCESS_KEY_ID
-unset AWS_SECRET_ACCESS_KEY
-unset AWS_SESSION_TOKEN
-# Generate mappings
-cat	inputs.csv
 aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
         
         export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
         export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
         export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+
+aws s3 cp ${managed_inputs} .
+
+aws s3 cp --quiet s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json .
+
+csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Study Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot; Managed_Inputs.csv &gt; inputs.csv
+
+
 IFS=&apos;,&apos;
 [ ! -f inputs.csv ]
 while read abv_name stdy_id stdy_type data_ready data_processed
 do
   if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]]; then
-	
-	  #if [[ ${stdy_type,,} == &quot;topmed&quot; ]] || [[ ${stdy_type,,} == &quot;parent&quot; ]]; then
-   	
-		
-   		aws s3 cp --quiet s3://avillach-73-bdcatalyst-etl/${abv_name,,}/completed/${stdy_id}/${stdy_id,,}_allConcepts_new_search_with_data_analyzer.csv data/${stdy_id}_allConcepts_new_search_with_data_analyzer.csv --quiet
-   
-       
-   
+   aws s3 cp --quiet s3://avillach-73-bdcatalyst-etl/${abv_name,,}/completed/${stdy_id}/${stdy_id,,}_allConcepts_new_search_with_data_analyzer.csv beforeRemoval/${stdy_id,,}_allConcepts_new_search_with_data_analyzer.csv --quiet 
+        if [[ -z beforeRemoval/${stdy_id,,}_allConcepts_new_search_with_data_analyzer.csv ]]; then
+        	echo &quot;No data found for &apos;ready&apos; study ${abv_name} ${stdy_id}&quot;
+            exit 255
+        fi
+   		split -d --line-bytes=250MB beforeRemoval/${stdy_id,,}_allConcepts_new_search_with_data_analyzer.csv beforeRemoval/${stdy_id,,}_allConcepts_new_search_with_data_analyzer.csv &amp;&amp; \
+        rm -f beforeRemoval/${stdy_id,,}_allConcepts_new_search_with_data_analyzer.csv &amp;&amp; \
+   		echo &quot;Downloaded and split ${stdy_id}&quot; &amp;       
+
    else 
-      echo &quot;$abv_name not ready for processing&quot;
+      echo &quot;$abv_name marked not ready for processing in managed inputs&quot;
    fi
 done &lt; inputs.csv
 
-aws s3 cp --quiet s3://avillach-73-bdcatalyst-etl/hrmn/completed/HRMN_allConcepts_new_search_with_data_analyzer.csv data/HRMN_allConcepts.csv --quiet
+aws s3 cp --quiet s3://avillach-73-bdcatalyst-etl/hrmn/completed/HRMN_allConcepts.csv beforeRemoval/HRMN_allConcepts.csv --quiet &amp;
 
-aws s3 cp --quiet s3://avillach-73-bdcatalyst-etl/general/completed/GLOBAL_allConcepts_merged.csv data/GLOBAL_allConcepts.csv --quiet
+aws s3 cp --quiet s3://avillach-73-bdcatalyst-etl/general/completed/GLOBAL_allConcepts_merged.csv beforeRemoval/GLOBAL_allConcepts.csv --quiet &amp;
+
+wait
+
+java -Xmx64g -DmaximumPoolSize=16 -Djava.util.concurrent.ForkJoinPool.common.parallelism=16 -jar jars/RemoveConsentZeroPatients.jar || exit 255
+java -Xmx64g -jar jars/DbGapDataMerge.jar || exit 255
+
 
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
 unset AWS_SESSION_TOKEN
-
-java -jar jars/DbGapDataMerge.jar
-
-java -jar jars/RemoveConsentZeroPatients.jar
-
-java -jar jars/BDCValidations.jar
 
 aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
 
 export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-aws s3 cp --quiet completed/Patient_Count_Per_Consents.csv s3://avillach-73-bdcatalyst-etl/general/completed/
-
-aws s3 cp --quiet processing/allConcepts.csv s3://avillach-73-bdcatalyst-etl/general/completed/allConcepts_data_analyzer.csv
+echo &quot;copying to s3&quot;
+aws s3 cp --no-progress completed/allConcepts.csv s3://avillach-73-bdcatalyst-etl/general/completed/allConcepts_data_analyzer.csv
 
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY

@@ -139,19 +139,15 @@ while read abv_name stdy_id stdy_type data_ready data_processed
 do
   if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]]; then
 
-	  #if [[ ${stdy_type,,} == &quot;topmed&quot; ]] || [[ ${stdy_type,,} == &quot;parent&quot; ]]; then
+	 if [[ ${stdy_type,,} == &quot;topmed&quot; ]] || [[ ${stdy_type,,} == &quot;parent&quot; ]] || [[ ${stdy_type,,} == &quot;substudy&quot; ]] ; then
         echo &quot;downloading metadata for $stdy_id&quot;
-        aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${stdy_id}/metadata/ ./local/source/${stdy_id}/rawData/ --recursive --exclude &quot;*&quot; --include &quot;${stdy_id}*.xml&quot; --quiet
-        aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${stdy_id}/metadata/ ./local/source/${stdy_id}/rawData/ --recursive --exclude &quot;*&quot; --include &quot;*.json&quot; 
-
-      #fi
+        aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${stdy_id}/metadata/ ./local/source/${stdy_id}/rawData/ --recursive --exclude &quot;*&quot; --include &quot;${stdy_id}*.xml&quot; --include &quot;*.json&quot; --quiet
+	fi
+      
    else 
       echo &quot;$abv_name $stdy_id not ready for processing&quot;
    fi
 done &lt; inputs.csv
-
-# This is not managed by the study loop. 
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/hrmn/metadata/dcc_harmonized.json  ./local/source/hrmn/rawData/
 
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
@@ -199,12 +195,5 @@ unset AWS_SESSION_TOKEN</command>
     </hudson.tasks.Shell>
   </builders>
   <publishers/>
-  <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
-      <deleteDirs>false</deleteDirs>
-      <cleanupParameter></cleanupParameter>
-      <externalDelete></externalDelete>
-      <disableDeferredWipeout>false</disableDeferredWipeout>
-    </hudson.plugins.ws__cleanup.PreBuildCleanup>
-  </buildWrappers>
+  <buildWrappers/>
 </project>

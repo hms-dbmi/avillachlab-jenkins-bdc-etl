@@ -65,6 +65,7 @@ mkdir mappings
 mkdir resources
 mkdir reports
 mkdir beforeConversion
+mkdir logs
 
 find data/ -type f -exec rm -rf {} \;
 find data/ -type d -exec rm -rf {} \;
@@ -129,25 +130,36 @@ do
         echo &quot;mappingfile=data/mapping2.csv&quot; &gt;&gt; resources/job.config
   		echo &quot;patientmappingfile=data/${abv_name^^}_PatientMapping.v2.csv&quot; &gt;&gt; resources/job.config
         echo &quot;usepatientmapping=Y&quot; &gt;&gt; resources/job.config
+        echo &quot;skipdataheaders=Y&quot; &gt;&gt; resources/job.config
   
         echo &quot;Numeric mappings before Analyzer $(grep &quot;NUMERIC&quot; data/mapping2.csv | wc -l)&quot;
         echo &quot;Text mappings before Analyzer $(grep &quot;TEXT&quot; data/mapping2.csv | wc -l)&quot;
-        java -jar jars/DataAnalyzer.jar -propertiesfile resources/job.config -mappingskipheaders N -trialid ${abv_name^^}
+        java -jar jars/DataAnalyzer.jar -propertiesfile resources/job.config -mappingskipheaders N -trialid ${abv_name^^} 2&gt;logs/${stdy_id}_analyzer_logs.txt
         
         cp completed/mapping.csv data/mapping2.csv
 
         echo &quot;Numeric mappings after Analyzer $(grep &quot;NUMERIC&quot; data/mapping2.csv | wc -l)&quot;
         echo &quot;Text mappings after Analyzer $(grep &quot;TEXT&quot; data/mapping2.csv | wc -l)&quot;
         
-        java -jar jars/Partitioner.jar -propertiesfile resources/job.config -mappingskipheaders N -trialid ${abv_name^^}
+        java -jar jars/Partitioner.jar -partitiononsize 50 -propertiesfile resources/job.config -mappingskipheaders N -trialid ${abv_name^^} 2&gt;logs/${stdy_id}_partition_logs.txt
+        if [ -s logs/${stdy_id}_partition_logs.txt ];
+        then
+            cat logs/${stdy_id}_partition_logs.txt
+            echo &quot;Errors in ${stdy_id} partitioner&quot;
+            exit 255
+        fi
+        bash runpartition.sh -j 15 -c &apos;config.part*.config&apos; -r resources/
         
-        bash runpartition.sh -j 31 -m 7g -c &apos;config.part*.config&apos; -r resources/
-        
-        java -jar jars/MergePartitions.jar -propertiesfile resources/job.config
-           
+        java -jar jars/MergePartitions.jar -propertiesfile resources/job.config 2&gt;logs/${stdy_id}_merge_logs.txt
+           if [ -s logs/${stdy_id}_merge_logs.txt ];
+        	then
+              cat logs/${stdy_id}_merge_logs.txt
+              echo &quot;Errors in ${stdy_id} merge&quot;
+              exit 255
+        	fi
         if ! [ -s completed/${abv_name^^}_allConcepts.csv ]; then
-        	echo &quot;ALLCONCEPTS for ${abv_name} is empty!&quot;
-        	exit 255
+        	echo &quot;ALLCONCEPTS for ${abv_name} is empty!&quot; &gt;&gt; review_log.txt
+        	# exit 255
         fi
         # assume role to handle larger data sets 
         unset AWS_ACCESS_KEY_ID

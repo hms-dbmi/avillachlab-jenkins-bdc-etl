@@ -1,0 +1,174 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>abv_name</name>
+          <defaultValue>recover_adult</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>stdy_id</name>
+          <defaultValue>phs003463</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.FileParameterDefinition>
+          <name>managed_inputs.csv</name>
+        </hudson.model.FileParameterDefinition>
+        <hudson.model.FileParameterDefinition>
+          <name>recover_adult_metadata.json</name>
+        </hudson.model.FileParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.5.2">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>https://github.com/hms-dbmi/ETL-MissionControl-dbgap-submodule</url>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>*/master</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="empty-list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+
+### assume etl role
+aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+
+mkdir data
+mkdir completed
+mkdir hierarchies
+mkdir processing
+mkdir logs
+mkdir mappings
+mkdir resources
+mkdir reports
+mkdir beforeConversionSeq
+mkdir data/decoded
+
+
+mv managed_inputs.csv data/Managed_Inputs.csv
+head -n 1 data/Managed_Inputs.csv &gt;&gt; data/Managed_Inputs.csv2
+grep -i ${abv_name^^}, data/Managed_Inputs.csv &gt;&gt; data/Managed_Inputs.csv2
+
+mv data/Managed_Inputs.csv2 data/Managed_Inputs.csv
+
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/PatientPool.txt data/
+
+aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/data/${abv_name^^}_PatientMapping.v2.csv data/  --quiet
+aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ beforeConversionSeq/ --recursive --exclude &quot;*&quot; --include &quot;*data_dict.xml*&quot; --include &quot;${stdy_id}*subject.multi*&quot; --include &quot;${stdy_id}*Subject.Multi*&quot; \
+        --include &quot;${stdy_id}*Subject.MULTI*&quot; --include &quot;${stdy_id}*sample.multi*&quot; --include &quot;${stdy_id}*Sample.Multi*&quot; \
+        --include &quot;${stdy_id}*Sample.MULTI*&quot;
+
+for  file  in  beforeConversionSeq/*; do
+echo &quot;File: $file&quot;
+FILE_ENCODING=$(file -i $file)
+iconv -f 8859_1 -t UTF-8//TRANSLIT &quot;$file&quot; -o data/decoded/$(basename $file)
+done
+
+java -jar jars/HPDSPatientNumTracker.jar 2&gt; logs/patient_seq_logs.txt 
+if [ -s logs/patient_seq_logs.txt ];
+then
+	echo &quot;Errors in patient sequencing&quot;
+	cat logs/patient_seq_logs.txt
+	exit 255
+fi
+
+aws s3 cp data/${abv_name^^}_PatientMapping.v2.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/data/${abv_name^^}_PatientMapping.v2.csv
+aws s3 cp data/PatientPool.txt s3://avillach-73-bdcatalyst-etl/general/data/PatientPool.txt
+
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+### assume etl role
+aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+mkdir temp
+mv data/RECOVER_ADULT_PatientMapping.v2.csv temp/RECOVER_ADULT_PatientMapping.v2.csv
+rm -f data/Managed_Inputs.csv 
+#mapping
+ java -jar jars/GenericMappingGenerator.jar -trialid phs003463 -hasDataTables -metadataFile recover_adult_metadata.json 2&gt;logs/mapping_logs.txt
+
+#allconcepts
+		#aws s3 cp s3://avillach-73-bdcatalyst-etl/recover_adult/data/RECOVER_ADULT_PatientMapping.v2.csv data/ --quiet
+        mv temp/RECOVER_ADULT_PatientMapping.v2.csv data/RECOVER_ADULT_PatientMapping.v2.csv
+        
+		cp  ./completed/phs003463_mapping.csv data/mapping2.csv
+		echo &quot;trialid=${abv_name^^}&quot; &gt; resources/job.config
+        echo &quot;mappingfile=data/mapping2.csv&quot; &gt;&gt; resources/job.config
+  		echo &quot;patientmappingfile=data/${abv_name^^}_PatientMapping.v2.csv&quot; &gt;&gt; resources/job.config
+        echo &quot;usepatientmapping=Y&quot; &gt;&gt; resources/job.config
+  
+        echo &quot;Numeric mappings before Analyzer $(grep &quot;NUMERIC&quot; data/mapping2.csv | wc -l)&quot;
+        echo &quot;Text mappings before Analyzer $(grep &quot;TEXT&quot; data/mapping2.csv | wc -l)&quot;
+        java -jar jars/DataAnalyzer.jar -propertiesfile resources/job.config -mappingskipheaders N -trialid ${abv_name^^} 2&gt;logs/analyzer_logs.txt
+
+        cp completed/mapping.csv data/mapping2.csv
+
+        echo &quot;Numeric mappings after Analyzer $(grep &quot;NUMERIC&quot; data/mapping2.csv | wc -l)&quot;
+        echo &quot;Text mappings after Analyzer $(grep &quot;TEXT&quot; data/mapping2.csv | wc -l)&quot;
+        java -jar jars/Partitioner.jar -partitiononsize 100 -propertiesfile resources/job.config -mappingskipheaders N -trialid ${abv_name^^} 2&gt;logs/partition_logs.txt
+
+        
+        bash runpartition.sh -j 31 -m 7g -c &apos;config.part*.config&apos; -r resources/
+        
+        java -jar jars/MergePartitions.jar -propertiesfile resources/job.config 2&gt;logs/merge_logs.txt
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+if [ -s logs/mapping_logs.txt ];
+then
+	cat logs/mapping_logs.txt
+	echo &quot;Errors in mapping&quot;
+	exit 255
+fi
+        if [ -s logs/partition_logs.txt ];
+        then
+            cat logs/partition_logs.txt
+            echo &quot;Errors in partitioner&quot;
+            exit 255
+        fi
+        if [ -s logs/merge_logs.txt ];
+        then
+            cat logs/merge_logs.txt
+            echo &quot;Errors in merge&quot;
+            exit 255
+        fi</command>
+      <configuredLocalRules/>
+      <unstableReturn>255</unstableReturn>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers/>
+</project>

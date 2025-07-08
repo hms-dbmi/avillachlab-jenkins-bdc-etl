@@ -1,0 +1,166 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description>Job to adjust the variable/subject counts for each study to reflect what is available in pic-sure&#xd;
+Pre-reqs: ingestion pipeline should be run</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>s3_bucket</name>
+          <defaultValue>s3://avillach-73-bdcatalyst-etl</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>api</name>
+          <defaultValue>http://172.20.0.2:8086/api</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.5.2">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>https://github.com/hms-dbmi/ETL-MissionControl-dbgap-submodule</url>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>*/master</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="empty-list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>true</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+
+### assume etl role
+aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+aws s3 cp ${s3_bucket}/general/resources/Managed_Inputs.csv Managed_Inputs.csv
+aws s3 cp ${s3_bucket}/general/data/consents.csv consents.csv
+aws s3 cp ${s3_bucket}/general/hpds/javabin/columnMeta/columnMeta.csv columnMeta.csv
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+
+csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot;,&quot;Study Type&quot;,&quot;Has Multi&quot; Managed_Inputs.csv &gt; inputs.csv
+IFS=&apos;,&apos;
+[ ! -f inputs.csv ]
+while read abv id data_ready data_processed study_type has_multi
+do
+	if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]]; then
+		mkdir ${id}
+      	echo &quot;Processing ${id}&quot;
+		curl --retry 5 --max-time 10 --retry-connrefused  --retry-delay 0 --show-error --silent $api/consent?datasetRef=${id} &gt; $id/consent_list.json || exit 255
+		LENGTH=$((`jq &apos;. | length&apos; $id/consent_list.json`))
+		if [[ $? != 0 ]] || [[ $LENGTH == 0 ]]
+		then
+            echo &quot;Missing expected consent information for ${id} in db&quot;
+        	exit 255;
+        
+		else
+			export LENGTH
+            echo &quot;Found ${LENGTH} consents for ${id} in database&quot;
+            export ITER=$(($LENGTH-1))
+		fi
+ 
+        for ((i = 0 ; i &lt; $LENGTH ; i++ )); 
+        do
+
+              consent=`jq -r &quot;.[&quot;${i}&quot;].consentCode&quot; $id/consent_list.json`
+              if [[ $? != 0 ]] || [[ -z $consent ]]
+              then
+              	   if [[ &quot;${study_type,,}&quot; == &quot;public&quot; ]]; then
+                   		echo &quot;Processing ${id} as a public study&quot;
+                        export consent=&quot;&quot;
+                   else
+                  	 echo &quot;Unable to get consent code from consent list- failing&quot;
+                  	 exit 255
+                   fi
+              else
+                  export consent
+                  echo &quot;Processing counts for: id: $id  consent: $consent&quot;
+              fi
+              
+              grep -i $id.$consent consents.csv | sort -u &gt; $id/consents_$i.csv
+              participantcount=`wc -l &lt; $id/consents_$i.csv`
+              if [[ $? != 0 ]] || [[ $participantcount == 0 ]] || [[ -z $participantcount ]]
+              then
+                  #handling for noncompliant studies without subject multis which do not get added to general consents.csv 
+              	  #(these consents are added to allConcepts separately during global var merge and will only ever have one consent)
+                  echo &quot;No participants found in standard consents.csv. Processing counts for id: $id  as public/noncompliant study&quot;
+                  aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+                  export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+                  export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+                  export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+                      aws s3 cp ${s3_bucket}/${abv,,}/data/${abv^^}_PatientMapping.v2.csv ./${id}/${abv^^}_PatientMapping.v2.csv || exit 255
+                  unset AWS_ACCESS_KEY_ID
+                  unset AWS_SECRET_ACCESS_KEY
+                  unset AWS_SESSION_TOKEN
+                  participantcount=`wc -l &lt; ${id}/${abv^^}_PatientMapping.v2.csv`
+                  if [[ $? != 0 ]] || [[ $participantcount == 0 ]] || [[ -z $participantcount ]]
+                  then
+                      echo &quot;Unable to get participant count- failing&quot;
+                      exit 255
+                  else
+                      export participantcount
+                  fi
+              else
+                  export participantcount
+                  echo &quot;Participant count &quot; $participantcount
+              fi
+
+          grep &quot;^\&quot;*\\\\${id}\\\\&quot; columnMeta.csv &gt; ${id}/vars.csv
+          varcount=`wc -l &lt; ${id}/vars.csv`
+          echo varcount $varcount 
+          if [[ $? != 0 ]] || [[ $varcount == 0 ]] || [[ -z $varcount ]]; then
+              echo &quot;No variables found for ${id} which was marked as ready for ingestion&quot;
+              exit 255
+          else
+          export varcount
+          echo &quot;Variable count &quot; $varcount
+          fi
+          
+          curl --retry 5 --max-time 10 --retry-connrefused  --retry-delay 0 --show-error --silent --request PUT --data-urlencode &quot;datasetRef=${id}&quot; --data-urlencode &quot;consentCode=${consent}&quot; \
+              --data-urlencode &quot;participantCount=${participantcount}&quot; --data-urlencode &quot;variableCount=${varcount}&quot; ${api}/consent/counts || exit 255
+     
+          unset participantcount
+          unset varcount
+          
+        done
+    fi
+done &lt; inputs.csv</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>

@@ -20,64 +20,54 @@
   <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@4000.v5198556e9cea_">
     <script>import groovy.json.JsonSlurper;
 pipeline {
-    agent any 
+    agent any
     stages {
-        
-        stage(&apos;merge global concepts&apos;) { 
+
+        stage(&apos;merge global concepts&apos;) {
             steps {
                 script {
                     build job: &apos;ETL - Merge Global Concepts&apos;
                 }
             }
         }
-        
-        stage(&apos;Pull latest stigvars from git&apos;) { 
+
+        stage(&apos;Pull latest stigvars from git&apos;) {
             steps {
                 script {
                     build job: &apos;ETL - Upload stigmatizing variable files from git to s3&apos;
                 }
             }
         }
-        stage(&apos;merge and generate javabin&apos;) { 
+        stage(&apos;merge and generate javabin&apos;) {
             steps {
                 script {
+                    //echo &quot;Merge Job&quot;
                     build job: &apos;ETL - All Concept Data Merge with Data Analyzer&apos;
-                    
+
                 }
                 script {
+                    //echo &quot;Javabins build&quot;
                     build job: &apos;ETL - Generate Phenotype Javabins Data Analyzer&apos;
                 }
             }
         }
-        stage(&apos;Create dictionary javabin&apos;) { 
+        stage(&apos;Create dictionary javabin&apos;) {
             steps {
                 script {
+                    //echo &quot;Dictionary build&quot;
                     build job: &apos;ETL - Generate HPDS Data Dictionary Javabin&apos;
                 }
             }
         }
-        stage(&apos;Get updated study counts from hpds&apos;) { 
-            steps {
-                script {
-                    build job: &apos;ETL - Update Meta Counts For All Consents&apos;
-                }
-            }
-        }
-        stage(&apos;Convert from dictionary json to new dictionary input&apos;){
-            steps {
-                script {
-                    build job: &apos;Old JSON Dictionary to New Dictionary Input Files&apos;
-                }
-            }
-        }
+
         stage(&apos;Dictionary DB Ingest&apos;){
             steps {
                 script {
                     build job: &apos;Dictionary ETL - BDC Ingest Pipeline&apos;
                 }
             }
-        } 
-        
+        }
+
     }
     post{
         success {

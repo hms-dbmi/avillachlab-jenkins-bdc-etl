@@ -1,0 +1,141 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>api</name>
+          <description>the url for the api calls</description>
+          <defaultValue>http://172.20.0.2:8086/api</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>datasetId</name>
+          <defaultValue>phs002694</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.BooleanParameterDefinition>
+          <name>removeObsoleteConcepts</name>
+          <description>checks concepts from ingest csv against existing dictionary entries for dataset. If a concept exists in dictionary but not in the dataset, removes that concept (primarily to guard against changing phv values in compliant studies)</description>
+          <defaultValue>true</defaultValue>
+        </hudson.model.BooleanParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>true</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+
+aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt;assume-role-output.txt
+
+export AWS_ACCESS_KEY_ID=$(grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;)
+export AWS_SECRET_ACCESS_KEY=$(grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;)
+export AWS_SESSION_TOKEN=$(grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;)
+mkdir ${datasetId}
+aws s3 cp s3://avillach-73-bdcatalyst-etl/newDictionary/${datasetId}/ ./${datasetId}/ --recursive
+
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+
+#dataset insert
+csvcut -z 10000000 -d &apos;φ&apos; -c 1,2,3,4 ${datasetId}/datasets.csv | csvformat -z 10000000 -D &apos;φ&apos; -U3 -Q🐍 &gt;${datasetId}/dataset_table.csv
+IFS=&apos;φ&apos;
+#core dataset entry
+while read datasetRef fullName abv desc; do
+    if [[ ${datasetRef} != &apos;ref&apos; ]]; then
+    	echo &quot;Creating Dataset&quot;
+        #create dataset entry
+        curl --retry 5 --max-time 10 --retry-connrefused  --retry-delay 0 --show-error --silent --request PUT \
+        	--data-urlencode &quot;datasetRef=${datasetRef}&quot; --data-urlencode &quot;abv=${abv}&quot; \
+            --data-urlencode &quot;fullName=${fullName}&quot; --data-urlencode &quot;desc=${desc}&quot; ${api}/dataset \
+            	|| { echo &apos;dataset curl failed&apos; ; exit 255;}
+    fi
+done &lt;${datasetId}/dataset_table.csv
+
+#dataset meta entry
+echo &quot;Creating Dataset Meta&quot;
+csvcut -z 10000000 -d &apos;φ&apos; -c 1,5- ${datasetId}/datasets.csv | csvformat -z 10000000 -D &apos;φ&apos; -U3 -Q🐍 &gt;${datasetId}/dataset_meta_table.csv
+export columncount=$(csvcut -d &apos;φ&apos; -z 10000000 -n ${datasetId}/dataset_meta_table.csv | wc -l)
+for ((i = 2; i &lt; ${columncount} + 1; i++)); do
+    keyname=$(csvcut -d &apos;φ&apos; -z 10000000 -c ${i} ${datasetId}/dataset_meta_table.csv | csvcut -d &apos;φ&apos; -z 10000000 -n | cut -c6-)
+    echo $keyname
+    csvcut -z 10000000 -d &apos;φ&apos; -c 1,${i} ${datasetId}/dataset_meta_table.csv | csvformat -z 10000000 -D &apos;φ&apos; &gt;${datasetId}/dataset_meta_column.csv
+    while read datasetRef values; do
+        if [[ ${datasetRef} != &apos;ref&apos; ]] &amp;&amp; [[ ! -z ${values} ]]; then
+            	curl --retry 5 --max-time 10 --retry-connrefused  --retry-delay 0 --show-error --silent --request PUT \
+                	--data-urlencode &quot;datasetRef=${datasetRef}&quot; --data-urlencode &quot;key=${keyname}&quot; \
+                	--data-urlencode &quot;values=${values}&quot; ${api}/dataset/metadata || { echo &apos;dataset meta curl failed&apos; ; exit 255; }
+        fi
+    done &lt;${datasetId}/dataset_meta_column.csv
+done
+
+#consents insert
+echo &quot;Creating Consents&quot;
+while read datasetRef consentCode description participantCount variableCount sampleCount authz; do
+    echo datasetRef $datasetRef
+    echo description $description
+    echo participantCount $participantCount
+    if [[ ${datasetRef} != &apos;datasetRef&apos; ]]; then
+        curl --retry 5 --max-time 10 --retry-connrefused  --retry-delay 0 --show-error --silent --request PUT \
+        	--data-urlencode &quot;datasetRef=${datasetRef}&quot; --data-urlencode &quot;consentCode=${consentCode}&quot; \
+            --data-urlencode &quot;description=${description}&quot; --data-urlencode &quot;authz=${authz}&quot; \
+            --data-urlencode &quot;participantCount=${participantCount}&quot; --data-urlencode &quot;variableCount=${variableCount}&quot; \
+            --data-urlencode &quot;sampleCount=${sampleCount}&quot; \
+            ${api}/consent || { echo &apos;consent curl failed&apos; ; exit 255; }
+    fi
+done &lt;${datasetId}/consents.csv
+
+#concept insert
+echo &quot;Creating Concepts&quot;
+echo &quot;dataset_ref&quot;,&quot;name&quot;,&quot;display&quot;,&quot;concept_type&quot;,&quot;concept_path&quot;,&quot;parent_concept_path&quot;,&quot;values&quot;,&quot;description&quot;,&quot;stigmatized&quot; &gt; ${datasetId}/concept_table.csv
+csvformat -d &apos;φ&apos; -u3 -q🐍 -z 10000000 -E ${datasetId}/concepts.csv | grep -v &apos;global_variables&apos; &gt;&gt;${datasetId}/concept_table.csv
+echo &quot;Concept line count for ${datasetId} = &quot; $(wc -l &lt; ${datasetId}/concept_table.csv)
+if [[  $(wc -l &lt; ${datasetId}/concept_table.csv) -gt 50000 ]];
+    then
+    	echo &quot;breaking concept_table up into 50k increments&quot;
+    	i=1
+        line1=2
+    	while [[ $line1 -lt $(wc -l &lt; ${datasetId}/concept_table.csv) ]];
+        	do
+            	line2=$(($line1+50000))
+                 
+                if [[ $line2 -gt $(wc -l &lt; ${datasetId}/concept_table.csv) ]]; then
+                    line2=`wc -l &lt; ${datasetId}/concept_table.csv`
+                fi
+                  echo starting $dataset line1 $line1 through line2 $line2
+                  head -n 1 ${datasetId}/concept_table.csv &gt; ${datasetId}/concept_table_$i.csv
+                  sed -n &quot;${line1},${line2}p&quot; ${datasetId}/concept_table.csv &gt;&gt; ${datasetId}/concept_table_$i.csv
+                  curl  --no-progress-meter --request PUT --header &apos;Content-Type: text/plain&apos; \
+                      --data-binary @&quot;${datasetId}/concept_table_$i.csv&quot; &quot;${api}/concept/csv?datasetRef=${datasetId}&quot;
+				
+                i=$(($i+1))
+                line1=$line2
+            done
+    else
+
+	curl --fail --no-progress-meter --request PUT --header &apos;Content-Type: text/plain&apos; \
+      --data-binary @&quot;${datasetId}/concept_table.csv&quot; &quot;${api}/concept/csv?datasetRef=${datasetId}&quot; || exit 255
+    fi</command>
+      <configuredLocalRules/>
+      <unstableReturn>255</unstableReturn>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers/>
+</project>

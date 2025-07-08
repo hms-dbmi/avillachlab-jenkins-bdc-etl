@@ -1,0 +1,195 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>STUDY_ID</name>
+          <defaultValue>phs003461</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>VERSION</name>
+          <defaultValue>v2</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.ChoiceParameterDefinition>
+          <name>DATASET_NAME</name>
+          <description>should match the second level of concept paths provided by recover.</description>
+          <choices class="java.util.Arrays$ArrayList">
+            <a class="string-array">
+              <string>recover_pediatric</string>
+              <string>recover_caregiver</string>
+              <string>recover_congenital</string>
+              <string>recover_autopsy</string>
+              <string>recover_adult</string>
+            </a>
+          </choices>
+        </hudson.model.ChoiceParameterDefinition>
+        <hudson.model.BooleanParameterDefinition>
+          <name>answerdata</name>
+          <defaultValue>true</defaultValue>
+        </hudson.model.BooleanParameterDefinition>
+        <hudson.model.BooleanParameterDefinition>
+          <name>biospecimens</name>
+          <defaultValue>true</defaultValue>
+        </hudson.model.BooleanParameterDefinition>
+        <hudson.model.BooleanParameterDefinition>
+          <name>demographics</name>
+          <defaultValue>true</defaultValue>
+        </hudson.model.BooleanParameterDefinition>
+        <hudson.model.BooleanParameterDefinition>
+          <name>fitbit</name>
+          <defaultValue>true</defaultValue>
+        </hudson.model.BooleanParameterDefinition>
+        <hudson.model.BooleanParameterDefinition>
+          <name>visits</name>
+          <defaultValue>true</defaultValue>
+        </hudson.model.BooleanParameterDefinition>
+        <hudson.model.BooleanParameterDefinition>
+          <name>derived_core</name>
+          <defaultValue>true</defaultValue>
+        </hudson.model.BooleanParameterDefinition>
+        <hudson.model.BooleanParameterDefinition>
+          <name>derived_symptoms</name>
+          <defaultValue>false</defaultValue>
+        </hudson.model.BooleanParameterDefinition>
+        <hudson.model.BooleanParameterDefinition>
+          <name>derived_visits</name>
+          <defaultValue>false</defaultValue>
+        </hudson.model.BooleanParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.5.2">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>https://github.com/hms-dbmi/pic-sure-metadata-curation.git</url>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>*/main</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="empty-list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>true</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+set -o pipefail
+cd &quot;_scripts/recover/job_scripts&quot;
+
+conn_user=&apos;postgres&apos;
+conn_pass=`aws secretsmanager get-secret-value --secret-id &apos;rds!db-2b115560-c8c4-4cec-8418-537a35f9c192&apos; --region &apos;us-east-1&apos; --query SecretString --output text | jq -r .password`
+if [[ $? != 0 ]] || [[ -z $conn_pass ]]
+then
+	echo &quot;Secretsmanager call failed&quot;
+	exit 255
+else
+	echo &quot;Secretsmanager call succeeded&quot;
+fi
+database_psql_host_address=&apos;recoverdb.cljahwnkfisu.us-east-1.rds.amazonaws.com&apos;
+DB=&quot;${DATASET_NAME,,}_${VERSION,,}&quot;
+
+echo &quot;testing connection to db&quot;
+PGPASSWORD=&quot;$conn_pass&quot; psql --quiet \
+    --host=&quot;$database_psql_host_address&quot; \
+    --port=&quot;5432&quot; \
+    --username=&quot;$conn_user&quot; \
+    --dbname=&quot;$DB&quot; \
+    -c &quot;\q&quot;  # This command tests the connection and exits
+
+if [ $? -ne 0 ]; then
+    echo &quot;Connection test failed!&quot;
+    exit 255
+else
+	echo &quot;Connection test succeeded - conn_user=$conn_user database_psql_host_address=$database_psql_host_address DB=$DB&quot;
+fi
+
+if ${answerdata}; then
+  	PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+      -f answerdata/get_answerdata_crosstabs.sql &amp;&amp;  \
+      PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+      -f answerdata/answerdata_metadata_builder.sql &amp;
+fi
+
+if ${biospecimens}; then
+  PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+    -f biospecimens/get_biospecimens_subtables.sql &amp;&amp;  \
+    PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+    -f biospecimens/biospecimens_metadata_builder.sql &amp;
+fi
+
+if ${demographics}; then
+	PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+      -f demographics/copy_demographics_table.sql &amp;&amp;  \
+      PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+      -f demographics/demographics_metadata_builder.sql &amp;
+fi
+if ${fitbit}; then
+	PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+      -f fitbit/get_fitbit_crosstables.sql &amp;&amp;  \
+      PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+      -f fitbit/fitbit_metadata_builder.sql &amp;
+fi
+if ${visits}; then
+	PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+      -f visits/get_visits_subtables.sql &amp;&amp;  \
+      PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+      -f visits/visits_metadata_builder.sql &amp;
+fi
+if ${derived_core}; then
+	PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+      -f derived_core/copy_derived_core_table.sql &amp;&amp;  \
+      PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+      -f derived_core/derived_core_metadata_builder.sql &amp;
+fi
+if ${derived_visits}; then
+	PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+      -f derived_visits/get_derived_visits_subtables.sql &amp;&amp;  \
+      PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+      -f derived_visits/derived_visits_metadata_builder.sql &amp;
+fi
+if ${derived_symptoms}; then
+	PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+      -f derived_symptoms/get_derived_symptoms_subtables.sql &amp;&amp;  \
+      PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+      -f derived_symptoms/derived_symptoms_metadata_builder.sql &amp;
+fi
+wait;
+echo &quot;completed curation, moving to merge meta stage&quot;;
+PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+      -f metadata_curation/dataset_metadata_merge.sql
+</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+    <hudson.plugins.timestamper.TimestamperBuildWrapper plugin="timestamper@1.27"/>
+  </buildWrappers>
+</project>

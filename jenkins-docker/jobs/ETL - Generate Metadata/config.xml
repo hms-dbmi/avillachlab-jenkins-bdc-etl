@@ -49,6 +49,7 @@
   <builders>
     <hudson.tasks.Shell>
       <command>#!/bin/bash
+
 ### assume etl role
 aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
 
@@ -95,11 +96,13 @@ do
         export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
   
      	echo &quot;Getting raw dictionary files for ${stdy_id}&quot;
-        aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ data/raw/ --recursive --exclude &quot;*&quot; --include &quot;*data_dict.xml*&quot; --include &quot;${stdy_id}*subject.multi*&quot; --include &quot;${stdy_id}*Subject.Multi*&quot; \
+        aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ data/raw/ --no-progress --recursive --exclude &quot;*&quot; \
+        --include &quot;${stdy_id}*ubject*data_dict*.xml*&quot; --include &quot;${stdy_id}*ample*data_dict*.xml*&quot; \
+        --include &quot;${stdy_id}*subject.multi*&quot; --include &quot;${stdy_id}*Subject.Multi*&quot; \
         --include &quot;${stdy_id}*Subject.MULTI*&quot; --include &quot;${stdy_id}*sample.multi*&quot; --include &quot;${stdy_id}*Sample.Multi*&quot; \
         --include &quot;${stdy_id}*Sample.MULTI*&quot; 
 		echo &quot;Getting study/sample multi files for ${stdy_id}&quot;
-        aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/decoded_data/ data/decoded/ --recursive \
+        aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/decoded_data/ data/decoded/ --no-progress --recursive \
         --exclude &quot;*&quot; --include &quot;${stdy_id}*subject.multi*&quot; --include &quot;${stdy_id}*Subject.Multi*&quot; \
         --include &quot;${stdy_id}*Subject.MULTI*&quot; --include &quot;${stdy_id}*sample.multi*&quot; --include &quot;${stdy_id}*Sample.Multi*&quot; \
         --include &quot;${stdy_id}*Sample.MULTI*&quot; 

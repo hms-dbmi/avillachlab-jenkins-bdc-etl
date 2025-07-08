@@ -58,10 +58,11 @@ mkdir hierarchies
 mkdir processing
 
 aws s3 cp ${managed_inputs} data/
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/resources/Genomic_Managed_Inputs.csv data/
 
 aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/metadata.json data/
 
-csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Study Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot;,&quot;Has Multi&quot; data/Managed_Inputs.csv | csvformat -E &gt; inputs.csv
+csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Study Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot;,&quot;Has Multi&quot; data/Managed_Inputs.csv &gt; inputs.csv
 
 rm -rf uniq_ids.txt
 
@@ -94,23 +95,27 @@ done &lt; inputs.csv
 echo &quot;pulling harmonized data set&quot;
 aws s3 cp s3://avillach-73-bdcatalyst-etl/hrmn/completed/HRMN_allConcepts.csv data/ --quiet
 
-aws s3 cp s3://avillach-73-bdcatalyst-etl/hrmn/data/HRMN_PatientMapping.v2.csv data/ --quiet
 
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
 unset AWS_SESSION_TOKEN
-
+mkdir logs
 echo &quot;generating consent group data&quot;
-java -jar jars/ConsentGroupGenerator.jar
+java -jar jars/ConsentGroupGenerator.jar 2&gt;&gt; logs/error_logging.txt
 echo &quot;generating phs id data&quot;
-java -jar jars/PHSIdGenerator.jar
+java -jar jars/PHSIdGenerator.jar 2&gt;&gt; logs/error_logging.txt
 echo &quot;generating rootnode data&quot;
-java -jar jars/RootNodeGenerator.jar
+java -jar jars/RootNodeGenerator.jar 2&gt;&gt; logs/error_logging.txt
 echo &quot;generating genomic sample id global var data&quot;
-java -jar jars/GenomicSampIdGlobalVarGenerator.jar
+java -jar jars/GenomicSampIdGlobalVarGenerator.jar 2&gt;&gt; logs/error_logging.txt
 echo &quot;generating studies consents&quot;
-java -jar jars/StudiesConsentsGenerator.jar -writedir ./completed_study_consents/
-
+java -jar jars/StudiesConsentsGenerator.jar -writedir ./completed_study_consents/ 2&gt;&gt; logs/error_logging.txt
+if [ -s logs/error_logging.txt ];
+then
+ echo &quot;Errors in global var generation&quot;;
+ cat logs/error_logging.txt;
+ exit 255;
+fi
 
 aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
 
@@ -130,7 +135,6 @@ aws s3 cp mappings/mapping.csv s3://avillach-73-bdcatalyst-etl/general/mappings/
 aws s3 cp completed_study_consents/ s3://avillach-73-bdcatalyst-etl/general/globalvars/study_consents/ --recursive
 </command>
       <configuredLocalRules/>
-      <unstableReturn>255</unstableReturn>
     </hudson.tasks.Shell>
   </builders>
   <publishers/>

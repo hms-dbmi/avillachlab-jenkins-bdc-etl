@@ -27,12 +27,12 @@ Will delete all children of the dataset then itself</description>
   <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
   <jdk>(System)</jdk>
   <triggers/>
-  <concurrentBuild>true</concurrentBuild>
+  <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Shell>
       <command>#!/bin/bash
 api=&apos;http://172.20.0.2:8086/api&apos;
-curl --request DELETE --data-urlencode &quot;datasetRef=${dataset_ref}&quot; ${api}/dataset</command>
+curl --retry 5 --retry-connrefused  --retry-delay 0 --request DELETE --data-urlencode &quot;datasetRef=${dataset_ref}&quot; ${api}/dataset || exit 255</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>

@@ -27,7 +27,7 @@
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.3.0">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.5.2">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -72,8 +72,10 @@ find completed/ -type f -exec rm -rf {} \;
 rm -rf pic-sure-hpds/
 
 aws s3 cp ${managed_inputs} data/Managed_Inputs.csv
+aws s3 cp ${managed_inputs} data/Managed_Inputs_OG.csv
 
 grep -i ${abv_name^^}, data/Managed_Inputs.csv &gt; data/Managed_Inputs.csv2
+head -1 data/Managed_Inputs.csv &gt; ./data/Managed_Inputs_Headers.csv
 
 mv data/Managed_Inputs.csv2 data/Managed_Inputs.csv
 
@@ -115,7 +117,7 @@ aws s3 cp data/PatientPool.txt s3://avillach-73-bdcatalyst-etl/general/data/Pati
   </builders>
   <publishers/>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>
