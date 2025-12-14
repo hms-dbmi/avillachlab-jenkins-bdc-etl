@@ -16,6 +16,10 @@
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
+          <name>study_accession</name>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
           <name>version</name>
           <description>version number being archived</description>
           <defaultValue>oops</defaultValue>
@@ -24,10 +28,6 @@
         <hudson.model.StringParameterDefinition>
           <name>participant_set</name>
           <description>Participant set being archived.  If applicable.</description>
-          <trim>false</trim>
-        </hudson.model.StringParameterDefinition>
-        <hudson.model.StringParameterDefinition>
-          <name>study_accession</name>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.BooleanParameterDefinition>
@@ -43,6 +43,7 @@
   <disabled>false</disabled>
   <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
   <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
   <triggers/>
   <concurrentBuild>false</concurrentBuild>
   <builders>
@@ -54,20 +55,21 @@ export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 if (${phs_in_file_name}) then
-aws s3 mv s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/rawData/  s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/oldData/${study_accession,,}/${version}.${participant_set}/rawData/ --recursive --exclude &quot;*&quot; --include &quot;${study_accession,,}*&quot;
+aws s3 mv --no-progress s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/rawData/  s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/oldData/${study_accession,,}/${version}.${participant_set}/rawData/ --recursive --exclude &quot;*&quot; --include &quot;${study_accession,,}*&quot;
 
-aws s3 mv s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/decoded_data/  s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/oldData/${study_accession,,}/${version}.${participant_set}/decoded_data/ --recursive --exclude &quot;*&quot; --include &quot;${study_accession,,}*&quot;
+aws s3 mv --no-progress s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/decoded_data/  s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/oldData/${study_accession,,}/${version}.${participant_set}/decoded_data/ --recursive --exclude &quot;*&quot; --include &quot;${study_accession,,}*&quot;
 else
-aws s3 mv s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/rawData/  s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/oldData/${study_accession,,}/${version}.${participant_set}/rawData/ --recursive
+aws s3 mv --no-progress s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/rawData/  s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/oldData/${study_accession,,}/${version}.${participant_set}/rawData/ --recursive
 
-aws s3 mv s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/decoded_data/  s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/oldData/${study_accession,,}/${version}.${participant_set}/decoded_data/ --recursive
+aws s3 mv --no-progress s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/decoded_data/  s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/oldData/${study_accession,,}/${version}.${participant_set}/decoded_data/ --recursive
 fi
 
 
 # don&apos;t archive this as a move as we want to keep current mappings.  Only remove if dbgap subject ids have changed in newer version
-aws s3 cp s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/data/${study_abv_name^^}_PatientMapping.v2.csv  s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/oldData/${study_accession,,}/${version}.${participant_set}/data/
+aws s3 cp --no-progress s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/data/${study_abv_name^^}_PatientMapping.v2.csv  s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/oldData/${study_accession,,}/${version}.${participant_set}/data/
+#aws s3 mv s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/data/${study_abv_name^^}_PatientMapping.v2.csv  s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/oldData/${study_accession,,}/${version}.${participant_set}/data/
 
-aws s3 mv s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/completed/${study_accession,,}/  s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/oldData/${study_accession,,}/${version}.${participant_set}/completed/ --recursive
+aws s3 mv --no-progress s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/completed/${study_accession,,}/  s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/oldData/${study_accession,,}/${version}.${participant_set}/completed/ --recursive
 
 </command>
       <configuredLocalRules/>

@@ -1,0 +1,119 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>api</name>
+          <defaultValue>http://172.20.0.2:8086/api</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.5.2">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>https://github.com/hms-dbmi/ETL-MissionControl-dbgap-submodule.git</url>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>*/master</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="empty-list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>true</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+        
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+mkdir resources
+
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/columnMeta/columnMeta.csv data/columnMeta.csv
+aws s3 cp  s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.csv data/Managed_Inputs.csv
+aws s3 cp s3://avillach-73-bdcatalyst-etl/hrmn/decoded_data/hrmn_metadata.json data/hrmn_metadata.json
+
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+	mkdir DCC
+    mkdir DCC/output
+    grep &quot;^\&quot;*\\\\DCC Harmonized data set\\\\&quot; data/columnMeta.csv  &gt; DCC/subset_columnmeta.csv
+    
+    java -jar jars/ConceptInputFileGenerator.jar --subsetDir &quot;./DCC/&quot; --ref &quot;DCC Harmonized data set&quot;
+	export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+	export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+	export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+    	aws s3 rm s3://avillach-73-bdcatalyst-etl/newDictionary/DCC/ --recursive --exclude &apos;*&apos; --include &apos;*.csv&apos;
+		aws s3 cp ./DCC/output/ s3://avillach-73-bdcatalyst-etl/newDictionary/DCC/ --recursive --exclude &apos;*&apos; --include &apos;*.csv&apos;
+	unset AWS_ACCESS_KEY_ID
+	unset AWS_SECRET_ACCESS_KEY
+	unset AWS_SESSION_TOKEN
+			
+
+    datasetRef=&quot;DCC Harmonized data set&quot;
+    abv=&quot;TOPMed_Harmonized&quot;
+    fullName=&quot;Trans-Omics for Precision Medicine (TOPMed) Harmonized Phenotypes&quot;
+    desc=&quot;Phenotype harmonization was conducted to enable cross-study analyses. The main goals of this process are to provide harmonized phenotypes that are well-documented, reproducible, and as homogeneous across studies as possible.&quot;
+	curl --retry 5 --max-time 10 --retry-connrefused  --retry-delay 0 --show-error --silent --request PUT \
+        	--data-urlencode &quot;datasetRef=${datasetRef}&quot; --data-urlencode &quot;abv=${abv}&quot; \
+            --data-urlencode &quot;fullName=${fullName}&quot; --data-urlencode &quot;desc=${desc}&quot; ${api}/dataset \
+            	|| { echo &apos;dataset curl failed&apos; ; exit 255;}
+                
+	csvgrep -c &quot;DCC Harmonized&quot; -m &quot;Yes&quot; data/Managed_Inputs.csv | csvgrep -c &quot;Data is ready to process&quot; -m &quot;Yes&quot; | csvcut -c &quot;Study Identifier&quot; | csvformat -E &gt; hrmn_studies.csv
+    while read study_id 
+    do
+    	echo &quot;$study_id is harmonized, adding to harmonization table&quot;
+        curl --request PUT --data-urlencode &quot;sourceDatasetRef=${study_id}&quot; --data-urlencode &quot;harmonizedDatasetRef=${datasetRef}&quot; &quot;${api}/dataset/harmonization&quot;
+    done &lt; hrmn_studies.csv
+       
+    curl --request PUT --header &apos;Content-Type: text/plain&apos; \
+      --data-binary @&quot;DCC/output/concepts.csv&quot; &quot;${api}/concept/csv?datasetRef=DCC%20Harmonized%20data%20set&quot; || exit 255
+      
+    jq &apos;.&apos; data/hrmn_metadata.json | jq &apos;group_by(.concept_path) | map(.[0])&apos;  &gt; data/hrmn_output.json || exit 255
+    curl --request PUT --header &apos;Content-Type: text/json&apos; \
+      --data @data/hrmn_output.json &quot;${api}/concept/curated?datasetRef=DCC%20Harmonized%20data%20set&quot; || exit 255
+
+     
+
+
+  
+
+     
+
+</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>

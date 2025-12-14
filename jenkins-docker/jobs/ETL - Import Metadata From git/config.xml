@@ -23,7 +23,7 @@
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.2.1">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.5.2">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -43,12 +43,12 @@
   <disabled>false</disabled>
   <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
   <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
   <triggers/>
   <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Shell>
       <command>#!/bin/bash
-
 aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
 
 export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
@@ -57,40 +57,60 @@ export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apo
 
 aws s3 cp ${managed_inputs} .
 
-csvcut -c 1,2,3,8,9 Managed_Inputs.csv &gt; inputs.csv
+csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Study Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot; Managed_Inputs.csv &gt; inputs.csv
 
 cat	inputs.csv
-
 cd pic-sure-metadata-curation
-
 IFS=&apos;,&apos;
 [ ! -f inputs.csv ]
 while read abv_name stdy_id stdy_type data_ready data_processed
 do
-  if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]]; then
-	 if [ ${abv_name,,} == &quot;red_coral&quot; ]; then       
+  if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]] &amp;&amp; [[ &quot;${data_processed,,}&quot; == &quot;no&quot; ]] &amp;&amp; [[ &quot;${stdy_type,,}&quot; != &quot;compliant&quot; ]]; then
+	 if [ ${abv_name,,} == &quot;red_coral&quot; ]; then
         aws s3 cp redcoral/output/ s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${stdy_id}/metadata/ --recursive --exclude &quot;*&quot; --include &quot;*.json&quot;
-     elif [[ ${stdy_type,,} != &quot;parent&quot; ]] &amp;&amp; [[ ${stdy_type,,} != &quot;topmed&quot; ]] &amp;&amp; [[ ${stdy_type,,} != &quot;substudy&quot; ]]; then
-        aws s3 cp ${abv_name,,}/output/ s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${stdy_id}/metadata/ --recursive --exclude &quot;*&quot; --include &quot;*.json&quot;
-        aws s3 cp ${abv_name}/output/ s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${stdy_id}/metadata/ --recursive --exclude &quot;*&quot; --include &quot;*.json&quot;
-     fi
+     else
+     	# Try to get metadata from S3 first
+        mkdir -p ${abv_name,,}/output/
+        aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/decoded_data/${stdy_id,,}_${abv_name,,}_metadata.json ${abv_name,,}/output/
+        
+        if compgen -G &quot;${abv_name,,}/output/${stdy_id,,}_${abv_name,,}_metadata.json&quot; &gt; /dev/null; then
+            echo &quot;Metadata found on s3 for ${abv_name,,}&quot;
+            aws s3 rm s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${stdy_id}/metadata/ --recursive --exclude &quot;*&quot; --include &quot;*.json&quot;
+            aws s3 cp ${abv_name,,}/output/${stdy_id,,}_${abv_name,,}_metadata.json s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${stdy_id}/metadata/${stdy_id,,}_${abv_name,,}_metadata.json
+        else
+            # Fall back to Git
+            if compgen -G &quot;${abv_name,,}/output/${stdy_id,,}_${abv_name,,}_metadata.json&quot; &gt; /dev/null; then
+                echo &quot;Metadata found on git for ${stdy_id,,}_${abv_name,,}&quot;
+                aws s3 rm s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${stdy_id}/metadata/ --recursive --exclude &quot;*&quot; --include &quot;*.json&quot;
+                aws s3 cp ${abv_name,,}/output/${stdy_id,,}_${abv_name,,}_metadata.json s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${stdy_id}/metadata/${stdy_id,,}_${abv_name,,}_metadata.json
+            else
+                echo &quot;Metadata not found for ${stdy_id,,}_${abv_name,,}. Please check directories and try again&quot;
+                echo &quot;$abv_name $stdy_id&quot; &gt;&gt; missing_metadata.txt
+                exit 255
+            fi
+        fi
+	fi
   else 
-     echo &quot;$abv_name not ready for processing&quot;
+     echo &quot;$stdy_id already processed, not ready for processing, and/or is compliant. Skipping.&quot;
   fi
-done &lt; inputs.csv
-
-aws s3 cp dcc_harmonized/output/ s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/hrmn/metadata/ --recursive --exclude &quot;*&quot; --include &quot;*.json&quot;
-
-#aws s3 cp redcoral/output/ s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/phs002363/metadata/ --recursive --exclude &quot;*&quot; --include &quot;*.json&quot;
-
-
-</command>
+done &lt; inputs.csv</command>
       <configuredLocalRules/>
+      <unstableReturn>255</unstableReturn>
     </hudson.tasks.Shell>
   </builders>
-  <publishers/>
+  <publishers>
+    <hudson.tasks.ArtifactArchiver>
+      <artifacts>missing_metadata.txt</artifacts>
+      <allowEmptyArchive>true</allowEmptyArchive>
+      <onlyIfSuccessful>false</onlyIfSuccessful>
+      <fingerprint>false</fingerprint>
+      <defaultExcludes>true</defaultExcludes>
+      <caseSensitive>true</caseSensitive>
+      <followSymlinks>false</followSymlinks>
+    </hudson.tasks.ArtifactArchiver>
+  </publishers>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.45">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>

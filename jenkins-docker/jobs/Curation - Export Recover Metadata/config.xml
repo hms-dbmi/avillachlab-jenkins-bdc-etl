@@ -1,0 +1,105 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>STUDY_ID</name>
+          <defaultValue>phs003463</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>VERSION</name>
+          <defaultValue>v5</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.ChoiceParameterDefinition>
+          <name>STUDY_ABV</name>
+          <choices class="java.util.Arrays$ArrayList">
+            <a class="string-array">
+              <string>recover_adult</string>
+            </a>
+          </choices>
+        </hudson.model.ChoiceParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+mkdir ${STUDY_ID}
+cd ${STUDY_ID}
+conn_user=&apos;postgres&apos;
+conn_pass=`aws secretsmanager get-secret-value --secret-id &apos;rds!db-2b115560-c8c4-4cec-8418-537a35f9c192&apos; --region &apos;us-east-1&apos; --query SecretString --output text | jq -r .password`
+database_psql_host_address=&apos;recoverdb.cljahwnkfisu.us-east-1.rds.amazonaws.com&apos;
+
+if [[ ${STUDY_ID} != &apos;phs003461&apos; ]]; then
+	dbname=&quot;${STUDY_ABV,,}_${VERSION,,}&quot;
+  #dbname=&quot;${STUDY_ABV,,}&quot;
+  PGPASSWORD=&quot;$conn_pass&quot; psql --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --username=&quot;$conn_user&quot; --dbname=&quot;${dbname}&quot; --csv -Atc \
+  &quot;select json_agg(meta) from metadata_output.metadata meta&quot; -o ${STUDY_ID}_${STUDY_ABV,,}_metadata.json
+  
+  aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt     
+  export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+  export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+  export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+  rm -f assume-role-output.txt
+  aws s3 cp ${STUDY_ID}_${STUDY_ABV,,}_metadata.json s3://avillach-73-bdcatalyst-etl/${STUDY_ABV,,}/decoded_data/
+  aws s3 cp ${STUDY_ID}_${STUDY_ABV,,}_metadata.json s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${STUDY_ID}/metadata/
+  unset AWS_ACCESS_KEY_ID
+  unset AWS_SECRET_ACCESS_KEY
+  unset AWS_SESSION_TOKEN
+
+else
+  #phs003461 is 3 studies in a single phs trench coat so merge the meta
+  mkdir merged
+  #pediatric
+  PGPASSWORD=&quot;$conn_pass&quot; psql --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --username=&quot;$conn_user&quot; --dbname=&quot;recover_pediatric_${VERSION}&quot; --csv -Atc \
+  &quot;select json_agg(meta) from metadata_output.metadata meta&quot; -o recover_pediatric_metadata.json
+  #congenital
+  PGPASSWORD=&quot;$conn_pass&quot; psql --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --username=&quot;$conn_user&quot; --dbname=&quot;recover_congenital_${VERSION}&quot; --csv -Atc \
+  &quot;select json_agg(meta) from metadata_output.metadata meta&quot; -o recover_congenital_metadata.json
+  #caregiver
+  PGPASSWORD=&quot;$conn_pass&quot; psql --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --username=&quot;$conn_user&quot; --dbname=&quot;recover_caregiver_${VERSION}&quot; --csv -Atc \
+  &quot;select json_agg(meta) from metadata_output.metadata meta&quot; -o recover_caregiver_metadata.json
+  jq -s &apos;add&apos; recover_pediatric_metadata.json recover_congenital_metadata.json recover_caregiver_metadata.json &gt; merged/recover_pediatric_metadata.json
+  
+  aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+  export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+  export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+  export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+  rm -f assume-role-output.txt
+  aws s3 cp merged/${STUDY_ABV,,}_metadata.json s3://avillach-73-bdcatalyst-etl/${STUDY_ABV,,}/decoded_data/
+  aws s3 cp merged/${STUDY_ABV,,}_metadata.json s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${STUDY_ID}/metadata/${STUDY_ABV,,}_metadata.json
+  unset AWS_ACCESS_KEY_ID
+  unset AWS_SECRET_ACCESS_KEY
+  unset AWS_SESSION_TOKEN
+fi</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>

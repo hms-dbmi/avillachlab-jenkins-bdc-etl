@@ -1,0 +1,193 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+# validate_multi_duplicates.sh
+#
+# Jenkins Validation Step:
+# Checks for duplicate Subject/Sample Multi files in S3.
+# Fails the build (exit 1) if any duplicates are detected.
+#
+# Usage: ./validate_multi_duplicates.sh
+
+set -euo pipefail
+
+# Report file to accumulate errors
+REPORT_FILE=&quot;duplicate_validation_report.txt&quot;
+echo &quot;--- Duplicate Subject/Sample Multi File Validation Report ---&quot; &gt; &quot;$REPORT_FILE&quot;
+echo &quot;Generated at: $(date)&quot; &gt;&gt; &quot;$REPORT_FILE&quot;
+echo &quot;-----------------------------------------------------------&quot; &gt;&gt; &quot;$REPORT_FILE&quot;
+
+# Global failure flag
+FAILURE_DETECTED=false
+
+# AWS Configuration
+BUCKET=&quot;avillach-73-bdcatalyst-etl&quot;
+
+assume_73_role() {
+  aws sts assume-role --duration-seconds 3600 \
+    --role-arn arn:aws:iam::736265540791:role/dbgap-etl \
+    --role-session-name &quot;s3-dbGap-etl&quot; &gt; assume-role-output.txt
+
+  export AWS_ACCESS_KEY_ID
+  export AWS_SECRET_ACCESS_KEY
+  export AWS_SESSION_TOKEN
+  AWS_ACCESS_KEY_ID=$(grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &apos;s/[ ,&quot;]//g&apos;)
+  AWS_SECRET_ACCESS_KEY=$(grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &apos;s/[ ,&quot;]//g&apos;)
+  AWS_SESSION_TOKEN=$(grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &apos;s/[ ,&quot;]//g&apos;)
+}
+
+unset_role() {
+  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+}
+
+log_duplicate() {
+    local label=$1
+    local ver=$2
+    local files_list=$3
+    
+    echo &quot;  [FAIL] Duplicate $label files found for version $ver&quot;
+    {
+        echo &quot;STUDY: $stdy_id ($abv_name)&quot;
+        echo &quot;ISSUE: Duplicate $label for Version $ver&quot;
+        echo &quot;FILES FOUND:&quot;
+        echo &quot;$files_list&quot;
+        echo &quot;-----------------------------------------------------------&quot;
+    } &gt;&gt; &quot;$REPORT_FILE&quot;
+    
+    FAILURE_DETECTED=true
+}
+
+check_version_duplicates() {
+    local type_name=$1
+    local files=$2
+    
+    # 1. Extract distinct versions (e.g. phs000007.v34)
+    # Added &apos;|| true&apos; so grep doesn&apos;t exit with 1 if no matches found
+    local versions=$(echo &quot;$files&quot; | grep -o &quot;${stdy_id}\.v[0-9]*&quot; | sort | uniq || true)
+
+    for ver in $versions; do
+        if [[ -z &quot;$ver&quot; ]]; then continue; fi
+        
+        # Filter files belonging to this version (exact match on version segment)
+        local ver_files=$(echo &quot;$files&quot; | grep -F &quot;${ver}.&quot; || true)
+
+        # 2. Check for duplicate Data files (.txt)
+        # Added &apos;|| true&apos; to prevent crash if no .txt files are found
+        local txt_files=$(echo &quot;$ver_files&quot; | grep -i &quot;\.txt$&quot; || true)
+        local txt_count=$(echo &quot;$txt_files&quot; | grep -c &quot;^&quot; || true) 
+        
+        if [[ &quot;$txt_count&quot; -gt 1 ]]; then
+            log_duplicate &quot;$type_name (Data/TXT)&quot; &quot;$ver&quot; &quot;$txt_files&quot;
+        fi
+
+        # 3. Check for duplicate Data Dictionaries (.xml)
+        # Added &apos;|| true&apos; to prevent crash if no .xml files are found
+        local xml_files=$(echo &quot;$ver_files&quot; | grep -i &quot;\.xml$&quot; || true)
+        local xml_count=$(echo &quot;$xml_files&quot; | grep -c &quot;^&quot; || true)
+
+        if [[ &quot;$xml_count&quot; -gt 1 ]]; then
+            log_duplicate &quot;$type_name (Dictionary/XML)&quot; &quot;$ver&quot; &quot;$xml_files&quot;
+        fi
+    done
+}
+
+# --- Main Execution ---
+
+assume_73_role
+
+echo &quot;Fetching Managed_Inputs.csv...&quot;
+mkdir -p data
+aws s3 cp &quot;s3://${BUCKET}/general/resources/Managed_Inputs.csv&quot; data/ --no-progress
+
+# Ensure csvcut is available
+if ! command -v csvcut &amp;&gt; /dev/null; then
+    echo &quot;Error: csvcut is required but not installed. Install csvkit.&quot;
+    exit 1
+fi
+
+echo &quot;Parsing input CSV...&quot;
+csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Study Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot;,&quot;Has Multi&quot; data/Managed_Inputs.csv | tail -n +2 &gt; inputs.csv
+
+echo &quot;Starting Validation Loop...&quot;
+
+while IFS=&apos;,&apos; read -r abv_name stdy_id stdy_type data_ready data_processed has_multi
+do
+    # Cleanup quotes and whitespace if csvcut output includes them
+    abv_name=$(echo &quot;$abv_name&quot; | tr -d &apos;&quot;&apos;)
+    stdy_id=$(echo &quot;$stdy_id&quot; | tr -d &apos;&quot;&apos;)
+    data_ready=$(echo &quot;$data_ready&quot; | tr -d &apos;&quot;&apos;)
+    has_multi=$(echo &quot;$has_multi&quot; | tr -d &apos;&quot;&apos;)
+
+    # macOS/Linux compatible lowercase
+    data_ready_lower=$(echo &quot;$data_ready&quot; | tr &apos;[:upper:]&apos; &apos;[:lower:]&apos;)
+    has_multi_lower=$(echo &quot;$has_multi&quot; | tr &apos;[:upper:]&apos; &apos;[:lower:]&apos;)
+    abv_name_lower=$(echo &quot;$abv_name&quot; | tr &apos;[:upper:]&apos; &apos;[:lower:]&apos;)
+
+    # Filter logic: Data Ready=yes AND Has Multi=yes
+    if [[ &quot;$data_ready_lower&quot; == &quot;yes&quot; ]] &amp;&amp; [[ &quot;$has_multi_lower&quot; == &quot;yes&quot; ]]; then
+        
+        echo &quot;Validating: $abv_name ($stdy_id)...&quot;
+        s3_path=&quot;s3://${BUCKET}/${abv_name_lower}/decoded_data/&quot;
+        
+        # 1. Get full file list (suppress errors if folder doesn&apos;t exist)
+        if full_file_list=$(aws s3 ls &quot;$s3_path&quot; --recursive 2&gt;/dev/null); then
+            # 2. Process Subject Files
+            # CRITICAL FIX: Added &apos;|| true&apos; to prevent exit 1 when no files match
+            subject_files=$(echo &quot;$full_file_list&quot; | grep -i &quot;subject\.multi&quot; || true)
+            if [[ -n &quot;$subject_files&quot; ]]; then
+                check_version_duplicates &quot;SUBJECT&quot; &quot;$subject_files&quot;
+            fi
+
+            # 3. Process Sample Files
+            # CRITICAL FIX: Added &apos;|| true&apos; to prevent exit 1 when no files match
+            sample_files=$(echo &quot;$full_file_list&quot; | grep -i &quot;sample\.multi&quot; || true)
+            if [[ -n &quot;$sample_files&quot; ]]; then
+                check_version_duplicates &quot;SAMPLE&quot; &quot;$sample_files&quot;
+            fi
+        else
+            echo &quot;  [WARN] Could not list $s3_path (folder might not exist yet)&quot;
+        fi
+    fi
+done &lt; inputs.csv
+
+unset_role
+
+# --- Final Decision ---
+if [ &quot;$FAILURE_DETECTED&quot; = true ]; then
+    echo &quot;&quot;
+    echo &quot;!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!&quot;
+    echo &quot;FAILURE: Duplicate files detected. Pipeline stopping.&quot;
+    echo &quot;!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!&quot;
+    echo &quot;&quot;
+    cat &quot;$REPORT_FILE&quot;
+    exit 1
+else
+    echo &quot;&quot;
+    echo &quot;SUCCESS: No duplicates found.&quot;
+    exit 0
+fi</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers/>
+</project>

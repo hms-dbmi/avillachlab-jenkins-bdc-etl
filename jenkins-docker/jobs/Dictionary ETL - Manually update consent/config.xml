@@ -1,0 +1,82 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>api</name>
+          <description>the url for the api calls</description>
+          <defaultValue>http://172.20.0.2:8086/api</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>datasetId</name>
+          <defaultValue>phs003461</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.FileParameterDefinition>
+          <name>consents.csv</name>
+        </hudson.model.FileParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>true</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+
+IFS=&apos;φ&apos;
+#consents insert
+echo &quot;Creating Consents&quot;
+while read datasetRef consentCode description participantCount variableCount sampleCount authz; do
+    echo datasetRef $datasetRef
+    echo description $description
+    
+    if [ -f $participantCount ]; then
+    	echo participantCount empty, yeet
+    	participantCount=-1
+    fi
+    
+    if [ -f $variableCount ]; then
+    	echo variableCount empty, yeet
+    	variableCount=-1
+    fi
+    if [ -f $sampleCount ]; then
+    	echo sampleCount empty, yeet
+    	sampleCount=-1
+    fi
+    
+    if [[ ${datasetRef} != &apos;datasetRef&apos; ]]; then
+        curl --show-error --silent --request PUT --data-urlencode &quot;datasetRef=${datasetRef}&quot; --data-urlencode &quot;consentCode=${consentCode}&quot; \
+            --data-urlencode &quot;description=${description}&quot; --data-urlencode &quot;authz=${authz}&quot; \
+            --data-urlencode &quot;participantCount=${participantCount}&quot; --data-urlencode &quot;variableCount=${variableCount}&quot; --data-urlencode &quot;sampleCount=${sampleCount}&quot; \
+            ${api}/consent
+    fi
+done &lt;consents.csv</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>

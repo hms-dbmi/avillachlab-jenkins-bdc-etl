@@ -1,0 +1,96 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>api</name>
+          <description>the url for the api calls</description>
+          <defaultValue>http://172.20.0.2:8086/api</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>datasetId</name>
+          <defaultValue>phs002694</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.FileParameterDefinition>
+          <name>concepts.csv</name>
+        </hudson.model.FileParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>true</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+
+mkdir ${datasetId}
+cp concepts.csv ./${datasetId}/ 
+
+#concept insert
+echo &quot;Creating Concepts&quot;
+IFS=&apos;φ&apos;
+csvcut -z 10000000 -d &apos;φ&apos; -c 1,2,3,4,5,6 ${datasetId}/concepts.csv | csvformat -u0 -U3 -Q🐍 -z 10000000 -D &apos;φ&apos; &gt;${datasetId}/concept_table.csv
+#core concept entry
+while read datasetRef name display conceptType conceptPath parentPath; do
+    if [[ ${datasetRef} != &apos;datasetRef&apos; ]]; then
+        #add/update concept
+        curl --show-error --silent --request PUT --data-urlencode &quot;datasetRef=${datasetRef}&quot; --data-urlencode &quot;name=${name}&quot; \
+            --data-urlencode &quot;display=${display}&quot; --data-urlencode &quot;conceptType=${conceptType}&quot; \
+            --data-urlencode &quot;conceptPath=${conceptPath}&quot; --data-urlencode &quot;parentPath=${parentPath}&quot; \
+            ${api}/concept
+        #connect concept to dataset facet
+        curl --show-error --silent --request PUT --data-urlencode &quot;facetName=${datasetRef}&quot; --data-urlencode &quot;conceptPath=${conceptPath}&quot; ${api}/facet/concept
+        #connect concept to data type facet
+        curl --show-error --silent --request PUT --data-urlencode &quot;facetName=${conceptType}&quot; --data-urlencode &quot;conceptPath=${conceptPath}&quot; ${api}/facet/concept
+    fi
+done &lt;${datasetId}/concept_table.csv
+
+#concept meta entry
+echo &quot;Creating Concept Meta&quot;
+csvcut -d &apos;φ&apos; -z 10000000 -c 5,7- ${datasetId}/concepts.csv | csvformat -u0 -U3 -Q🐍 -z 10000000 -D &apos;φ&apos; &gt;${datasetId}/concept_meta_table.csv
+export columncount=$(csvcut -d &apos;φ&apos; -z 10000000 -n ${datasetId}/concept_meta_table.csv | wc -l)
+for ((i = 2; i &lt; ${columncount} + 1; i++)); do
+    keyname=$(csvcut -d &apos;φ&apos; -z 10000000 -c ${i} ${datasetId}/concept_meta_table.csv | csvcut -z 10000000 -n | cut -c6-)
+    csvcut -d &apos;φ&apos; -z 10000000 -c 1,${i} ${datasetId}/concept_meta_table.csv | csvformat -u0 -U3 -Q🐍 -z 10000000 -D &apos;φ&apos; &gt;${datasetId}/concept_meta_column.csv
+    while read conceptPath values; do
+        if [[ ${conceptPath} != &apos;conceptPath&apos; ]]; then
+        	if [[ ! -z ${values} ]]; then
+            	export encodedConceptPath=$(echo -n $conceptPath | jq -sRr @uri)
+            	export encodedKeyName=$(echo -n $keyname | jq -sRr @uri)
+            	echo $values &gt; ${datasetId}/concept_meta_values.txt
+            	curl --show-error --silent --request PUT --header &apos;Content-Type: text/plain&apos; \
+                	--data @${datasetId}/concept_meta_values.txt &quot;${api}/concept/metadata?conceptPath=${encodedConceptPath}&amp;key=${encodedKeyName}&quot;
+        	fi
+        fi
+    done &lt;${datasetId}/concept_meta_column.csv
+done
+</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>

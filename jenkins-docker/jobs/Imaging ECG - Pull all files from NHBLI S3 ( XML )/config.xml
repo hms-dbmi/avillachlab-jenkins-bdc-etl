@@ -1,0 +1,155 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.ChoiceParameterDefinition>
+          <name>nhlbi_account_number</name>
+          <description>use 7</description>
+          <choices class="java.util.Arrays$ArrayList">
+            <a class="string-array">
+              <string>600168050588</string>
+              <string>714862078411</string>
+            </a>
+          </choices>
+        </hudson.model.ChoiceParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>target_directory</name>
+          <description>1st level prefix after bucket_s3_name 
+Ex: imaging_aric
+</description>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>internal_visit_name</name>
+          <description>Ex: Visit1 or Visit2...etc.
+
+should match the visit being pulled from s3 uri</description>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>visit_s3_uri</name>
+          <description>bucket visit
+s3://nih-nhlbi-bdc-imaging-aric-phs003946-v1-r1-c1/V1/</description>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/usr/bin/env bash
+set -euo pipefail
+
+# 0) guard for “imaging*”
+#case &quot;${target_directory:-}&quot; in
+#  imaging*) ;;
+#  *)
+#    echo &quot;Error: target_directory must start with &apos;imaging&apos;&quot; &gt;&amp;2
+#    exit 1
+#    ;;
+#esac
+
+# 1) assume role (using aws CLI --query to avoid grep hacks)
+creds=$(aws sts assume-role \
+  --role-arn &quot;arn:aws:iam::714862078411:role/nih-nhlbi-TopMed-EC2Access-S3&quot; \
+  --role-session-name &quot;get-phenotypic-data&quot; \
+  --output json)
+
+export AWS_ACCESS_KEY_ID=$(   jq -r .Credentials.AccessKeyId   &lt;&lt;&lt;&quot;$creds&quot;)
+export AWS_SECRET_ACCESS_KEY=$(jq -r .Credentials.SecretAccessKey &lt;&lt;&lt;&quot;$creds&quot;)
+export AWS_SESSION_TOKEN=$(    jq -r .Credentials.SessionToken    &lt;&lt;&lt;&quot;$creds&quot;)
+
+#nih-nhlbi-bdc-imaging-cardia-phs003819-v1-r1-c1
+#nih-nhlbi-bdc-imaging-cardia-phs003819-v1-r1-c2
+#aws s3 ls &quot;s3://nih-nhlbi-bdc-imaging-cardia-phs003819-v1-r1-c1&quot; --recursive
+#aws s3 ls &quot;s3://nih-nhlbi-bdc-imaging-cardia-phs003819-v1-r1-c2&quot; --recursive
+
+#nih-nhlbi-bdc-whi-imaging-phs003824-v1-r2-c1
+#nih-nhlbi-bdc-whi-imaging-phs003824-v1-r2-c2
+#aws s3 cp &quot;s3://nih-nhlbi-bdc-whi-imaging-phs003824-v1-r2-c1&quot; ./ --recursive --exclude &quot;*&quot; --include &quot;*.manifest.*&quot;
+#aws s3 cp &quot;s3://nih-nhlbi-bdc-whi-imaging-phs003824-v1-r2-c2&quot; ./ --recursive --exclude &quot;*&quot; --include &quot;*.manifest.*&quot;
+
+#imaging-fhs
+aws s3 cp &quot;s3://nih-nhlbi-bdc-imaging-fhs-phs003593-v2-r1-c1&quot; ./c1/ --recursive --exclude &quot;*&quot; --include &quot;*.manifest.*&quot; --include &quot;*DD*&quot; --include &quot;*DS*&quot; --include &quot;*sstr*&quot;
+aws s3 cp &quot;s3://nih-nhlbi-bdc-imaging-fhs-phs003593-v2-r1-c2&quot; ./c2/ --recursive --exclude &quot;*&quot; --include &quot;*.manifest.*&quot; --include &quot;*DD*&quot; --include &quot;*DS*&quot; --include &quot;*sstr*&quot;
+aws s3 cp &quot;s3://nih-nhlbi-bdc-imaging-fhs-phs003593-v2-r1-c1/ECG/data/FHS_ECG_07_VISIT03_20070101_00164.xml&quot; ./
+
+#imaging-dmri-vgc
+#aws s3 cp &quot;s3://nih-nhlbi-bdc-imaging-dmri-vgc-phs004002-v1-r1-c1&quot; ./c1/ --recursive --exclude &quot;*&quot; --include &quot;*.manifest.*&quot; --include &quot;*DD*&quot; --include &quot;*DS*&quot; --include &quot;*sstr*&quot;
+#aws s3 cp &quot;s3://nih-nhlbi-bdc-imaging-dmri-vgc-phs004002-v1-r1-c1/Documentation/&quot; ./Documentation/ --recursive 
+
+# imaging-hfn-neat
+#aws s3 cp &quot;s3://nih-nhlbi-bdc-imaging-hfn-neat-phs004254-v1-r1-c1/&quot; &quot;./imaging-hfn-next/&quot; --recursive --exclude &quot;*&quot; --include &quot;*.manifest.*&quot; --include &quot;*DD*&quot; --include &quot;*DS*&quot; --include &quot;*sstr*&quot;
+
+# imaging-chs
+#aws s3 cp &quot;s3://nih-nhlbi-bdc-imaging-chs-phs003639-v1-r2-c1&quot; ./ --recursive --exclude &quot;*&quot; --include &quot;*.manifest.*&quot;
+#aws s3 cp &quot;s3://nih-nhlbi-bdc-imaging-chs-phs003639-v1-r2-c2&quot; ./ --recursive --exclude &quot;*&quot; --include &quot;*.manifest.*&quot;
+#aws s3 cp &quot;s3://nih-nhlbi-bdc-imaging-chs-phs003639-v1-r2-c3&quot; ./ --recursive --exclude &quot;*&quot; --include &quot;*.manifest.*&quot;
+#aws s3 cp &quot;s3://nih-nhlbi-bdc-imaging-chs-phs003639-v1-r2-c4&quot; ./ --recursive --exclude &quot;*&quot; --include &quot;*.manifest.*&quot;
+
+#nih-nhlbi-bdc-mesa-hmb-phs003702-v1-r2-c1
+#nih-nhlbi-bdc-mesa-hmb-npu-phs003702-v1-r2-c2
+#aws s3 cp &quot;s3://nih-nhlbi-bdc-mesa-hmb-phs003702-v1-r2-c1/Documentation&quot; ./ --recursive 
+#aws s3 cp &quot;s3://nih-nhlbi-bdc-mesa-hmb-npu-phs003702-v1-r2-c2/Documentation&quot; ./ --recursive
+
+# 2) prep dirs
+#tmp_dir=$(mktemp -d)
+#mkdir -p &quot;$internal_visit_name&quot;
+
+# 3) pull all XML in one go into tmp_dir
+#aws s3 cp &quot;${visit_s3_uri}&quot; \
+#         &quot;$tmp_dir&quot; \
+#         --recursive \
+#         --exclude &quot;*&quot; \
+#         --include &quot;*.xml&quot; \
+#         --no-progress
+
+# 4) flatten into your target
+#find &quot;$tmp_dir&quot; -type f -name &apos;*.xml&apos; -exec mv -t &quot;$internal_visit_name&quot; -- {} +
+
+# 5) cleanup temp
+#rm -rf &quot;$tmp_dir&quot;
+
+# 6) (optionally) unset creds if you’re finished with AWS
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
+#aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+
+#export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+#export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+#export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+
+# 7) upload flattened back to S3
+#aws s3 cp &quot;$internal_visit_name&quot; \
+#         &quot;s3://avillach-73-bdcatalyst-etl/${target_directory}/rawData/$internal_visit_name&quot; \
+#         --recursive \
+#         --no-progress</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>

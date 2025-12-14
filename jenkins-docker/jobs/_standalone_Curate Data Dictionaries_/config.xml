@@ -1,0 +1,98 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job@1400.v7fd111b_ec82f">
+  <actions>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobAction plugin="pipeline-model-definition@2.2218.v56d0cda_37c72"/>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction plugin="pipeline-model-definition@2.2218.v56d0cda_37c72">
+      <jobProperties>
+        <string>org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty</string>
+      </jobProperties>
+      <triggers/>
+      <parameters/>
+      <options/>
+    </org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction>
+  </actions>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty>
+      <abortPrevious>false</abortPrevious>
+    </org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty>
+  </properties>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@4000.v5198556e9cea_">
+    <script>pipeline {
+  agent { label &apos;controller&apos; }
+
+  options {
+    timestamps()
+    disableConcurrentBuilds()
+  }
+
+  stages {
+    stage(&apos;Curate Data Dictionaries (fully compliant studies)&apos;) {
+      steps {
+        withAWS(role: &apos;dbgap-etl&apos;, roleAccount: &apos;736265540791&apos;, duration: 3600, roleSessionName: &apos;subject-multi-pipeline&apos;) {
+          s3Download(
+            file: &apos;Managed_Inputs.csv&apos;,
+            bucket: &apos;avillach-73-bdcatalyst-etl&apos;,
+            path: &apos;general/resources/Managed_Inputs.csv&apos;,
+            force: true
+          )
+        }
+
+        script {
+          def inputs = readCSV file: &apos;Managed_Inputs.csv&apos;, format: CSVFormat.DEFAULT.withHeader()
+          def importRuns = [:]
+
+          inputs.each { row -&gt;
+            def ready     = (row[&apos;Data is ready to process&apos;] ?: &apos;&apos;).trim()
+            def processed = (row[&apos;Data Processed&apos;] ?: &apos;&apos;).trim()
+            def hasMulti  = (row[&apos;Has Multi&apos;] ?: &apos;&apos;).trim()
+            def studyType = (row[&apos;Study Type&apos;] ?: &apos;&apos;).trim()
+
+            def stdyId = (row[&apos;Study Identifier&apos;] ?: &apos;&apos;).trim()
+            def abv    = (row[&apos;Study Abbreviated Name&apos;] ?: &apos;&apos;).trim()
+
+            def typeEligible =
+              studyType.equalsIgnoreCase(&apos;compliant&apos;) ||
+              studyType.equalsIgnoreCase(&apos;topmed&apos;) ||
+              studyType.equalsIgnoreCase(&apos;parent&apos;) ||
+              studyType.equalsIgnoreCase(&apos;substudy&apos;)
+
+            def shouldRun = (ready == &apos;Yes&apos;) &amp;&amp; (processed == &apos;No&apos;) &amp;&amp; (hasMulti == &apos;Yes&apos;) &amp;&amp; typeEligible
+
+            if (shouldRun &amp;&amp; stdyId) {
+              def sid = stdyId
+              def sabv = abv
+              importRuns[&quot;curate_${sid}&quot;] = {
+                build job: &apos;Curation - Compliant Data Dictionary to Metadata&apos;,
+                  parameters: [
+                    string(name: &apos;study_abv&apos;, value: sabv),
+                    string(name: &apos;study_id&apos;,  value: sid)
+                  ],
+                  wait: true,
+                  propagate: true
+              }
+            }
+          }
+
+          if (importRuns.isEmpty()) {
+            echo &quot;No eligible studies found.&quot;
+            return
+          }
+
+          echo &quot;Launching ${importRuns.size()} parallel jobs on controller...&quot;
+          parallel importRuns
+        }
+      }
+    }
+  }
+}</script>
+    <sandbox>true</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>

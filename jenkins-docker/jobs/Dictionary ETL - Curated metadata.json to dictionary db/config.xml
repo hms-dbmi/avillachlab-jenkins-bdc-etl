@@ -1,0 +1,178 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description>This job needs a refactor.  Should just be determining if it&apos;s in the new metadata.json format or the older version.  Do the JQ transform to the new format more transparent and simpler.</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>api</name>
+          <defaultValue>http://172.20.0.2:8086/api</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>stdy_id</name>
+          <defaultValue>phs003565</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>abv</name>
+          <defaultValue>BIOLINCC_HFN-RELAX</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.BooleanParameterDefinition>
+          <name>hasJsonConceptPaths</name>
+          <defaultValue>false</defaultValue>
+        </hudson.model.BooleanParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>true</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+set -euo pipefail
+
+# =============================
+# Verbosity / logging controls
+# =============================
+LOG_TS() { date +&quot;%Y-%m-%dT%H:%M:%S%z&quot;; }
+log()    { echo &quot;[$(LOG_TS)] INFO  $*&quot; &gt;&amp;2; }
+warn()   { echo &quot;[$(LOG_TS)] WARN  $*&quot; &gt;&amp;2; }
+error()  { echo &quot;[$(LOG_TS)] ERROR $*&quot; &gt;&amp;2; }
+
+AWS_CLI_EXTRA=()
+if [[ &quot;${VERBOSE_AWS:-0}&quot; == &quot;1&quot; ]]; then
+  AWS_CLI_EXTRA+=(--debug)
+  log &quot;AWS CLI debug logging ENABLED&quot;
+fi
+
+# =============================
+# Config
+# =============================
+ROLE_ARN=&quot;arn:aws:iam::736265540791:role/dbgap-etl&quot;
+ROLE_SESSION_NAME=&quot;s3-test&quot;
+ASSUME_DURATION_SECONDS=3600
+
+: &quot;${stdy_id:?stdy_id is required}&quot;
+: &quot;${abv:?abv is required}&quot;
+: &quot;${api:?api is required}&quot;
+
+stdy_id_lc=&quot;${stdy_id,,}&quot;
+abv_lc=&quot;${abv,,}&quot;
+
+metadata_file=&quot;${stdy_id_lc}_${abv_lc}_metadata.json&quot;
+output_file=&quot;${stdy_id_lc}_${abv_lc}_output.json&quot;
+assume_out=&quot;assume-role-output.json&quot;
+
+# =============================
+# Cleanup
+# =============================
+cleanup() {
+  log &quot;Cleaning up temporary credentials&quot;
+  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  rm -f &quot;$assume_out&quot;
+}
+trap cleanup EXIT
+
+# =============================
+# Prereqs
+# =============================
+need() { command -v &quot;$1&quot; &gt;/dev/null 2&gt;&amp;1 || { error &quot;Missing required command: $1&quot;; exit 2; }; }
+
+log &quot;Validating prerequisites&quot;
+need aws
+need jq
+need curl
+log &quot;Prerequisites OK&quot;
+
+# =============================
+# Assume role
+# =============================
+log &quot;Assuming role: $ROLE_ARN (session=$ROLE_SESSION_NAME, duration=${ASSUME_DURATION_SECONDS}s)&quot;
+aws sts assume-role \
+  --duration-seconds &quot;$ASSUME_DURATION_SECONDS&quot; \
+  --role-arn &quot;$ROLE_ARN&quot; \
+  --role-session-name &quot;$ROLE_SESSION_NAME&quot; \
+  &quot;${AWS_CLI_EXTRA[@]}&quot; \
+  &gt; &quot;$assume_out&quot;
+
+log &quot;Parsing temporary credentials&quot;
+export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+AWS_ACCESS_KEY_ID=&quot;$(jq -r &apos;.Credentials.AccessKeyId&apos; &quot;$assume_out&quot;)&quot;
+AWS_SECRET_ACCESS_KEY=&quot;$(jq -r &apos;.Credentials.SecretAccessKey&apos; &quot;$assume_out&quot;)&quot;
+AWS_SESSION_TOKEN=&quot;$(jq -r &apos;.Credentials.SessionToken&apos; &quot;$assume_out&quot;)&quot;
+log &quot;Role assumed successfully&quot;
+
+# =============================
+# Download metadata
+# =============================
+log &quot;Downloading metadata file: $metadata_file&quot;
+aws s3 cp \
+  &quot;s3://avillach-73-bdcatalyst-etl/${abv_lc}/decoded_data/${metadata_file}&quot; \
+  &quot;$metadata_file&quot; \
+  --no-progress \
+  &quot;${AWS_CLI_EXTRA[@]}&quot;
+
+if [[ ! -f &quot;$metadata_file&quot; ]]; then
+  warn &quot;Metadata file not found after initial download attempt, retrying&quot;
+  aws s3 cp \
+    &quot;s3://avillach-73-bdcatalyst-etl/${abv_lc}/decoded_data/${metadata_file}&quot; \
+    &quot;$metadata_file&quot; \
+    --no-progress \
+    &quot;${AWS_CLI_EXTRA[@]}&quot;
+fi
+
+if [[ ! -f &quot;$metadata_file&quot; ]]; then
+  error &quot;Metadata file still missing after retry: $metadata_file&quot;
+  exit 1
+fi
+
+log &quot;Metadata download complete&quot;
+
+# =============================
+# Transform
+# =============================
+log &quot;Deduplicating concepts by concept_path&quot;
+jq &apos;.&apos; &quot;$metadata_file&quot; \
+  | jq &apos;group_by(.concept_path) | map(.[0])&apos; \
+  &gt; &quot;$output_file&quot; || exit 255
+
+log &quot;Output written: $output_file&quot;
+
+# =============================
+# Upload to API
+# =============================
+log &quot;Uploading curated concepts to API (datasetRef=${stdy_id_lc})&quot;
+curl --request PUT --fail \
+  --header &apos;Content-Type: text/json&apos; \
+  --data @&quot;$output_file&quot; \
+  &quot;${api}/concept/curated?datasetRef=${stdy_id_lc}&quot;
+
+log &quot;API upload completed successfully&quot;
+log &quot;Job finished successfully&quot;</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>

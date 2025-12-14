@@ -1,0 +1,182 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>api</name>
+          <defaultValue>http://172.20.0.2:8086/</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>true</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+set -euo pipefail
+
+# --- Config ---
+dictionary_api=&quot;${api}&quot;
+role_arn=&quot;arn:aws:iam::736265540791:role/dbgap-etl&quot;
+container_name=&quot;dictionaryetl&quot;
+container_cm_dir=&quot;/opt/local/hpds&quot;
+local_data_dir=&quot;data&quot;
+
+# --- Pre-flight checks ---
+for cmd in aws jq csvgrep csvcut docker curl; do
+  command -v &quot;$cmd&quot; &gt;/dev/null || { echo &quot;missing: $cmd&quot; &gt;&amp;2; exit 1; }
+done
+
+# --- Assume AWS Role (simple parse) ---
+aws sts assume-role --duration-seconds 3600 \
+  --role-arn &quot;$role_arn&quot; \
+  --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+
+export AWS_ACCESS_KEY_ID=$(grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | tr -d &apos; ,&quot;&apos;)
+export AWS_SECRET_ACCESS_KEY=$(grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | tr -d &apos; ,&quot;&apos;)
+export AWS_SESSION_TOKEN=$(grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | tr -d &apos; ,&quot;&apos;)
+
+# --- Download Required Files ---
+mkdir -p &quot;$local_data_dir&quot;
+aws s3 cp &quot;s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.csv&quot; &quot;$local_data_dir/Managed_Inputs.csv&quot; --no-progress
+aws s3 cp &quot;s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/columnMeta/columnMeta.csv&quot; &quot;$local_data_dir/columnMeta.csv&quot; --no-progress
+
+# --- Clear Credentials ---
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
+# --- Build studies.json (skip header, only phs*, ready=Yes, processed=No) ---
+csvgrep -c &quot;Data is ready to process&quot; -m &quot;Yes&quot; &quot;$local_data_dir/Managed_Inputs.csv&quot; \
+| csvgrep -c &quot;Data Processed&quot; -m &quot;No&quot; \
+| csvcut  -c &quot;Study Identifier&quot; \
+| tail -n +2 \
+| grep -E &apos;^phs[0-9]+&apos; \
+| jq -Rsc &apos;split(&quot;\n&quot;) | map(select(length&gt;0))&apos; &gt; studies.json
+
+echo &quot;studies.json:&quot;
+cat studies.json
+echo
+
+# --- Ensure target dir exists in container and copy columnMeta.csv ---
+docker exec &quot;$container_name&quot; mkdir -p &quot;$container_cm_dir&quot;
+docker cp &quot;$local_data_dir/columnMeta.csv&quot; &quot;${container_name}:${container_cm_dir}/columnMeta.csv&quot;
+echo &quot;Copied columnMeta.csv into ${container_name}:${container_cm_dir}/columnMeta.csv&quot;
+
+# --- Build payload.json safely with jq ---
+jq -n --argjson studies &quot;$(cat studies.json)&quot; &apos;
+{
+  includeDefaultFacets: true,
+  clearDatabase: false,
+  studies: $studies
+}&apos; &gt; payload.json
+
+# --- DEBUG POST (replace your POST section with this while debugging) ---
+payload_file=&quot;payload.json&quot;
+resp_body=&quot;loader_response.json&quot;
+resp_headers=&quot;loader_response.headers&quot;
+curl_trace=&quot;curl.trace&quot;
+
+echo &quot;Payload:&quot;
+jq . &quot;$payload_file&quot; || cat &quot;$payload_file&quot;
+echo
+
+# Pick one URL to test explicitly while debugging:
+test_url=&quot;${dictionary_api%/}/load/initialize&quot;
+echo &quot;POST -&gt; $test_url&quot;
+echo
+
+# cURL with full diagnostics
+http_code=&quot;$(
+  curl -v -i \
+    --trace-ascii &quot;$curl_trace&quot; --trace-time \
+    --no-progress-meter \
+    --max-time 0 \
+    -H &quot;Content-Type: application/json&quot; \
+    -d @&quot;$payload_file&quot; \
+    -o &quot;$resp_body&quot; \
+    -D &quot;$resp_headers&quot; \
+    -w &apos;%{http_code}&apos; \
+    &quot;$test_url&quot; 2&gt;curl.verbose
+)&quot; || true
+
+echo
+echo &quot;HTTP status: $http_code&quot;
+echo &quot;Saved: $resp_headers, $resp_body, curl.verbose, $curl_trace&quot;
+
+echo
+echo &quot;Response headers:&quot;
+sed -n &apos;1,200p&apos; &quot;$resp_headers&quot;
+
+echo
+echo &quot;Response body (first 200 lines):&quot;
+sed -n &apos;1,200p&apos; &quot;$resp_body&quot;
+
+# Helpful parses
+echo
+echo &quot;Server header:&quot;; grep -i &apos;^server:&apos; &quot;$resp_headers&quot; || true
+echo &quot;Content-Type:&quot;;  grep -i &apos;^content-type:&apos; &quot;$resp_headers&quot; || true
+echo &quot;Location:&quot;;      grep -i &apos;^location:&apos; &quot;$resp_headers&quot; || true
+
+# --- Copy Error Report From Container ---
+# vars
+container_name=&quot;dictionaryetl&quot;
+container_cm_dir=&quot;/opt/local/hpds&quot;
+file=&quot;columnMetaErrors.csv&quot;
+
+# exists (any size)
+if docker exec &quot;$container_name&quot; sh -lc &quot;[ -f \&quot;$container_cm_dir/$file\&quot; ]&quot;; then
+  docker cp &quot;$container_name:$container_cm_dir/$file&quot; &quot;./$file&quot;
+  docker exec &quot;$container_name&quot; sh -lc &quot;rm -f \&quot;$container_cm_dir/$file\&quot;&quot;
+else
+ # so the archive doesn&apos;t fail
+ touch $file
+fi
+
+# --- Cleanup in container ---
+docker exec &quot;$container_name&quot; rm -f &quot;${container_cm_dir}/columnMeta.csv&quot; || true
+echo &quot;Removed columnMeta.csv from container.&quot;
+
+# --- Artifacts ---
+echo &quot;Saved:&quot;
+echo &quot; - studies.json&quot;
+echo &quot; - payload.json&quot;
+echo &quot; - loader_response.json&quot;
+echo &quot; - HTTP status: ${http_code}&quot;</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers>
+    <hudson.tasks.ArtifactArchiver>
+      <artifacts>columnMetaErrors.csv</artifacts>
+      <allowEmptyArchive>false</allowEmptyArchive>
+      <onlyIfSuccessful>false</onlyIfSuccessful>
+      <fingerprint>false</fingerprint>
+      <defaultExcludes>true</defaultExcludes>
+      <caseSensitive>true</caseSensitive>
+      <followSymlinks>false</followSymlinks>
+    </hudson.tasks.ArtifactArchiver>
+  </publishers>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>

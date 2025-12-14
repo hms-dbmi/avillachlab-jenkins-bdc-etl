@@ -1,5 +1,5 @@
 <?xml version='1.1' encoding='UTF-8'?>
-<scriptApproval plugin="script-security@1131.v8b_b_5eda_c328e">
+<scriptApproval plugin="script-security@1369.v9b_98a_4e95b_2d">
   <approvedScriptHashes>
     <string>017d0db438428731cd600b6ebda805065433520f</string>
     <string>06a421bb34e0e8aa45d8402eab04e6e54e46f913</string>
@@ -36,13 +36,17 @@
     <string>method groovy.json.JsonSlurper parse java.io.File</string>
     <string>method groovy.json.JsonSlurperClassic parseText java.lang.String</string>
     <string>method java.lang.Process waitFor</string>
+    <string>method org.apache.commons.csv.CSVFormat withHeader java.lang.String[]</string>
+    <string>method org.apache.commons.csv.CSVRecord get java.lang.String</string>
     <string>new groovy.json.JsonOutput</string>
     <string>new groovy.json.JsonSlurperClassic</string>
     <string>new java.io.File java.lang.String</string>
     <string>new java.lang.StringBuffer</string>
     <string>staticField java.lang.System out</string>
+    <string>staticField org.apache.commons.csv.CSVFormat DEFAULT</string>
     <string>staticMethod org.codehaus.groovy.runtime.DefaultGroovyMethods execute java.lang.String</string>
     <string>staticMethod org.codehaus.groovy.runtime.DefaultGroovyMethods getAt java.lang.Object java.lang.String</string>
+    <string>staticMethod org.codehaus.groovy.runtime.DefaultGroovyMethods getAt java.util.Collection java.lang.String</string>
     <string>staticMethod org.codehaus.groovy.runtime.DefaultGroovyMethods getText java.io.File</string>
     <string>staticMethod org.codehaus.groovy.runtime.DefaultGroovyMethods putAt java.lang.Object java.lang.String java.lang.Object</string>
     <string>staticMethod org.codehaus.groovy.runtime.DefaultGroovyMethods write java.io.File java.lang.String</string>
@@ -51,6 +55,7 @@
   </approvedSignatures>
   <aclApprovedSignatures/>
   <approvedClasspathEntries/>
+  <forceSandbox>false</forceSandbox>
   <pendingScripts/>
   <pendingSignatures/>
   <pendingClasspathEntries/>

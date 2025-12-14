@@ -1,0 +1,90 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description>This job needs a refactor.  Should just be determining if it&apos;s in the new metadata.json format or the older version.  Do the JQ transform to the new format more transparent and simpler.</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>api</name>
+          <defaultValue>http://172.20.0.2:8086/api</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>true</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+set -o pipefail
+
+# Assume dbgap-etl role
+aws sts assume-role --duration-seconds 3600 \
+  --role-arn arn:aws:iam::736265540791:role/dbgap-etl \
+  --role-session-name &quot;facet-clear&quot; &gt; assume-role-output.txt
+
+# Export temporary credentials
+export AWS_ACCESS_KEY_ID=$(grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;)
+export AWS_SECRET_ACCESS_KEY=$(grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;)
+export AWS_SESSION_TOKEN=$(grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;)
+
+# Prepare payload
+cat &gt; clear_facets_payload.json &lt;&lt;&apos;EOF&apos;
+{
+  &quot;Facet_Categories&quot;: [&quot;Consortium_Curated_Facets&quot;]
+}
+EOF
+
+echo &quot;Clearing all Consortium_Curated_Facets facets...&quot;
+
+HTTP_CODE=$(curl --silent --show-error --fail \
+  --retry 10 \
+  --retry-delay 5 \
+  --retry-all-errors \
+  --retry-connrefused \
+  --max-time 0 \
+  -o clear_facets_response.json \
+  -w &quot;%{http_code}&quot; \
+  -X POST \
+  -H &quot;Content-Type: application/json&quot; \
+  --data-binary @clear_facets_payload.json \
+  ${api}/facet-loader/clear)
+
+echo &quot;Facet clear response (HTTP ${HTTP_CODE}):&quot;
+cat clear_facets_response.json || true
+
+# Upload response to S3 for audit
+aws s3 cp &quot;clear_facets_response.json&quot; &quot;s3://avillach-73-bdcatalyst-etl/general/resources/clear_facets_response.json&quot; --no-progress
+
+# Cleanup
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+
+echo &quot;Facet clear job completed.&quot;</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>

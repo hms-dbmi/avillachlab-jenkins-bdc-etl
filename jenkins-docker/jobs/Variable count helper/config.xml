@@ -1,0 +1,84 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description>See if I can sandbox a useful utility to help validate variable count issues. - TD</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>abv_name</name>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>stdy_id</name>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/usr/bin/env bash
+
+aws sts assume-role --duration-seconds 3600 \
+    --role-arn arn:aws:iam::736265540791:role/dbgap-etl \
+    --role-session-name &quot;s3-test&quot; &gt; assume-role-output.json
+
+export AWS_ACCESS_KEY_ID=$(jq -r &apos;.Credentials.AccessKeyId&apos; assume-role-output.json)
+export AWS_SECRET_ACCESS_KEY=$(jq -r &apos;.Credentials.SecretAccessKey&apos; assume-role-output.json)
+export AWS_SESSION_TOKEN=$(jq -r &apos;.Credentials.SessionToken&apos; assume-role-output.json)
+
+# Ensure variables are set
+if [[ -z &quot;$AWS_ACCESS_KEY_ID&quot; || -z &quot;$AWS_SECRET_ACCESS_KEY&quot; || -z &quot;$AWS_SESSION_TOKEN&quot; ]]; then
+    echo &quot;Failed to assume role. Check the credentials.&quot;
+    exit 1
+fi
+
+# Copy the mapping file from S3
+echo &quot;Mapping file counts&quot;
+aws s3 cp &quot;s3://avillach-73-bdcatalyst-etl/${abv_name,,}/mappings/${stdy_id}/mapping2_post_analyzer.csv&quot; mapping2.csv
+
+echo &quot;Total Line count for number of concepts:&quot;
+wc -l mapping2.csv
+
+echo &quot;Line count for number of unique concepts:&quot;
+cut -d &apos;,&apos; -f2 mapping2.csv | sort | uniq | wc -l
+
+
+echo &quot;&quot;
+echo &quot;Metadata count&quot;
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json metadata.json
+
+# Extract clinical variable count for the given study_id
+clinical_variable_count=$(jq -r --arg study_id &quot;$stdy_id&quot; &apos;.bio_data_catalyst[] | select(.study_identifier == $study_id) | .clinical_variable_count&apos; metadata.json)
+
+# Output study_id and clinical variable count
+if [[ -n &quot;$clinical_variable_count&quot; &amp;&amp; &quot;$clinical_variable_count&quot; != &quot;null&quot; ]]; then
+    echo &quot;Study ID: $stdy_id&quot;
+    echo &quot;Clinical Variable Count: $clinical_variable_count&quot;
+else
+    echo &quot;Study ID: $stdy_id not found in metadata.json&quot;
+fi
+
+echo &quot;&quot;
+echo &quot;Check the dictionary backend:&quot;
+</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers/>
+</project>

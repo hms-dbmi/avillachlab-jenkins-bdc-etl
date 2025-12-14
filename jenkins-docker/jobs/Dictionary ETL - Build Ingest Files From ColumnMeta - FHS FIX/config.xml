@@ -1,0 +1,259 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>api</name>
+          <defaultValue>http://172.20.0.2:8086/api</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>datasetRef</name>
+          <defaultValue>phs003768</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.5.2">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>https://github.com/hms-dbmi/ETL-MissionControl-dbgap-submodule.git</url>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>*/master</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="empty-list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>true</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/usr/bin/env bash
+set -euo pipefail
+
+# =============================
+# Verbosity / logging controls
+# =============================
+LOG_TS() { date +&quot;%Y-%m-%dT%H:%M:%S%z&quot;; }
+log()    { echo &quot;[$(LOG_TS)] INFO  $*&quot; &gt;&amp;2; }
+warn()   { echo &quot;[$(LOG_TS)] WARN  $*&quot; &gt;&amp;2; }
+error()  { echo &quot;[$(LOG_TS)] ERROR $*&quot; &gt;&amp;2; }
+
+AWS_CLI_EXTRA=()
+if [[ &quot;${VERBOSE_AWS:-0}&quot; == &quot;1&quot; ]]; then
+  AWS_CLI_EXTRA+=(--debug)
+  log &quot;AWS CLI debug logging ENABLED&quot;
+fi
+
+# =============================
+# Config (override via env)
+# =============================
+ROLE_ARN=&quot;${ROLE_ARN:-arn:aws:iam::736265540791:role/dbgap-etl}&quot;
+ROLE_SESSION_NAME=&quot;${ROLE_SESSION_NAME:-s3-test}&quot;
+ASSUME_DURATION_SECONDS=&quot;${ASSUME_DURATION_SECONDS:-3600}&quot;
+S3_BUCKET=&quot;${S3_BUCKET:-avillach-73-bdcatalyst-etl}&quot;
+
+ASSUME_OUT=&quot;${ASSUME_OUT:-assume-role-output.json}&quot;
+DATA_DIR=&quot;${DATA_DIR:-data}&quot;
+
+: &quot;${datasetRef:?datasetRef is required}&quot;
+: &quot;${api:?api is required}&quot;
+
+mkdir -p &quot;$DATA_DIR&quot;
+
+log &quot;Dataset Ref         : $datasetRef&quot;
+log &quot;S3 Bucket           : $S3_BUCKET&quot;
+log &quot;Data Dir            : $DATA_DIR&quot;
+log &quot;Assume Role ARN     : $ROLE_ARN&quot;
+log &quot;Role Session Name   : $ROLE_SESSION_NAME&quot;
+log &quot;Assume Duration     : ${ASSUME_DURATION_SECONDS}s&quot;
+
+# =============================
+# Cleanup
+# =============================
+cleanup() {
+  log &quot;Cleaning up temporary credentials&quot;
+  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  rm -f &quot;$ASSUME_OUT&quot;
+}
+trap cleanup EXIT
+
+# =============================
+# Prereqs
+# =============================
+need() { command -v &quot;$1&quot; &gt;/dev/null 2&gt;&amp;1 || { error &quot;Missing required command: $1&quot;; exit 2; }; }
+
+log &quot;Validating prerequisites&quot;
+need aws
+need jq
+need csvcut
+need csvformat
+need csvgrep
+need java
+need curl
+log &quot;Prerequisites OK&quot;
+
+# =============================
+# Assume role (one time)
+# =============================
+log &quot;Assuming role: $ROLE_ARN (session=$ROLE_SESSION_NAME, duration=${ASSUME_DURATION_SECONDS}s)&quot;
+aws sts assume-role \
+  --duration-seconds &quot;$ASSUME_DURATION_SECONDS&quot; \
+  --role-arn &quot;$ROLE_ARN&quot; \
+  --role-session-name &quot;$ROLE_SESSION_NAME&quot; \
+  &quot;${AWS_CLI_EXTRA[@]}&quot; \
+  &gt; &quot;$ASSUME_OUT&quot;
+
+log &quot;Parsing temporary credentials&quot;
+export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+AWS_ACCESS_KEY_ID=&quot;$(jq -r &apos;.Credentials.AccessKeyId&apos; &quot;$ASSUME_OUT&quot;)&quot;
+AWS_SECRET_ACCESS_KEY=&quot;$(jq -r &apos;.Credentials.SecretAccessKey&apos; &quot;$ASSUME_OUT&quot;)&quot;
+AWS_SESSION_TOKEN=&quot;$(jq -r &apos;.Credentials.SessionToken&apos; &quot;$ASSUME_OUT&quot;)&quot;
+log &quot;Role assumed successfully&quot;
+
+# =============================
+# Pull inputs
+# =============================
+log &quot;Downloading inputs from S3&quot;
+aws s3 cp &quot;s3://${S3_BUCKET}/general/resources/Managed_Inputs.csv&quot; \
+  &quot;${DATA_DIR}/Managed_Inputs.csv&quot; --no-progress &quot;${AWS_CLI_EXTRA[@]}&quot;
+aws s3 cp &quot;s3://${S3_BUCKET}/general/data/metadata_new_search.json&quot; \
+  &quot;${DATA_DIR}/studies_metadata.json&quot; --no-progress &quot;${AWS_CLI_EXTRA[@]}&quot;
+aws s3 cp &quot;s3://${S3_BUCKET}/general/hpds/javabin/columnMeta/columnMeta.csv&quot; \
+  &quot;${DATA_DIR}/columnMeta.csv&quot; --no-progress &quot;${AWS_CLI_EXTRA[@]}&quot;
+log &quot;Inputs downloaded&quot;
+
+# Drop creds before processing locally (keeps existing behavior)
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+log &quot;Dropped temporary credentials for local processing&quot;
+
+# =============================
+# Build TSV for safe reading
+# =============================
+inputs_tsv=&quot;inputs.tsv&quot;
+log &quot;Building TSV: $inputs_tsv&quot;
+csvcut -c &quot;Study Identifier&quot;,&quot;Study Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot; &quot;${DATA_DIR}/Managed_Inputs.csv&quot; \
+  | csvformat -T \
+  &gt; &quot;$inputs_tsv&quot;
+
+if [[ ! -s &quot;$inputs_tsv&quot; ]]; then
+  error &quot;inputs.tsv not created or empty&quot;
+  exit 1
+fi
+log &quot;TSV created: $inputs_tsv ($(wc -l &lt; &quot;$inputs_tsv&quot;) lines)&quot;
+
+# =============================
+# Main loop
+# =============================
+log &quot;Scanning inputs for datasetRef match: $datasetRef&quot;
+
+while IFS=$&apos;\t&apos; read -r study_id study_type data_ready data_processed; do
+  [[ -z &quot;${study_id:-}&quot; ]] &amp;&amp; continue
+
+  if [[ &quot;$study_id&quot; != &quot;$datasetRef&quot; ]]; then
+    continue
+  fi
+
+  log &quot;Matched study_id=$study_id (study_type=${study_type:-}, data_ready=${data_ready:-}, data_processed=${data_processed:-})&quot;
+
+  mkdir -p &quot;${study_id}/output&quot;
+
+  log &quot;Normalizing columnMeta.csv&quot;
+  csvformat -u 3 -z 524288000 &quot;${DATA_DIR}/columnMeta.csv&quot; &gt; &quot;${DATA_DIR}/columnMeta_normalized.csv&quot;
+  log &quot;Normalized columnMeta written: ${DATA_DIR}/columnMeta_normalized.csv&quot;
+
+  log &quot;Subsetting studies metadata for study_identifier=$study_id&quot;
+  jq &apos;[.bio_data_catalyst[] | select(.&quot;study_identifier&quot;==&quot;&apos;&quot;${study_id}&quot;&apos;&quot;)]&apos; \
+    &quot;${DATA_DIR}/studies_metadata.json&quot; &gt; &quot;${study_id}/subset_metadata.json&quot;
+  log &quot;Subset metadata written: ${study_id}/subset_metadata.json&quot;
+
+  log &quot;Filtering columnMeta for study prefix and excluding Peoria&quot;
+  csvgrep -z 524288000 \
+    -c 1 \
+    --regex &quot;^\\\\${study_id,,}\\\\&quot; \
+    &quot;${DATA_DIR}/columnMeta_normalized.csv&quot; \
+    | csvgrep -z 524288000 \
+        -c 1 \
+        --invert-match \
+        --regex &quot;Peoria&quot; \
+    &gt; &quot;${study_id}/subset_columnmeta.csv&quot;
+  log &quot;Subset columnMeta written: ${study_id}/subset_columnmeta.csv&quot;
+
+  log &quot;Generating dataset input files&quot;
+  java -jar jars/DatasetInputFileGenerator.jar --subsetDir &quot;./${study_id}/&quot; --ref &quot;${study_id}&quot;
+
+  log &quot;Generating concept input files&quot;
+  java -jar jars/ConceptInputFileGenerator.jar --subsetDir &quot;./${study_id}/&quot; --ref &quot;${study_id}&quot;
+
+  # Re-export creds for S3 + API calls (keeps existing behavior)
+  log &quot;Re-exporting temporary credentials for S3 and API calls&quot;
+  export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  AWS_ACCESS_KEY_ID=&quot;$(jq -r &apos;.Credentials.AccessKeyId&apos; &quot;$ASSUME_OUT&quot;)&quot;
+  AWS_SECRET_ACCESS_KEY=&quot;$(jq -r &apos;.Credentials.SecretAccessKey&apos; &quot;$ASSUME_OUT&quot;)&quot;
+  AWS_SESSION_TOKEN=&quot;$(jq -r &apos;.Credentials.SessionToken&apos; &quot;$ASSUME_OUT&quot;)&quot;
+
+  log &quot;Cleaning existing S3 CSVs under newDictionary/${study_id}/&quot;
+  aws s3 rm &quot;s3://${S3_BUCKET}/newDictionary/${study_id}/&quot; \
+    --recursive --exclude &apos;*&apos; --include &apos;*.csv&apos; \
+    &quot;${AWS_CLI_EXTRA[@]}&quot;
+
+  log &quot;Uploading generated CSVs to s3://${S3_BUCKET}/newDictionary/${study_id}/&quot;
+  aws s3 cp &quot;./${study_id}/output/&quot; &quot;s3://${S3_BUCKET}/newDictionary/${study_id}/&quot; \
+    --recursive --exclude &apos;*&apos; --include &apos;*.csv&apos; --no-progress \
+    &quot;${AWS_CLI_EXTRA[@]}&quot;
+
+  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  log &quot;Dropped temporary credentials before local API uploads&quot;
+
+  log &quot;Uploading datasets.csv to API&quot;
+  curl --request PUT --header &apos;Content-Type: text/plain&apos; \
+    --data-binary @&quot;${study_id}/output/datasets.csv&quot; \
+    &quot;${api}/dataset/csv&quot; || exit 255
+
+  log &quot;Uploading consents.csv to API&quot;
+  curl --request PUT --header &apos;Content-Type: text/plain&apos; \
+    --data-binary @&quot;${study_id}/output/consents.csv&quot; \
+    &quot;${api}/consent/csv?datasetRef=${study_id}&quot; || exit 255
+
+  log &quot;Uploading concepts.csv to API&quot;
+  curl --request PUT --header &apos;Content-Type: text/plain&apos; \
+    --data-binary @&quot;${study_id}/output/concepts.csv&quot; \
+    &quot;${api}/concept/csv?datasetRef=${study_id}&quot; || exit 255
+
+  log &quot;Completed processing for study_id=$study_id&quot;
+done &lt; &quot;$inputs_tsv&quot;
+
+log &quot;Job finished successfully&quot;</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>

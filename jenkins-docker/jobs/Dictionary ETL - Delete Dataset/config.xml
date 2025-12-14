@@ -1,0 +1,107 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>dataset_ref</name>
+          <description>phs num or similar
+Will delete all children of the dataset then itself
+
+ex: DCC Harmonized data set</description>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>true</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/sh
+set +e  # keep behavior: do not abort on first curl failure
+
+# =============================
+# Verbosity / logging controls
+# =============================
+LOG_TS() { date +&quot;%Y-%m-%dT%H:%M:%S%z&quot;; }
+log()    { echo &quot;[$(LOG_TS)] INFO  $*&quot; &gt;&amp;2; }
+warn()   { echo &quot;[$(LOG_TS)] WARN  $*&quot; &gt;&amp;2; }
+error()  { echo &quot;[$(LOG_TS)] ERROR $*&quot; &gt;&amp;2; }
+
+# =============================
+# Config (override via env)
+# =============================
+api=&quot;${api:-http://172.20.0.2:8086/api}&quot;
+retry_sleep=&quot;${retry_sleep:-15}&quot;
+window_sec=&quot;${window_sec:-1800}&quot;
+connect_timeout=&quot;${connect_timeout:-5}&quot;
+
+: &quot;${dataset_ref:?dataset_ref is required}&quot;
+
+start_ts=&quot;$(date +%s)&quot;
+deadline=$((start_ts + window_sec))
+attempt=0
+
+log &quot;API                : $api&quot;
+log &quot;dataset_ref        : $dataset_ref&quot;
+log &quot;retry_sleep        : ${retry_sleep}s&quot;
+log &quot;window_sec         : ${window_sec}s&quot;
+log &quot;connect_timeout    : ${connect_timeout}s&quot;
+log &quot;Starting retry loop&quot;
+
+while :; do
+  attempt=$((attempt + 1))
+  now=&quot;$(date +%s)&quot;
+  remaining=$((deadline - now))
+  if [ &quot;$remaining&quot; -lt 0 ]; then remaining=0; fi
+
+  log &quot;Attempt #$attempt (remaining window: ${remaining}s): DELETE /dataset&quot;
+
+  # Limit only the connect phase; once connected, let it run (keep existing behavior)
+  curl --silent --show-error --fail \
+    --connect-timeout &quot;$connect_timeout&quot; \
+    --request DELETE \
+    --data-urlencode &quot;datasetRef=${dataset_ref}&quot; \
+    &quot;${api}/dataset&quot;
+  rc=$?
+
+  if [ &quot;$rc&quot; -eq 0 ]; then
+    log &quot;Dataset delete request accepted/completed&quot;
+    exit 0
+  fi
+
+  case &quot;$rc&quot; in
+    7)  warn &quot;Server not up yet (connection refused). Retrying...&quot;;;
+    28) warn &quot;Connect attempt timed out. Retrying...&quot;;;
+    22) warn &quot;HTTP error (&gt;=400) due to --fail. Will retry...&quot;;;
+    *)  warn &quot;curl failed with rc=$rc; retrying...&quot;;;
+  esac
+
+  now=&quot;$(date +%s)&quot;
+  if [ &quot;$now&quot; -ge &quot;$deadline&quot; ]; then
+    warn &quot;Overall retry window reached; not failing the job because delete may still be running.&quot;
+    exit 0
+  fi
+
+  sleep &quot;$retry_sleep&quot;
+done</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers/>
+</project>
