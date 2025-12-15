@@ -17,6 +17,21 @@ RUN apt-get update && apt-get install -y \
     csvkit \
  && rm -rf /var/lib/apt/lists/*
 
+# ---- Adoptium (Temurin) apt repo ----
+RUN install -m 0755 -d /etc/apt/keyrings \
+ && curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public \
+    | gpg --dearmor -o /etc/apt/keyrings/adoptium.gpg \
+ && echo "deb [signed-by=/etc/apt/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb $(. /etc/os-release && echo $VERSION_CODENAME) main" \
+    > /etc/apt/sources.list.d/adoptium.list
+
+# ---- Install Temurin JDKs ----
+RUN apt-get update && apt-get install -y \
+    temurin-11-jdk \
+    temurin-17-jdk \
+    temurin-21-jdk \
+    temurin-24-jdk \
+ && rm -rf /var/lib/apt/lists/*
+
 # ---- AWS CLI v2 ----
 RUN curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip \
  && unzip /tmp/awscliv2.zip -d /tmp \
@@ -28,42 +43,22 @@ RUN git clone --depth=1 https://github.com/tfutils/tfenv.git /opt/tfenv \
  && ln -s /opt/tfenv/bin/* /usr/local/bin
 
 # ---- Install Terraform versions ----
-RUN tfenv install 0.12.31
-RUN tfenv install latest
-RUN tfenv use 0.12.31
-
-# ---- SDKMAN + Temurin JDKs ----
-ENV SDKMAN_DIR=/usr/local/sdkman
-RUN mkdir -p "$SDKMAN_DIR" && chown -R jenkins:jenkins "$SDKMAN_DIR"
-
-USER jenkins
-SHELL ["/bin/bash", "-lc"]
-
-# Install SDKMAN
-RUN curl -s "https://get.sdkman.io" | bash
-
-# Install Temurin JDKs (pin exact identifiers)
-RUN source "$SDKMAN_DIR/bin/sdkman-init.sh" \
- && sdk install java 11.0.29-tem \
- && sdk install java 17.0.17-tem \
- && sdk install java 21.0.9-tem \
- && sdk install java 24.0.2-tem \
- && sdk default java 21.0.9-tem
-
-USER root
-SHELL ["/bin/bash", "-lc"]
+RUN tfenv install 0.12.31 \
+ &&RUN tfenv install latest \
+ && tfenv use 0.12.31
 
 # ---- Jenkins plugins ----
 COPY plugins.txt /usr/share/jenkins/ref/plugins.txt
 RUN jenkins-plugin-cli -f /usr/share/jenkins/ref/plugins.txt
 
 # ---- Sanity checks ----
-RUN terraform version \
+RUN java -version \
+ && ls -la /usr/lib/jvm \
  && aws --version \
+ && terraform version \
  && git --version \
  && jq --version \
  && tfenv --version \
- && csvcut --version \
- && ls -la /usr/local/sdkman/candidates/java
+ && csvcut --version
 
 USER jenkins
