@@ -44,7 +44,7 @@ RUN git clone --depth=1 https://github.com/tfutils/tfenv.git /opt/tfenv \
 
 # ---- Install Terraform versions ----
 RUN tfenv install 0.12.31 \
- &&RUN tfenv install latest \
+ && RUN tfenv install latest \
  && tfenv use 0.12.31
 
 # ---- Jenkins plugins ----
