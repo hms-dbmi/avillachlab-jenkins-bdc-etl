@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
     git \
     jq \
     unzip \
+    zip \
     curl \
     ca-certificates \
     gnupg \
@@ -31,6 +32,27 @@ RUN tfenv install 0.12.31
 RUN tfenv install latest
 RUN tfenv use 0.12.31
 
+# ---- SDKMAN + Temurin JDKs ----
+ENV SDKMAN_DIR=/usr/local/sdkman
+RUN mkdir -p "$SDKMAN_DIR" && chown -R jenkins:jenkins "$SDKMAN_DIR"
+
+USER jenkins
+SHELL ["/bin/bash", "-lc"]
+
+# Install SDKMAN
+RUN curl -s "https://get.sdkman.io" | bash
+
+# Install Temurin JDKs (pin exact identifiers)
+RUN source "$SDKMAN_DIR/bin/sdkman-init.sh" \
+ && sdk install java 11.0.29-tem \
+ && sdk install java 17.0.17-tem \
+ && sdk install java 21.0.9-tem \
+ && sdk install java 24.0.2-tem \
+ && sdk default java 21.0.9-tem
+
+USER root
+SHELL ["/bin/bash", "-lc"]
+
 # ---- Jenkins plugins ----
 COPY plugins.txt /usr/share/jenkins/ref/plugins.txt
 RUN jenkins-plugin-cli -f /usr/share/jenkins/ref/plugins.txt
@@ -41,6 +63,7 @@ RUN terraform version \
  && git --version \
  && jq --version \
  && tfenv --version \
- && csvcut --version
+ && csvcut --version \
+ && ls -la /usr/local/sdkman/candidates/java
 
 USER jenkins
