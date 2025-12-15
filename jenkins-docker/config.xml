@@ -30,22 +30,22 @@
   <jdks>
     <jdk>
       <name>JDK-11</name>
-      <home>/usr/local/sdkman/candidates/java/11.0.29-tem</home>
+      <home>/usr/lib/jvm/temurin-11-jdk-amd64</home>
       <properties/>
     </jdk>
     <jdk>
       <name>JDK-17</name>
-      <home>/usr/local/sdkman/candidates/java/17.0.17-tem</home>
+      <home>/usr/lib/jvm/temurin-17-jdk-amd64</home>
       <properties/>
     </jdk>
     <jdk>
       <name>JDK-21</name>
-      <home>/usr/local/sdkman/candidates/java/21.0.9-tem</home>
+      <home>/usr/lib/jvm/temurin-21-jdk-amd64</home>
       <properties/>
     </jdk>
     <jdk>
       <name>jdk-24</name>
-      <home>/usr/local/sdkman/candidates/java/24.0.2-tem</home>
+      <home>/usr/lib/jvm/temurin-24-jdk-amd64</home>
       <properties/>
     </jdk>
   </jdks>
