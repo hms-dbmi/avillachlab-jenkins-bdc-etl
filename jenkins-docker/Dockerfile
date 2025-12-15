@@ -1,45 +1,46 @@
-FROM jenkins/jenkins:lts
+# Base Jenkins controller
+FROM jenkins/jenkins:lts-jdk21
 
-ARG S3_BUCKET
+USER root
 
+# ---- OS utilities commonly needed in pipelines ----
+RUN apt-get update && apt-get install -y \
+    git \
+    jq \
+    unzip \
+    curl \
+    ca-certificates \
+    gnupg \
+    lsb-release \
+    bash \
+    csvkit \
+ && rm -rf /var/lib/apt/lists/*
+
+# ---- AWS CLI v2 ----
+RUN curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip \
+ && unzip /tmp/awscliv2.zip -d /tmp \
+ && /tmp/aws/install \
+ && rm -rf /tmp/aws /tmp/awscliv2.zip
+
+# ---- tfenv (Terraform version manager) ----
+RUN git clone --depth=1 https://github.com/tfutils/tfenv.git /opt/tfenv \
+ && ln -s /opt/tfenv/bin/* /usr/local/bin
+
+# ---- Install Terraform versions ----
+RUN tfenv install 0.12.31
+RUN tfenv install latest
+RUN tfenv use 0.12.31
+
+# ---- Jenkins plugins ----
 COPY plugins.txt /usr/share/jenkins/ref/plugins.txt
+RUN jenkins-plugin-cli -f /usr/share/jenkins/ref/plugins.txt
 
-COPY config.xml /var/jenkins_home/config.xml
+# ---- Sanity checks ----
+RUN terraform version \
+ && aws --version \
+ && git --version \
+ && jq --version \
+ && tfenv --version \
+ && csvcut --version
 
-COPY scriptApproval.xml /var/jenkins_home/scriptApproval.xml
-
-COPY hudson.tasks.Maven.xml /var/jenkins_home/hudson.tasks.Maven.xml
-
-USER root 
-
-RUN echo "s/stack_s3_bucket_var/$S3_BUCKET/"
-
-RUN sed -i "s/stack_s3_bucket_var/$S3_BUCKET/" /var/jenkins_home/config.xml
-
-RUN echo deb http://deb.debian.org/debian stretch-backports main >> /etc/apt/sources.list
-
-RUN apt-get update
-
-RUN apt-get -y install apt-transport-https
-
-RUN apt-get -y install python3-pip
-
-RUN pip3 install --no-input awscli --upgrade
-
-RUN curl -fsSL https://get.docker.com | sh
-
-RUN docker --version 
-
-RUN wget https://www-us.apache.org/dist/maven/maven-3/3.6.3/binaries/apache-maven-3.6.3-bin.tar.gz -P /opt
-
-RUN apt-get -y -t stretch-backports install openjdk-11-jdk
-
-RUN tar -xvzf /opt/apache-maven-3.6.3-bin.tar.gz -C /opt
-
-RUN rm /opt/apache-maven-3.6.3-bin.tar.gz
-
-RUN apt-get install jq -y
-
-RUN `/usr/local/bin/install-plugins.sh < /usr/share/jenkins/ref/plugins.txt` || echo "Some errors occurred during plugin installation."
-
-RUN wget https://releases.hashicorp.com/terraform/0.12.31/terraform_0.12.31_linux_amd64.zip && unzip terraform_0.12.31_linux_amd64.zip && mv terraform /usr/local/bin/
+USER jenkins
