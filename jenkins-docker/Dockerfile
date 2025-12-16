@@ -1,43 +1,90 @@
-FROM jenkins/jenkins:2.448
-
-ARG S3_BUCKET
-
-COPY plugins.txt /usr/share/jenkins/ref/plugins.txt
-
-COPY config.xml /var/jenkins_home/config.xml
-
-COPY scriptApproval.xml /var/jenkins_home/scriptApproval.xml
-
-COPY hudson.tasks.Maven.xml /var/jenkins_home/hudson.tasks.Maven.xml
+# Base Jenkins controller
+FROM jenkins/jenkins:lts-jdk21
 
 USER root
 
-RUN echo "s/stack_s3_bucket_var/$S3_BUCKET/"
+# ---- OS utilities commonly needed in pipelines ----
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    jq \
+    unzip \
+    zip \
+    curl \
+    ca-certificates \
+    gnupg \
+    lsb-release \
+    bash \
+    csvkit \
+ && rm -rf /var/lib/apt/lists/*
 
-RUN sed -i "s/stack_s3_bucket_var/$S3_BUCKET/" /var/jenkins_home/config.xml
+# ---- Docker CLI (client only; uses host /var/run/docker.sock) ----
+# Prefer Debian packages first. If your base repo doesn't provide docker-cli,
+# switch to the Docker Inc repo approach (see alt block below).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    docker-cli \
+    docker-compose-plugin \
+ && rm -rf /var/lib/apt/lists/*
 
-RUN apt-get update -y
+# ---- Adoptium (Temurin) apt repo ----
+RUN install -m 0755 -d /etc/apt/keyrings \
+ && curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public \
+    | gpg --dearmor -o /etc/apt/keyrings/adoptium.gpg \
+ && echo "deb [signed-by=/etc/apt/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb $(. /etc/os-release && echo $VERSION_CODENAME) main" \
+    > /etc/apt/sources.list.d/adoptium.list
 
-RUN apt-get -y install apt-transport-https \
-    python3-pip \
-    wget
+# ---- Install Temurin JDKs ----
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    temurin-11-jdk \
+    temurin-17-jdk \
+    temurin-21-jdk \
+    temurin-24-jdk \
+ && rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install --no-input awscli --upgrade --break-system-packages
+# ---- AWS CLI v2 ----
+RUN curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip \
+ && unzip /tmp/awscliv2.zip -d /tmp \
+ && /tmp/aws/install \
+ && rm -rf /tmp/aws /tmp/awscliv2.zip
 
-RUN curl -fsSL https://get.docker.com | sh
+# ---- tfenv (Terraform version manager) ----
+RUN git clone --depth=1 https://github.com/tfutils/tfenv.git /opt/tfenv \
+ && ln -s /opt/tfenv/bin/* /usr/local/bin
 
-RUN docker --version
+# ---- Install Terraform versions ----
+RUN tfenv install 0.12.31 \
+ && tfenv install latest \
+ && tfenv use 0.12.31
 
-RUN wget https://downloads.apache.org/maven/maven-3/3.8.8/binaries/apache-maven-3.8.8-bin.tar.gz -P /opt
+# ---- Jenkins plugins ----
+COPY plugins.txt /usr/share/jenkins/ref/plugins.txt
+RUN jenkins-plugin-cli -f /usr/share/jenkins/ref/plugins.txt
 
-#RUN apt-get -y -t stretch-backports install openjdk-11-jdk
+# ---- Sanity checks ----
+RUN java -version \
+ && ls -la /usr/lib/jvm \
+ && aws --version \
+ && terraform version \
+ && git --version \
+ && jq --version \
+ && tfenv --version \
+ && csvcut --version \
+ && docker --version
 
-RUN tar -xvzf /opt/apache-maven-3.8.8-bin.tar.gz -C /opt
+USER jenkins
 
-RUN rm /opt/apache-maven-3.8.8-bin.tar.gz
 
-RUN apt-get install jq -y
-
-RUN /bin/jenkins-plugin-cli -f /usr/share/jenkins/ref/plugins.txt || echo "Some errors occurred during plugin installation."
-
-RUN wget https://releases.hashicorp.com/terraform/0.12.31/terraform_0.12.31_linux_amd64.zip && unzip terraform_0.12.31_linux_amd64.zip && mv terraform /usr/local/bin/
+# ------------------------------------------------------------
+# ALT: If docker-cli isn't available from Debian repos
+# (Uncomment this block and remove the "docker-cli" RUN above.)
+# ------------------------------------------------------------
+# RUN apt-get update && apt-get install -y --no-install-recommends \
+#     ca-certificates curl gnupg \
+#  && install -m 0755 -d /etc/apt/keyrings \
+#  && curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg \
+#  && chmod a+r /etc/apt/keyrings/docker.gpg \
+#  && . /etc/os-release \
+#  && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $VERSION_CODENAME stable" \
+#     > /etc/apt/sources.list.d/docker.list \
+#  && apt-get update \
+#  && apt-get install -y --no-install-recommends docker-ce-cli docker-buildx-plugin docker-compose-plugin \
+#  && rm -rf /var/lib/apt/lists/*
