@@ -88,12 +88,23 @@
 
             cd ..
             git add -A
-
+            
+            echo &quot;=== Git status ===&quot;
+            git status --short
+            
+            echo
+            echo &quot;=== Staged files ===&quot;
+            git diff --cached --name-status
+            
+            echo
+            echo &quot;=== Diff summary (staged) ===&quot;
+            git diff --cached --stat
+            
             if git diff --cached --quiet; then
               echo &quot;No changes detected; nothing to push&quot;
               exit 0
             fi
-
+            
             git commit -m &quot;Jenkins backup: $(date -u +%Y-%m-%dT%H:%M:%SZ)&quot;
             git push -u origin &quot;$BRANCH&quot;
           &apos;&apos;&apos;
