@@ -1,0 +1,130 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description>Drops and rebuilds the merged_mappings table with the subject mappings for all cited studies available in hpds</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+set -o pipefail
+
+aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.csv Managed_Inputs.csv
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+
+
+conn_user=&apos;postgres&apos;
+conn_pass=`aws secretsmanager get-secret-value --secret-id &apos;rds!db-8086eb77-cd6d-48bc-9298-4380892798ca&apos; --region &apos;us-east-1&apos; --query SecretString --output text | jq -r .password`
+if [[ $? != 0 ]] || [[ -z $conn_pass ]]
+then
+	echo &quot;Secretsmanager call failed&quot;
+	exit 255
+else
+	echo &quot;Secretsmanager call succeeded&quot;
+fi
+database_psql_host_address=&apos;dictionarydb.cljahwnkfisu.us-east-1.rds.amazonaws.com&apos;
+DB=&quot;dccharmonized&quot;
+
+
+echo &quot;testing connection to db&quot;
+PGPASSWORD=&quot;$conn_pass&quot; psql --quiet \
+    --host=&quot;$database_psql_host_address&quot; \
+    --port=&quot;5432&quot; \
+    --username=&quot;$conn_user&quot; \
+    --dbname=&quot;$DB&quot; \
+    -c &quot;\q&quot;  # This command tests the connection and exits
+
+if [ $? -ne 0 ]; then
+    echo &quot;Connection test failed!&quot;
+    exit 255
+else
+	echo &quot;Connection test succeeded - conn_user=$conn_user database_psql_host_address=$database_psql_host_address DB=$DB&quot;
+fi
+
+echo &quot;Establishing necessary schemas&quot;
+PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+-c &quot;ALTER DATABASE $DB set client_min_messages=warning&quot; \
+-c &quot;CREATE SCHEMA IF NOT EXISTS hpds_mappings&quot; \
+-c &quot;DROP TABLE IF EXISTS hpds_mappings.merged_mappings&quot; \
+-c &quot;CREATE TABLE hpds_mappings.merged_mappings (dbgap_id numeric, phs text, hpds_id numeric)&quot;
+
+
+
+echo &quot;fetching applicable study/version list for dcc&quot;
+PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+-c &quot;\COPY (SELECT distinct phs from util.study_versions) to study_versions.csv WITH (FORMAT CSV, HEADER TRUE)&quot;
+
+
+
+
+IFS=&apos;,&apos;
+while read phs; do
+
+    
+    
+aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+if [[ $phs == &apos;phs000289&apos; ]] || [[ $phs == &apos;phs001402&apos; ]]; then
+	echo &quot;$phs belongs to mayovte, which has a non-compatible consent issue. skipping&quot;
+
+elif [[ ! -z `grep $phs Managed_Inputs.csv` ]]; then
+	echo &quot;$phs present in managed_inputs, fetching patient mapping&quot;
+    export query=&quot;select \&quot;Study Abbreviated Name\&quot; from Managed_Inputs where \&quot;Study Identifier\&quot; = &apos;$phs&apos;&quot;
+    echo $query
+    abv=`csvsql --query $query Managed_Inputs.csv | csvformat -E`
+	echo &quot;abv is $abv&quot;
+    mkdir $abv
+    aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv,,}/data/${abv^^}_PatientMapping.v2.csv $abv
+    sed -i &quot;s/${abv^^}/${phs}/g&quot; $abv/${abv^^}_PatientMapping.v2.csv
+    PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+    	-c &quot;\COPY hpds_mappings.merged_mappings from &apos;$abv/${abv^^}_PatientMapping.v2.csv&apos; WITH (FORMAT CSV)&quot;
+    
+    
+else 
+	echo &quot;$phs not ingested by picsure. skipping&quot;
+fi
+
+
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+ 
+done &lt; study_versions.csv
+</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>

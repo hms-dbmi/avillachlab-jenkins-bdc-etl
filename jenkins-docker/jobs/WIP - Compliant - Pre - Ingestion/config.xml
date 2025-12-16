@@ -1,0 +1,122 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>Git_Branch</name>
+          <description>The branch containing the study implementation.</description>
+          <defaultValue>main</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>study_abbreviation</name>
+          <description>The study abbreviation.</description>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.5.2">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>git@github.com:hms-dbmi/bdc-etl-curation.git</url>
+        <credentialsId>bdc-etl-curation-ro-deploy-key</credentialsId>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>*/${Git_Branch}</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="empty-list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+
+### assume etl role
+aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export STORAGE_TYPE=&apos;s3&apos;
+export S3_BUCKET=&apos;avillach-73-bdcatalyst-etl&apos;
+# Accounts and corresponding IAM roles
+#&quot;arn:aws:iam::600168050588:role/nih-nhlbi-TopMed-EC2Access-S3&quot;
+#&quot;arn:aws:iam::714862078411:role/nih-nhlbi-TopMed-EC2Access-S3&quot;
+#creds=$(aws sts assume-role --role-arn &quot;$role_arn&quot; --role-session-name &quot;get-phenotypic-data&quot;)
+#aws s3 cp --recursive &quot;s3://avillach-73-bdcatalyst-etl/${study_abbreviation,,}/decoded_data/&quot; ./decoded_data/ --quiet
+
+# This function demonstrates how we are assuming role in the validate Jenkins job
+# Function to assume an AWS role
+#assume_aws_role() {
+#  local role_arn=&quot;$1&quot;
+#
+#  echo &quot;Assuming role: $role_arn&quot;
+#  creds=$(aws sts assume-role --role-arn &quot;$role_arn&quot; --role-session-name &quot;get-phenotypic-data&quot;)
+#
+#  if [[ -z &quot;$creds&quot; ]]; then
+#    echo &quot;Failed to assume role: $role_arn&quot;
+#    return 1
+#  fi
+
+#  export AWS_ACCESS_KEY_ID=$(echo &quot;$creds&quot; | jq -r &apos;.Credentials.AccessKeyId&apos;)
+#  export AWS_SECRET_ACCESS_KEY=$(echo &quot;$creds&quot; | jq -r &apos;.Credentials.SecretAccessKey&apos;)
+#  export AWS_SESSION_TOKEN=$(echo &quot;$creds&quot; | jq -r &apos;.Credentials.SessionToken&apos;)
+#}
+
+#Update managed inputs
+#aws s3 cp Managed_Input.csv s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.csv
+#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.csv s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/Managed_Inputs.csv
+# aws s3 cp managed_inputs.tsv s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.tsv
+
+aws s3 rm s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/rawData/
+python compliant_pre_ingestion/script.py \
+  --managed-inputs-s3-bucket &quot;avillach-73-bdcatalyst-etl&quot; \
+  --managed-inputs-s3-key &quot;general/resources/Managed_Inputs.csv&quot; \
+  --personal-s3-bucket &quot;s3-test&quot; \
+  --accounts arn:aws:iam::987654321098:role/BDCDataAccess \
+             arn:aws:iam::321098765432:role/BDCDataAccess \
+  --source-role-session-name &quot;get-phenotypic-data&quot; \
+  --output-dir &quot;./validation_reports&quot;
+  
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.csv Managed_Input.csv
+aws s3 cp s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/rawData/ ./${study_abv_name,,}/ --recursive
+
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+unset STORAGE_TYPE
+unset S3_BUCKET</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>

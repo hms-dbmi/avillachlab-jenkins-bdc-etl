@@ -28,21 +28,28 @@ export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut 
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
 aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json metadata.json 
-#TODO - change this job to dictionary api job
+
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.csv Managed_Inputs.csv
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.csv ./data/Managed_Inputs.csv
+
+csvgrep -c &quot;Data Processed&quot; -m &quot;No&quot; data/Managed_Inputs.csv | csvgrep -c &quot;Data is ready to process&quot; -m &quot;Yes&quot; | csvcut -c &quot;Study Identifier&quot; | csvformat -E &gt; updated_studies.csv
+    
 jq &apos;.bio_data_catalyst[] | select(.data_type | contains(&quot;G&quot;)) | select(.study_identifier | contains(&quot;phs&quot;))| {study_identifier: .study_identifier, study_version: .study_version, consent_group_code: (.consent_group_code | .[1:])}&apos; \
 	metadata.json | jq -s | in2csv -f json &gt; study_list.csv
 IFS=&apos;,&apos;
 [ ! -f study_list.csv ]
 while read stdy_id version consent
-do
-#get count from telemetry
-curl --retry 5 --show-error --silent -X &apos;GET&apos; &quot;https://www.ncbi.nlm.nih.gov/gap/sstr/api/v1/study/${stdy_id}.${version}/summary&quot;  -H &apos;accept: application/json&apos; &gt; ${stdy_id}.$consent.response.json
-count=`jq &apos;.study.consent_groups[] | select(.code == &apos;${consent}&apos; ) | .sample_count&apos; ${stdy_id}.$consent.response.json`
-#put count in doc for easy qa
-echo &quot;$stdy_id,$consent, $count&quot; &gt;&gt; genomic_counts.csv
-#update dictionary db
-curl --request PUT --data-urlencode &quot;datasetRef=${stdy_id}&quot; --data-urlencode &quot;consentCode=c${consent}&quot; \
-            --data-urlencode &quot;sampleCount=${count}&quot; http://172.20.0.2:8086/api/consent/counts    
+  do
+  if [[ ! -z `grep $stdy_id updated_studies.csv` ]]; then
+  #get count from telemetry
+  curl --retry 5 --show-error --silent -X &apos;GET&apos; &quot;https://www.ncbi.nlm.nih.gov/gap/sstr/api/v1/study/${stdy_id}.${version}/summary&quot;  -H &apos;accept: application/json&apos; &gt; ${stdy_id}.$consent.response.json
+  count=`jq &apos;.study.consent_groups[] | select(.code == &apos;${consent}&apos; ) | .sample_count&apos; ${stdy_id}.$consent.response.json`
+  #put count in doc for easy qa
+  echo &quot;$stdy_id,$consent, $count&quot; &gt;&gt; genomic_counts.csv
+  #update dictionary db
+  curl --request PUT --data-urlencode &quot;datasetRef=${stdy_id}&quot; --data-urlencode &quot;consentCode=c${consent}&quot; \
+              --data-urlencode &quot;sampleCount=${count}&quot; http://172.20.0.2:8086/api/consent/counts    
+fi
 done &lt; study_list.csv
 
 </command>

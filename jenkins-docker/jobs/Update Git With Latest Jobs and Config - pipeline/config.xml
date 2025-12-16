@@ -1,0 +1,86 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job@1559.va_a_533730b_ea_d">
+  <actions>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobAction plugin="pipeline-model-definition@2.2277.v00573e73ddf1"/>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction plugin="pipeline-model-definition@2.2277.v00573e73ddf1">
+      <jobProperties/>
+      <triggers/>
+      <parameters/>
+      <options/>
+    </org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction>
+  </actions>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+  </properties>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@4238.va_6fb_65c1f699">
+    <script>pipeline {
+  agent any
+
+  stages {
+    stage(&apos;Backup Jenkins config to git&apos;) {
+      steps {
+        withCredentials([sshUserPrivateKey(
+          credentialsId: &apos;bdc-etl-jenkins-push&apos;,
+          keyFileVariable: &apos;SSH_KEY&apos;,
+          usernameVariable: &apos;SSH_USER&apos;
+        )]) {
+          sh &apos;&apos;&apos;#!/usr/bin/env bash
+            set -euo pipefail
+
+            # --- known_hosts (strict) ---
+            install -d -m 700 &quot;$HOME/.ssh&quot;
+            ssh-keyscan -t ed25519 github.com &gt;&gt; &quot;$HOME/.ssh/known_hosts&quot; 2&gt;/dev/null
+            chmod 600 &quot;$HOME/.ssh/known_hosts&quot;
+
+            # Make sure key path is available to child processes
+            export SSH_KEY SSH_USER
+
+            # --- Git SSH wrapper (safe for spaces in $SSH_KEY) ---
+            cat &gt; git_ssh_wrapper.sh &lt;&lt;&apos;EOF&apos;
+#!/bin/sh
+exec ssh -i &quot;$SSH_KEY&quot; \
+  -o IdentitiesOnly=yes \
+  -o StrictHostKeyChecking=yes \
+  -o UserKnownHostsFile=&quot;$HOME/.ssh/known_hosts&quot; \
+  &quot;$@&quot;
+EOF
+            chmod 700 git_ssh_wrapper.sh
+            export GIT_SSH=&quot;$PWD/git_ssh_wrapper.sh&quot;
+
+            rm -rf repo
+            git clone git@github.com:hms-dbmi/avillachlab-jenkins-bdc-etl.git repo
+            cd repo
+
+            git checkout -B jenkins-backup-nightly
+            git config user.name  &quot;jenkins&quot;
+            git config user.email &quot;jenkins@hms-dbmi.local&quot;
+
+            cd jenkins-docker
+            rm -rf jobs jobs_old var
+
+            find &quot;${JENKINS_HOME}/jobs&quot; -name &quot;config.xml&quot; -exec cp --parents {} . \\;
+            mv &quot;.${JENKINS_HOME}/jobs&quot; ./jobs
+
+            cp &quot;${JENKINS_HOME}/config.xml&quot; .
+            cp &quot;${JENKINS_HOME}/plugins.txt&quot; .
+            cp &quot;${JENKINS_HOME}/scriptApproval.xml&quot; .
+
+            git add -A
+            git commit -m &quot;Git push from Jenkins. Branch from jenkins-backup-nightly&quot; || echo &quot;No changes to commit&quot;
+            git push -u origin jenkins-backup-nightly
+          &apos;&apos;&apos;
+        }
+      }
+    }
+  }
+}</script>
+    <sandbox>true</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>

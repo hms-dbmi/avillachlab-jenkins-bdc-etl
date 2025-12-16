@@ -1,0 +1,361 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description>Generates and synchronizes compliant study metadata&#xd;
+&#xd;
+This job assumes the dbGaP ETL IAM role, identifies the latest viable metadata inputs for a given study from S3, converts them into a compliant metadata JSON, and publishes the result back to canonical S3 locations. It automatically resolves the most recent candidate files across decoded study metadata and HPDS metadata artifacts, ensuring consistent, up-to-date outputs for downstream ETL and analysis workflows.</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>study_id</name>
+          <description>The phs for the given study. E.g. phs000007</description>
+          <defaultValue>phs000007</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>study_abv</name>
+          <description>The study abbreviation. E.g. FHS</description>
+          <defaultValue>FHS</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.8.1">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>git@github.com:hms-dbmi/bdc-etl-curation.git</url>
+        <credentialsId>git</credentialsId>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>*/oct_release_updates</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="empty-list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>true</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/usr/bin/env bash
+set -euo pipefail
+
+# =============================
+# Verbosity / logging controls
+# =============================
+LOG_TS() { date +&quot;%Y-%m-%dT%H:%M:%S%z&quot;; }
+log()    { echo &quot;[$(LOG_TS)] INFO  $*&quot; &gt;&amp;2; }
+warn()   { echo &quot;[$(LOG_TS)] WARN  $*&quot; &gt;&amp;2; }
+error()  { echo &quot;[$(LOG_TS)] ERROR $*&quot; &gt;&amp;2; }
+
+# Enable AWS CLI debug if VERBOSE_AWS=1
+AWS_CLI_EXTRA=()
+if [[ &quot;${VERBOSE_AWS:-0}&quot; == &quot;1&quot; ]]; then
+  AWS_CLI_EXTRA+=(--debug)
+  log &quot;AWS CLI debug logging ENABLED&quot;
+fi
+
+# =============================
+# Config (override via env)
+# =============================
+ROLE_ARN=&quot;${ROLE_ARN:-arn:aws:iam::736265540791:role/dbgap-etl}&quot;
+ROLE_SESSION_NAME=&quot;${ROLE_SESSION_NAME:-s3-test}&quot;
+ASSUME_DURATION_SECONDS=&quot;${ASSUME_DURATION_SECONDS:-3600}&quot;
+
+S3_BUCKET=&quot;${S3_BUCKET:-avillach-73-bdcatalyst-etl}&quot;
+
+: &quot;${study_id:?study_id is required}&quot;
+: &quot;${study_abv:?study_abv is required}&quot;
+
+study_abv_lc=&quot;$(printf &apos;%s&apos; &quot;$study_abv&quot; | tr &apos;[:upper:]&apos; &apos;[:lower:]&apos;)&quot;
+
+DEST_DIR=&quot;./input/${study_id}/rawData&quot;
+OUT_DIR=&quot;./output/${study_id}/metadata&quot;
+OUT_FILE=&quot;${OUT_DIR}/${study_id}_${study_abv_lc}_metadata.json&quot;
+
+mkdir -p &quot;$DEST_DIR&quot; &quot;$OUT_DIR&quot;
+
+# =============================
+# Source prefixes (extensible)
+# =============================
+PREFIXES=(
+  &quot;${study_abv_lc}/decoded_data/&quot;
+  &quot;general/hpds/javabin/${study_id}/metadata/&quot;
+  &quot;${study_abv_lc}/rawData/&quot;
+)
+
+log &quot;Study ID            : $study_id&quot;
+log &quot;Study Abbreviation  : $study_abv ($study_abv_lc)&quot;
+log &quot;S3 Bucket           : $S3_BUCKET&quot;
+log &quot;Destination Dir     : $DEST_DIR&quot;
+log &quot;Output Metadata     : $OUT_FILE&quot;
+
+i=0
+for p in &quot;${PREFIXES[@]}&quot;; do
+  i=$((i+1))
+  log &quot;Source Prefix #${i}    : s3://${S3_BUCKET}/${p}&quot;
+done
+
+# =============================
+# Cleanup
+# =============================
+cleanup() {
+  log &quot;Cleaning up temporary credentials&quot;
+  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN STORAGE_TYPE S3_BUCKET
+}
+trap cleanup EXIT
+
+# =============================
+# Prereqs
+# =============================
+need() { command -v &quot;$1&quot; &gt;/dev/null 2&gt;&amp;1 || { error &quot;Missing required command: $1&quot;; exit 2; }; }
+
+log &quot;Validating prerequisites&quot;
+need aws
+need jq
+need python3
+need awk
+need sed
+log &quot;Prerequisites OK&quot;
+
+# =============================
+# Python deps (workspace venv)
+# =============================
+VENV_DIR=&quot;${VENV_DIR:-.venv}&quot;
+
+log &quot;Setting up Python venv: $VENV_DIR&quot;
+python3 -m venv &quot;$VENV_DIR&quot;
+
+# shellcheck disable=SC1090
+source &quot;$VENV_DIR/bin/activate&quot;
+
+log &quot;Installing Python deps into venv&quot;
+python -m pip install -U pip wheel
+python -m pip install \
+  &quot;jsonschema&gt;=4.0&quot; \
+  pyreadstat \
+  pandas \
+  lxml \
+  botocore==1.35.91 \
+  boto3==1.35.91 \
+  s3fs
+
+log &quot;Python ready: $(python -c &apos;import pandas; print(&quot;pandas=&quot;+pandas.__version__)&apos;)&quot;
+
+# =============================
+# Assume role
+# =============================
+log &quot;Assuming role: $ROLE_ARN (session=$ROLE_SESSION_NAME, duration=${ASSUME_DURATION_SECONDS}s)&quot;
+assume_json=&quot;$(mktemp)&quot;
+aws sts assume-role \
+  --duration-seconds &quot;$ASSUME_DURATION_SECONDS&quot; \
+  --role-arn &quot;$ROLE_ARN&quot; \
+  --role-session-name &quot;$ROLE_SESSION_NAME&quot; \
+  &quot;${AWS_CLI_EXTRA[@]}&quot; \
+  &gt; &quot;$assume_json&quot;
+
+log &quot;Parsing temporary credentials&quot;
+export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+AWS_ACCESS_KEY_ID=&quot;$(jq -r &apos;.Credentials.AccessKeyId&apos; &quot;$assume_json&quot;)&quot;
+AWS_SECRET_ACCESS_KEY=&quot;$(jq -r &apos;.Credentials.SecretAccessKey&apos; &quot;$assume_json&quot;)&quot;
+AWS_SESSION_TOKEN=&quot;$(jq -r &apos;.Credentials.SessionToken&apos; &quot;$assume_json&quot;)&quot;
+rm -f &quot;$assume_json&quot;
+log &quot;Role assumed successfully&quot;
+
+# =============================
+# Helpers
+# =============================
+
+# Output TSV: key&lt;TAB&gt;lastModified   (to STDOUT only)
+# Filtering rules:
+# - candidate filename must start with ${study_id}
+# - *.json candidates must end with metadata.json
+# - *.xml candidates must end with data_dict.xml
+# - manifest candidates must match *.manifest.*
+list_candidates_tsv() {
+  local prefix=&quot;$1&quot;
+  local page_count=0
+  local token=&quot;&quot;
+
+  log &quot;Listing objects under prefix: s3://$S3_BUCKET/$prefix&quot;
+
+  while :; do
+    page_count=$((page_count + 1))
+    log &quot;Fetching page $page_count (continuation-token=${token:-none})&quot;
+
+    if [[ -n &quot;$token&quot; ]]; then
+      page=&quot;$(aws s3api list-objects-v2 \
+        --bucket &quot;$S3_BUCKET&quot; \
+        --prefix &quot;$prefix&quot; \
+        --continuation-token &quot;$token&quot; \
+        &quot;${AWS_CLI_EXTRA[@]}&quot;)&quot;
+    else
+      page=&quot;$(aws s3api list-objects-v2 \
+        --bucket &quot;$S3_BUCKET&quot; \
+        --prefix &quot;$prefix&quot; \
+        &quot;${AWS_CLI_EXTRA[@]}&quot;)&quot;
+    fi
+
+    local total
+    total=&quot;$(jq &apos;.Contents | length // 0&apos; &lt;&lt;&lt;&quot;$page&quot;)&quot;
+    log &quot;Page $page_count returned $total objects&quot;
+
+    # candidates to STDOUT only
+    jq -r --arg study_id &quot;$study_id&quot; &apos;
+      (.Contents // [])
+      | .[]
+      | .Key as $k
+      | ($k | split(&quot;/&quot;) | last) as $f
+      | select(
+          ($f | startswith($study_id)) and (
+            ($f | test(&quot;\\.manifest\\..+$&quot;)) or
+            ($f | test(&quot;metadata\\.json$&quot;)) or
+            ($f | test(&quot;data_dict\\.xml$&quot;))
+          )
+        )
+      | &quot;\($k)\t\(.LastModified)&quot;
+    &apos; &lt;&lt;&lt;&quot;$page&quot;
+
+    token=&quot;$(jq -r &apos;.NextContinuationToken // empty&apos; &lt;&lt;&lt;&quot;$page&quot;)&quot;
+    [[ -z &quot;$token&quot; ]] &amp;&amp; break
+  done
+
+  log &quot;Completed listing for prefix: $prefix&quot;
+}
+
+# Input: TSV key&lt;TAB&gt;lastModified
+# Output: keys (one per selected file)
+pick_latest_per_filename() {
+  log &quot;Selecting latest object per filename using LastModified&quot;
+  awk -F&apos;\t&apos; &apos;
+    function base(path,   n, a) { n=split(path,a,&quot;/&quot;); return a[n]; }
+    {
+      k=$1; lm=$2; b=base(k);
+      if (!(b in best_lm) || lm &gt; best_lm[b]) { best_lm[b]=lm; best_key[b]=k; }
+    }
+    END { for (b in best_key) print best_key[b]; }
+  &apos;
+}
+
+download_keys() {
+  local keys_file=&quot;$1&quot;
+  local count=0
+
+  log &quot;Starting downloads&quot;
+  while IFS= read -r key; do
+    [[ -z &quot;$key&quot; ]] &amp;&amp; continue
+    count=$((count + 1))
+    local filename=&quot;${key##*/}&quot;
+    local dest_path=&quot;${DEST_DIR}/${filename}&quot;
+
+    log &quot;[$count] Downloading s3://$S3_BUCKET/$key -&gt; $dest_path&quot;
+    aws s3 cp &quot;s3://${S3_BUCKET}/${key}&quot; &quot;$dest_path&quot; \
+      --only-show-errors \
+      &quot;${AWS_CLI_EXTRA[@]}&quot;
+
+    log &quot;[$count] Download complete: $dest_path&quot;
+    echo &quot;$dest_path&quot;
+  done &lt; &quot;$keys_file&quot;
+
+  log &quot;Downloaded $count files&quot;
+}
+
+# =============================
+# Candidate resolution
+# =============================
+log &quot;Resolving candidate objects (union + latest per filename)&quot;
+
+tmp_candidates=&quot;$(mktemp)&quot;
+tmp_selected=&quot;$(mktemp)&quot;
+tmp_downloaded=&quot;$(mktemp)&quot;
+
+# Union candidates across all prefixes
+{
+  for p in &quot;${PREFIXES[@]}&quot;; do
+    list_candidates_tsv &quot;$p&quot;
+  done
+} | sort -u &gt; &quot;$tmp_candidates&quot;
+
+log &quot;Total union candidates: $(wc -l &lt; &quot;$tmp_candidates&quot;)&quot;
+
+if [[ ! -s &quot;$tmp_candidates&quot; ]]; then
+  error &quot;No candidate objects found under any configured prefixes.&quot;
+  i=0
+  for p in &quot;${PREFIXES[@]}&quot;; do
+    i=$((i+1))
+    error &quot;  Source Prefix #${i}: s3://${S3_BUCKET}/${p}&quot;
+  done
+  exit 1
+fi
+
+cut -f1,2 &quot;$tmp_candidates&quot; | pick_latest_per_filename | sort &gt; &quot;$tmp_selected&quot;
+log &quot;Final selected objects: $(wc -l &lt; &quot;$tmp_selected&quot;)&quot;
+
+log &quot;Selected S3 objects:&quot;
+awk -v bucket=&quot;$S3_BUCKET&quot; &apos;{ print &quot;  - s3://&quot; bucket &quot;/&quot; $0 }&apos; &quot;$tmp_selected&quot; &gt;&amp;2
+
+# =============================
+# Download
+# =============================
+download_keys &quot;$tmp_selected&quot; | sort &gt; &quot;$tmp_downloaded&quot;
+
+log &quot;Final downloaded files:&quot;
+sed &apos;s|^|  - |&apos; &quot;$tmp_downloaded&quot; &gt;&amp;2
+
+rm -f &quot;$tmp_candidates&quot; &quot;$tmp_selected&quot;
+
+# =============================
+# Convert + upload
+# =============================
+log &quot;Running compliant metadata conversion&quot;
+python -m compliant_metadata.convert_compliant_data_dict \
+  --input-folder &quot;${DEST_DIR}/&quot; \
+  --output-file &quot;$OUT_FILE&quot;
+
+log &quot;Conversion complete: $OUT_FILE&quot;
+
+log &quot;Uploading converted metadata (hpds path)&quot;
+aws s3 cp &quot;$OUT_FILE&quot; \
+  &quot;s3://${S3_BUCKET}/general/hpds/javabin/${study_id}/metadata/${study_id}_${study_abv_lc}_metadata.json&quot; \
+  --only-show-errors \
+  &quot;${AWS_CLI_EXTRA[@]}&quot;
+
+log &quot;Uploading converted metadata (decoded_data path)&quot;
+aws s3 cp &quot;$OUT_FILE&quot; \
+  &quot;s3://${S3_BUCKET}/${study_abv_lc}/decoded_data/${study_id}_${study_abv_lc}_metadata.json&quot; \
+  --only-show-errors \
+  &quot;${AWS_CLI_EXTRA[@]}&quot;
+
+log &quot;Uploads complete&quot;
+log &quot;Job finished successfully&quot;
+
+rm -f &quot;$tmp_downloaded&quot;</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.49">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>

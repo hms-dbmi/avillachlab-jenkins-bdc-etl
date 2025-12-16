@@ -55,21 +55,21 @@ fi
       <command>api=&apos;http://172.20.0.2:8086/api&apos;
 csvcut -c 1 conceptsToRemove.txt &gt; stigvars.txt
 #sed -i &apos;s/\\/\\\\/g&apos; conceptsWLineEndings.txt
-curl  --fail --request  PUT --header &apos;Content-Type: text/plain&apos; \
+curl  --fail --retry 5 --retry-connrefused  --retry-delay 0  --request  PUT --header &apos;Content-Type: text/plain&apos; \
           --data-binary @stigvars.txt &quot;${api}/concept/metadata/stigvars?value=true&quot; &gt; /dev/null; exit $?</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
     <hudson.tasks.Shell>
       <command>api=&apos;http://172.20.0.2:8086/api&apos;
 csvcut -c 1 approved_concepts.txt &gt; nonstigvars.txt
-curl  --fail --request PUT --header &apos;Content-Type: text/plain&apos; \
+curl  --fail --retry 5 --retry-connrefused  --retry-delay 0 --request PUT --header &apos;Content-Type: text/plain&apos; \
           --data-binary @nonstigvars.txt &quot;${api}/concept/metadata/stigvars?value=false&quot; &gt; /dev/null; exit $?</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>
   <publishers/>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>

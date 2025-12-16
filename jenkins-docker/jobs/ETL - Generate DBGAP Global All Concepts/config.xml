@@ -75,9 +75,9 @@ find resources/ -type f -exec rm -rf {} \;
 
 rm -rf pic-sure-hpds/
 
-aws s3 cp ${managed_inputs} data/
+#aws s3 cp ${managed_inputs} data/
 
-aws s3 cp ${metadata_file} data/metadata.json
+#aws s3 cp ${metadata_file} data/metadata.json
 
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
@@ -90,17 +90,17 @@ export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/ data/ --recursive
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/globalvars/study_consents/ data/ --recursive
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/mappings/mapping.postrootnodes.csv mappings/mapping.csv
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/ data/ --recursive --no-progress
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/globalvars/study_consents/ data/ --recursive --no-progress
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/mappings/mapping.postrootnodes.csv mappings/mapping.csv --no-progress
 
 cat data/studies_consents_mapping.csv &gt;&gt; mappings/mapping.csv
 
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/resources/job.config resources/
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/resources/job.config resources/ --no-progress
 
 java -jar jars/GenerateAllConcepts.jar -propertiesfile resources/job.config
 
-aws s3 cp completed/GLOBAL_allConcepts.csv s3://avillach-73-bdcatalyst-etl/general/completed/ </command>
+aws s3 cp completed/GLOBAL_allConcepts.csv s3://avillach-73-bdcatalyst-etl/general/completed/  --no-progress</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>

@@ -1,8 +1,8 @@
 <?xml version='1.1' encoding='UTF-8'?>
-<flow-definition plugin="workflow-job@1400.v7fd111b_ec82f">
+<flow-definition plugin="workflow-job@1559.va_a_533730b_ea_d">
   <actions>
-    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobAction plugin="pipeline-model-definition@2.2218.v56d0cda_37c72"/>
-    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction plugin="pipeline-model-definition@2.2218.v56d0cda_37c72">
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobAction plugin="pipeline-model-definition@2.2277.v00573e73ddf1"/>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction plugin="pipeline-model-definition@2.2277.v00573e73ddf1">
       <jobProperties/>
       <triggers/>
       <parameters/>
@@ -20,96 +20,206 @@ BDC Managed Inputs should be updated.&#xd;
     <org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty>
       <abortPrevious>false</abortPrevious>
     </org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
-      <autoRebuild>false</autoRebuild>
-      <rebuildDisabled>false</rebuildDisabled>
-    </com.sonyericsson.rebuild.RebuildSettings>
   </properties>
-  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@4000.v5198556e9cea_">
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@4238.va_6fb_65c1f699">
     <script>import groovy.json.JsonSlurper;
+
 pipeline {
-    agent any 
+    agent any
     stages {
-        stage(&apos;Import data(fully compliant studies)&apos;) {
+        stage(&apos;Import data (fully compliant studies)&apos;) {
             steps {
-                withAWS(role:&apos;dbgap-etl&apos;, roleAccount:&apos;736265540791&apos;, duration: 3600, roleSessionName: &apos;subject-multi-pipeline&apos;) {
-                    s3Download(file:&apos;Managed_Inputs.csv&apos;, bucket:&apos;avillach-73-bdcatalyst-etl&apos;, path:&apos;general/resources/Managed_Inputs.csv&apos;, force:true)
+                withAWS(role: &apos;dbgap-etl&apos;, roleAccount: &apos;736265540791&apos;, duration: 3600, roleSessionName: &apos;subject-multi-pipeline&apos;) {
+                    s3Download(file: &apos;Managed_Inputs.csv&apos;, bucket: &apos;avillach-73-bdcatalyst-etl&apos;, path: &apos;general/resources/Managed_Inputs.csv&apos;, force: true)
                 }
-                
+
                 script {
+
                     def inputs = readCSV file: &apos;Managed_Inputs.csv&apos;, format: CSVFormat.DEFAULT.withHeader()
                     def importRuns = [:]
                     def inputCount = 0
                     inputs.each() {
-                        if  (
-                            it[&apos;Data is ready to process&apos;] == &apos;Yes&apos; &amp; it[&quot;Data Processed&quot;] == &apos;No&apos; &amp; it[&quot;Has Multi&quot;] == &apos;Yes&apos;
-                            &amp; (it[&apos;Study Type&apos;].equalsIgnoreCase(&apos;topmed&apos;) || it[&apos;Study Type&apos;].equalsIgnoreCase(&apos;parent&apos;) || it[&apos;Study Type&apos;].equalsIgnoreCase(&apos;substudy&apos;)) 
+                        if (
+                                it[&apos;Data is ready to process&apos;] == &apos;Yes&apos; &amp; it[&quot;Data Processed&quot;] == &apos;No&apos; &amp; it[&quot;Has Multi&quot;] == &apos;Yes&apos;
+                                        &amp; (it[&apos;Study Type&apos;].equalsIgnoreCase(&apos;topmed&apos;) || it[&apos;Study Type&apos;].equalsIgnoreCase(&apos;parent&apos;) || it[&apos;Study Type&apos;].equalsIgnoreCase(&apos;substudy&apos;) 
+                                        || it[&apos;Study Type&apos;].equalsIgnoreCase(&apos;compliant&apos;))
                         ) {
-                             def stdy_id = it[&quot;Study Identifier&quot;]
-                             importRuns[&quot;importRuns${stdy_id}&quot;] = {
+
+                            def stdy_id = it[&quot;Study Identifier&quot;]
+                            importRuns[&quot;importRuns${stdy_id}&quot;] = {
                                 build job: &apos;ETL - Pull Data from NHLBI S3&apos;,
-                                    parameters: [
-                                        string(name: &apos;study_abv_name&apos;, value: it[&apos;Study Abbreviated Name&apos;]),
-                                        string(name: &apos;nhlbi_account_number&apos;, value: it[&apos;Pheno Ingest NHLBI Account&apos;]),
-                                        string(name: &apos;bucket_s3_names&apos;, value: it[&apos;Pheno Ingest buckets&apos;])
-                                    ]
-                             }
+                                        parameters: [
+                                                string(name: &apos;study_abv_name&apos;, value: it[&apos;Study Abbreviated Name&apos;]),
+                                                string(name: &apos;nhlbi_account_number&apos;, value: it[&apos;Pheno Ingest NHLBI Account&apos;]),
+                                                string(name: &apos;bucket_s3_names&apos;, value: it[&apos;Pheno Ingest buckets&apos;])
+                                        ]
+                            }
+
                         }
                     }
                     parallel importRuns
                 }
             }
         }
-        
+
+        stage(&apos;Clean Metadata Directories&apos;) {
+            steps {
+                script {
+                    build job: &apos;ETL - Clear Metadata Directories&apos;
+                }
+            }
+        }
+
+        stage(&apos;Refreshing Curated Data Dictionaries&apos;) {
+            steps {
+                script {
+                    build job: &apos;ETL - Import DBGAP Dictionaries to s3&apos;
+                }
+            }
+        }
+
+        stage(&apos;Curate Data Dictionaries (fully compliant studies)&apos;) {
+            steps {
+                withAWS(role: &apos;dbgap-etl&apos;, roleAccount: &apos;736265540791&apos;, duration: 3600, roleSessionName: &apos;subject-multi-pipeline&apos;) {
+                    s3Download(file: &apos;Managed_Inputs.csv&apos;, bucket: &apos;avillach-73-bdcatalyst-etl&apos;, path: &apos;general/resources/Managed_Inputs.csv&apos;, force: true)
+                }
+
+                script {
+                    def inputs = readCSV file: &apos;Managed_Inputs.csv&apos;, format: CSVFormat.DEFAULT.withHeader()
+                    def importRuns = [:]
+                    def inputCount = 0
+                    inputs.each() {
+                        if (
+                                it[&apos;Data is ready to process&apos;] == &apos;Yes&apos; &amp; it[&quot;Data Processed&quot;] == &apos;No&apos; &amp; it[&quot;Has Multi&quot;] == &apos;Yes&apos;
+                                        &amp; (it[&apos;Study Type&apos;].equalsIgnoreCase(&apos;topmed&apos;) || it[&apos;Study Type&apos;].equalsIgnoreCase(&apos;parent&apos;) || it[&apos;Study Type&apos;].equalsIgnoreCase(&apos;substudy&apos;)) || it[&apos;Study Type&apos;].equalsIgnoreCase(&apos;compliant&apos;)
+                        ) {
+                            def stdy_id = it[&quot;Study Identifier&quot;]
+                            importRuns[&quot;importRuns${stdy_id}&quot;] = {
+                                build job: &apos;Curation - Compliant Data Dictionary to Metadata&apos;,
+                                        parameters: [
+                                                string(name: &apos;study_abv&apos;, value: it[&apos;Study Abbreviated Name&apos;]),
+                                                string(name: &apos;study_id&apos;, value: it[&apos;Study Identifier&apos;])
+                                        ]
+                            }
+                        }
+                    }
+                    parallel importRuns
+                }
+            }
+        }
+
+        stage(&apos;Import Metadata&apos;) {
+            steps{
+                script {
+                    build job: &apos;ETL - Import Metadata From git&apos;
+                }
+            }
+        }
+
+        stage(&apos;Generate Missing Subject and Sample Files&apos;) {
+            steps {
+                withAWS(role: &apos;dbgap-etl&apos;, roleAccount: &apos;736265540791&apos;, duration: 3600, roleSessionName: &apos;subject-multi-pipeline&apos;) {
+                    s3Download(file: &apos;Managed_Inputs.csv&apos;, bucket: &apos;avillach-73-bdcatalyst-etl&apos;, path: &apos;general/resources/Managed_Inputs.csv&apos;, force: true)
+                }
+
+                script {
+                    def inputs = readCSV file: &apos;Managed_Inputs.csv&apos;, format: CSVFormat.DEFAULT.withHeader()
+                    def inputCount = 0
+                    inputs.each() {
+                        if (it[&apos;Data is ready to process&apos;] == &apos;Yes&apos; &amp; it[&quot;Data Processed&quot;] == &apos;No&apos;) {
+                            def stdy_id = it[&quot;Study Identifier&quot;]
+                            build job: &apos;Curation - Create Sample and Subject Files&apos;, parameters: [
+                                        string(name: &apos;study_abbreviation&apos;, value: it[&apos;Study Abbreviated Name&apos;]),
+                                        string(name: &apos;study_phs&apos;, value: it[&apos;Study Identifier&apos;]),
+                                        string(name: &apos;version&apos;, value: it[&apos;Version&apos;]),
+                                        string(name: &apos;phase&apos;, value: it[&apos;Phase&apos;]),
+                                        string(name: &apos;study_full_name&apos;, value: it[&apos;Study Full Name&apos;])
+                                ]
+                        }
+                    }
+                }
+            }
+        }
+
+        stage(&apos;Validate Duplicate Sample and Subject Multi Files Don\&apos;t Exist&apos;) {
+            steps {
+                script {
+                    build job: &apos;Validation Sample and Subject Multi Files&apos;
+                }
+            }
+        }
+
         stage(&apos;Decode Data&apos;) {
             steps {
-                withAWS(role:&apos;dbgap-etl&apos;, roleAccount:&apos;736265540791&apos;, duration: 3600, roleSessionName: &apos;subject-multi-pipeline&apos;) {
-                    s3Download(file:&apos;Managed_Inputs.csv&apos;, bucket:&apos;avillach-73-bdcatalyst-etl&apos;, path:&apos;general/resources/Managed_Inputs.csv&apos;, force:true)
+                withAWS(role: &apos;dbgap-etl&apos;, roleAccount: &apos;736265540791&apos;, duration: 3600, roleSessionName: &apos;subject-multi-pipeline&apos;) {
+                    s3Download(file: &apos;Managed_Inputs.csv&apos;, bucket: &apos;avillach-73-bdcatalyst-etl&apos;, path: &apos;general/resources/Managed_Inputs.csv&apos;, force: true)
                 }
-                
+
                 script {
                     def inputs = readCSV file: &apos;Managed_Inputs.csv&apos;, format: CSVFormat.DEFAULT.withHeader()
                     def decodeRuns = [:]
                     def inputCount = 0
                     inputs.each() {
-                        if  (it[&apos;Data is ready to process&apos;] == &apos;Yes&apos; &amp; it[&quot;Data Processed&quot;] == &apos;No&apos; &amp; it[&quot;Has Multi&quot;] == &apos;Yes&apos;) {
-                             def stdy_id = it[&quot;Study Identifier&quot;]
-                             decodeRuns[&quot;decodeRuns${stdy_id}&quot;] = {
-                                build job: &apos;ETL - DBGap Decode Data&apos;,
-                                    parameters: [
-                                        string(name: &apos;abv_name&apos;, value: it[&apos;Study Abbreviated Name&apos;]),
-                                        string(name: &apos;stdy_id&apos;, value: it[&apos;Study Identifier&apos;])
-                                    ]
-                             }
+                        if (it[&apos;Data is ready to process&apos;] == &apos;Yes&apos; &amp; it[&quot;Data Processed&quot;] == &apos;No&apos; &amp; it[&quot;Has Multi&quot;] == &apos;Yes&apos;) {
+                            def stdy_id = it[&quot;Study Identifier&quot;]
+
+                            if ((it[&apos;Study Identifier&apos;] == &apos;phs000286&apos; &amp;&amp; it[&apos;Version&apos;] == &apos;v7&apos;) ||
+                                    (it[&apos;Study Identifier&apos;] == &apos;phs000285&apos; &amp;&amp; it[&apos;Version&apos;] == &apos;v3&apos;) ||
+                                    (it[&apos;Study Identifier&apos;] == &apos;phs000280&apos; &amp;&amp; it[&apos;Version&apos;] == &apos;v8&apos;)) {
+                                decodeRuns[&quot;decodeRuns${stdy_id}&quot;] = {
+                                    build job: &apos;Fix Column Alignment Issue&apos;,
+                                            parameters: [
+                                                    string(name: &apos;abv_name&apos;, value: it[&apos;Study Abbreviated Name&apos;]),
+                                                    string(name: &apos;stdy_id&apos;, value: it[&apos;Study Identifier&apos;])
+                                            ]
+                                }
+                            } else {
+                                decodeRuns[&quot;decodeRuns${stdy_id}&quot;] = {
+                                    build job: &apos;ETL - DBGap Decode Data&apos;,
+                                            parameters: [
+                                                    string(name: &apos;abv_name&apos;, value: it[&apos;Study Abbreviated Name&apos;]),
+                                                    string(name: &apos;stdy_id&apos;, value: it[&apos;Study Identifier&apos;])
+                                            ]
+                                }
+                            }
+
                         }
                     }
                     parallel decodeRuns
                 }
             }
         }
+
         stage(&apos;Sequence Patients&apos;) {
             steps {
-                withAWS(role:&apos;dbgap-etl&apos;, roleAccount:&apos;736265540791&apos;, duration: 3600, roleSessionName: &apos;semi-compliant-pipeline&apos;) {
-                    s3Download(file:&apos;Managed_Inputs.csv&apos;, bucket:&apos;avillach-73-bdcatalyst-etl&apos;, path:&apos;general/resources/Managed_Inputs.csv&apos;, force:true)
+                withAWS(role: &apos;dbgap-etl&apos;, roleAccount: &apos;736265540791&apos;, duration: 3600, roleSessionName: &apos;semi-compliant-pipeline&apos;) {
+                    s3Download(file: &apos;Managed_Inputs.csv&apos;, bucket: &apos;avillach-73-bdcatalyst-etl&apos;, path: &apos;general/resources/Managed_Inputs.csv&apos;, force: true)
                 }
-                
+
                 script {
                     def inputs = readCSV file: &apos;Managed_Inputs.csv&apos;, format: CSVFormat.DEFAULT.withHeader()
                     def sequenceRuns = [:]
-                    def inputCount = 0
+                    def hrmnCount = 0
                     inputs.each() {
-                        inputCount += 1;
-                        if  (it.get(&apos;Data is ready to process&apos;) == &apos;Yes&apos; &amp; it.get(&apos;Data Processed&apos;) == &apos;No&apos; &amp; it.get(&apos;Has Multi&apos;) == &apos;Yes&apos;) {
-                            echo &apos;Sequencing patients for &apos; + it[1]
-                             sequenceRuns[&quot;sequenceRuns${inputCount}&quot;] = {
-                                build job: &apos;ETL - DBGap Sequence Patients&apos;, 
-                                    parameters: [
-                                        string(name: &apos;abv_name&apos;, value: it.get(&quot;Study Abbreviated Name&quot;))
-                                    ]
-                             }
+
+                        if (it.get(&apos;Data is ready to process&apos;) == &apos;Yes&apos; &amp; it.get(&apos;Data Processed&apos;) == &apos;No&apos; &amp; it.get(&apos;Has Multi&apos;) == &apos;Yes&apos;) {
+                            def stdy_id = it[&quot;Study Identifier&quot;]
+                            if (it.get(&apos;DCC Harmonized&apos;) == &apos;Yes&apos;) {
+                                hrmnCount++;
+                            }
+                            sequenceRuns[&quot;sequenceRuns${stdy_id}&quot;] = {
+                                build job: &apos;ETL - DBGap Sequence Patients&apos;,
+                                        parameters: [
+                                                string(name: &apos;abv_name&apos;, value: it.get(&quot;Study Abbreviated Name&quot;))
+                                        ]
+                            }
                         }
                     }
                     parallel sequenceRuns
+                    if (hrmnCount &gt; 0) {
+                        echo &apos;Harmonized study/studies updated, refreshing DCC Harmonized with updated patient nums&apos;
+                        build job: &apos;ETL - Update DCC Harmonized&apos;
+                    }
                 }
             }
         }
@@ -117,10 +227,10 @@ pipeline {
             steps {
                 script {
                     build job: &apos;ETL - Generate Metadata&apos;
-                }     
-            } 
+                }
+            }
         }
-        stage(&apos;Generate Global Variables&apos;) { 
+        stage(&apos;Generate Global Variables&apos;) {
             steps {
                 script {
                     build job: &apos;ETL - Generate DBGAP Global Variables&apos;
@@ -130,23 +240,23 @@ pipeline {
                 }
             }
         }
-        stage(&apos;Create Mapping Files for Studies Not Processed Yet&apos;) { 
+        stage(&apos;Create Mapping Files for Studies Not Processed Yet&apos;) {
             steps {
-                
+
                 script {
                     def mappingRuns = [:]
                     mappingRuns[&quot;noncomp-mapping&quot;] = {
                         build job: &apos;ETL - Generate Non_DBGAP Mapping Files&apos;
                     }
                     mappingRuns[&quot;comp-mapping&quot;] = {
-                       build job: &apos;ETL - Generate DBGAP Mapping Files&apos;
+                        build job: &apos;ETL - Generate DBGAP Mapping Files&apos;
                     }
                     parallel mappingRuns
                 }
             }
         }
-        
-        stage(&apos;Generate All Concepts for Studies Not Processed Yet&apos;) { 
+
+        stage(&apos;Generate All Concepts for Studies Not Processed Yet&apos;) {
             steps {
                 script {
                     def allConceptsRuns = [:]
@@ -154,20 +264,14 @@ pipeline {
                         build job: &apos;ETL - Generate Non-DBGap All Concepts with Data Type Analyzer&apos;
                     }
                     allConceptsRuns[&quot;comp-allconcepts&quot;] = {
-                       build job: &apos;ETL - Generate DBGAP All Concepts with Data Type Analyzer&apos;
+                        build job: &apos;ETL - Generate DBGAP All Concepts with Data Type Analyzer&apos;
                     }
                     parallel allConceptsRuns
                 }
             }
         }
-        
-        stage(&apos;Refreshing Curated Data Dictionaries&apos;) {
-            steps {
-                script {
-                    build job: &apos;ETL - Import Metadata From git&apos;
-                }
-            }
-        }
+
+
         stage(&apos;Generating Genomic Index Files Where Needed&apos;) {
             steps {
                 script {

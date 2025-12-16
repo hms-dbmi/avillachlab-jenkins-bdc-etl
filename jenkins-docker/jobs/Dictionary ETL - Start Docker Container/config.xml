@@ -43,8 +43,7 @@
   <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Shell>
-      <command>#!/bin/bash
-### Postgres config
+      <command>### Postgres config
 pw=`aws secretsmanager get-secret-value --secret-id &apos;rds!db-8086eb77-cd6d-48bc-9298-4380892798ca&apos; --region &apos;us-east-1&apos; --query SecretString --output text | jq -r .password`
 echo &quot;POSTGRES_PASSWORD=&apos;${pw}&apos;&quot; &gt;&gt; .env
 echo &apos;POSTGRES_HOST=dictionarydb.cljahwnkfisu.us-east-1.rds.amazonaws.com&apos; &gt;&gt; .env
@@ -55,9 +54,8 @@ echo &apos;POSTGRES_HOST=dictionarydb.cljahwnkfisu.us-east-1.rds.amazonaws.com&a
       <command>docker compose down
 docker compose build --no-cache
 docker compose up -d
+docker inspect dictionaryetl | jq -r &apos;.[] | .NetworkSettings.Networks.etlnetwork.IPAddress&apos;
 
-docker inspect dictionaryetl | jq -r &apos;.[] | .NetworkSettings.Networks.&quot;etlnetwork&quot;.IPAddress&apos;
-docker inspect jenkins | jq -r &apos;.[] | .NetworkSettings.Networks.&quot;etlnetwork&quot;.IPAddress&apos;
 </command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>

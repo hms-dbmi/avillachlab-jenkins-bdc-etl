@@ -32,7 +32,7 @@
     </userRemoteConfigs>
     <branches>
       <hudson.plugins.git.BranchSpec>
-        <name>*/master</name>
+        <name>*/Test-Updated-Jars</name>
       </hudson.plugins.git.BranchSpec>
     </branches>
     <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
@@ -64,6 +64,7 @@ mkdir processing
 mkdir mappings
 mkdir resources
 mkdir reports
+mkdir logs
 
 find data/ -type f -exec rm -rf {} \;
 find data/ -type d -exec rm -rf {} \;
@@ -93,7 +94,7 @@ while read abv_name stdy_id stdy_type data_ready data_processed has_multi
 do
   if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]] &amp;&amp; [[ ${data_processed,,} == &quot;no&quot; ]]; then
 
-	  if [[ ${stdy_type,,} == &quot;parent&quot; ]] || [[ ${stdy_type,,} == &quot;topmed&quot; ]] || [[ ${stdy_type,,} == &quot;substudy&quot; ]]; then
+	  if [[ ${stdy_type,,} == &quot;parent&quot; ]] || [[ ${stdy_type,,} == &quot;topmed&quot; ]] || [[ ${stdy_type,,} == &quot;substudy&quot; ]] || [[ ${stdy_type,,} == &quot;compliant&quot; ]]; then
       	echo &quot;Processing ${stdy_id} ${abv_name}&quot;
       
 		find data/ -type f -exec rm -rf {} \;
@@ -139,8 +140,8 @@ do
         java -jar jars/MergePartitions.jar -propertiesfile resources/job.config
 
         if [[ ! -s completed/${abv_name^^}_allConcepts.csv ]]; then
-        	echo &quot;ALLCONCEPTS for ${abv_name} is empty!&quot;
-        	exit 255
+        	echo &quot;ALLCONCEPTS for ${abv_name} is empty!&quot; &gt;&gt; review_log.txt
+        	#exit 255
         fi
         # assume role to handle larger data sets 
         unset AWS_ACCESS_KEY_ID

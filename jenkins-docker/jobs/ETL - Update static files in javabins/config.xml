@@ -49,10 +49,10 @@ export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
-ts=$(date &apos;+%m-%d-%y&apos;)
+ts=$(date &apos;+%m-%d-%yT%H&apos;)
 
 #aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/biodatacatalyst_javabins_data_analyzer_${ts}.tar.gz s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${S3_DATA_SET_TAR_NAME} .
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${S3_DATA_SET_TAR_NAME} . --no-progress
 
 tar xf ${S3_DATA_SET_TAR_NAME}
 
@@ -65,10 +65,10 @@ export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos
 export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 if ($updateStudyMeta) then
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json metadata.json
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json metadata.json --no-progress
 fi
 if ($updateStigvars) then
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/conceptsToRemove.txt .
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/conceptsToRemove.txt . --no-progress
 fi
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
@@ -82,7 +82,7 @@ export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apo
 
 tar cf biodatacatalyst_javabins_data_analyzer_${ts}.tar columnMeta.csv *.javabin encryption_key metadata.json conceptsToRemove.txt
 
-aws s3 cp biodatacatalyst_javabins_data_analyzer_${ts}.tar s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/
+aws s3 cp biodatacatalyst_javabins_data_analyzer_${ts}.tar s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/ --no-progress
 
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
@@ -107,7 +107,7 @@ echo &quot;s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/biodatacatalyst_
     </hudson.tasks.ArtifactArchiver>
   </publishers>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>

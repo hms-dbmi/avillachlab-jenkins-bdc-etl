@@ -17,7 +17,9 @@
       <parameterDefinitions>
         <hudson.model.StringParameterDefinition>
           <name>git_hash</name>
-          <defaultValue>genomicIngestion</defaultValue>
+          <description>old = genomicIngestion
+change = main</description>
+          <defaultValue>main</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
@@ -28,6 +30,7 @@
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
         <url>https://github.com/hms-dbmi/pic-sure-hpds</url>
+        <credentialsId>git</credentialsId>
       </hudson.plugins.git.UserRemoteConfig>
     </userRemoteConfigs>
     <branches>
@@ -43,7 +46,7 @@
   <disabled>false</disabled>
   <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
   <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
-  <jdk>(System)</jdk>
+  <jdk>jdk-24</jdk>
   <triggers/>
   <concurrentBuild>false</concurrentBuild>
   <builders>
@@ -83,13 +86,13 @@ export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apo
 
 cd &quot;${WORKSPACE}&quot;/docker/pic-sure-hpds-etl/
 
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/completed/allConcepts_data_analyzer.csv hpds/allConcepts.csv
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/completed/allConcepts_data_analyzer.csv hpds/allConcepts.csv --no-progress
 
 cat /dev/urandom | tr -dc &apos;a-zA-Z0-9&apos; | fold -w 32 | head -n 1 &gt; hpds/encryption_key
 
 #aws s3 cp s3://avillach-73-bdcatalyst-etl/general/resources/docker-compose-csv-loader.yml .
 
-docker run -i -v &quot;$(pwd)&quot;/hpds:/opt/local/hpds -v &quot;$(pwd)&quot;/hpds:/opt/local/phenocube -eNO_ROLLUP=NO_ROLLUP -eHEAPSIZE=4096 -eLOADER_NAME=CSVLoaderNewSearch ${HPDS_ETL_IMAGE}
+docker run -i -v &quot;$(pwd)&quot;/hpds:/opt/local/hpds -v &quot;$(pwd)&quot;/hpds:/opt/local/phenocube -eNO_ROLLUP=NO_ROLLUP -eHEAPSIZE=8192 -eLOADER_NAME=CSVLoaderNewSearch ${HPDS_ETL_IMAGE}
 
 #docker-compose -f docker-compose-csv-loader.yml up
 unset AWS_ACCESS_KEY_ID
@@ -104,19 +107,19 @@ export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apo
 
 cd hpds/
 
-ts=$(date &apos;+%m-%d-%y&apos;)
+ts=$(date &apos;+%m-%d-%yT%H&apos;)
 
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json metadata.json
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json metadata.json --no-progress
 
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/conceptsToRemove.txt .
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/conceptsToRemove.txt . --no-progress
 
 #docker run -i -v &quot;$(pwd)&quot;:/opt/local/hpds -eLOADER_NAME=UpdateClinicalVariableCounts $HPDS_ETL_IMAGE
 
 tar -cf biodatacatalyst_javabins_data_analyzer_${ts}.tar columnMeta.csv *.javabin encryption_key metadata.json conceptsToRemove.txt
 
-aws s3 cp biodatacatalyst_javabins_data_analyzer_${ts}.tar s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/
+aws s3 cp biodatacatalyst_javabins_data_analyzer_${ts}.tar s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/ --no-progress
 
-aws s3 cp columnMeta.csv s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/columnMeta/columnMeta.csv
+aws s3 cp columnMeta.csv s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/columnMeta/columnMeta.csv --no-progress
 
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
