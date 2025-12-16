@@ -22,7 +22,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # switch to the Docker Inc repo approach (see alt block below).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     docker-cli \
-    docker-compose-plugin \
  && rm -rf /var/lib/apt/lists/*
 
 # ---- Adoptium (Temurin) apt repo ----
