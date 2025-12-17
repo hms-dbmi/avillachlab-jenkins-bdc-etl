@@ -46,7 +46,6 @@ RUN set -eux; \
   install -m 0755 -d /etc/apt/keyrings; \
   curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor -o /etc/apt/keyrings/adoptium.gpg; \
   . /etc/os-release; \
-  # FORCE bookworm here to avoid 404s if the base image drifts to trixie/testing
   echo "deb [signed-by=/etc/apt/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb bookworm main" \
     > /etc/apt/sources.list.d/adoptium.list
 
@@ -58,16 +57,16 @@ RUN set -eux; \
     csvkit \
     postgresql-client \
     python3 python3-venv python3-pip \
-    # removed temurin-24-jdk as it is likely not in the stable apt repo yet
-    temurin-11-jdk temurin-17-jdk temurin-21-jdk \
+    temurin-11-jdk temurin-17-jdk temurin-21-jdk temurin-24-jdk \
   ; \
   rm -rf /var/lib/apt/lists/*
 
 # ---- AWS CLI v2 ----
-RUN curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
- && unzip /tmp/awscliv2.zip -d /tmp \
- && /tmp/aws/install \
- && rm -rf /tmp/aws /tmp/awscliv2.zip
+RUN set -eux; \
+  curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip \
+  && unzip /tmp/awscliv2.zip -d /tmp \
+  && /tmp/aws/install \
+  && rm -rf /tmp/aws /tmp/awscliv2.zip
 
 # ---- tfenv (Terraform version manager) ----
 RUN git clone --depth=1 https://github.com/tfutils/tfenv.git /opt/tfenv \
