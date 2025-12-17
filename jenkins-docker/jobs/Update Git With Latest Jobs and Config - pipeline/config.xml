@@ -52,7 +52,7 @@
 
             # --- sanity: instance profile auth for AWS ---
             command -v aws &gt;/dev/null 2&gt;&amp;1
-            aws sts get-caller-identity --output json &gt;/dev/null
+            aws sts get-caller-identity --output json &gt; /tmp/aws-caller.json
 
             # --- GitHub SSH setup ---
             install -d -m 700 &quot;$HOME/.ssh&quot;
@@ -83,47 +83,54 @@
             fi
             git pull --ff-only origin &quot;$BRANCH&quot; 2&gt;/dev/null || true
 
-            # --- build minimal backup set (NO SECRETS) ---
-            TS=&quot;$(date -u +%Y-%m-%dT%H%M%SZ)&quot;
-            DEST_SNAP=&quot;${S3_BASE}/snapshots/${TS}/&quot;
+            # --- S3 model: overwrite is fine (bucket versioning keeps history) ---
             DEST_LATEST=&quot;${S3_BASE}/latest/&quot;
 
-            SNAP_DIR=&quot;$WORKDIR/jenkins_home_min&quot;
-            mkdir -p &quot;$SNAP_DIR/jobs&quot;
+            # Strict allowlist sync direct from JENKINS_HOME (NO SECRETS, NO WORKSPACE, NO BUILDS)
+            aws s3 sync &quot;${JENKINS_HOME}/&quot; &quot;$DEST_LATEST&quot; \
+              --delete \
+              --only-show-errors \
+              --exclude &quot;*&quot; \
+              --include &quot;config.xml&quot; \
+              --include &quot;plugins.txt&quot; \
+              --include &quot;scriptApproval.xml&quot; \
+              --include &quot;jenkins.model.JenkinsLocationConfiguration.xml&quot; \
+              --include &quot;nodes/**&quot; \
+              --include &quot;jobs/**/config.xml&quot;
 
-            # Controller-level files (non-secret)
-            for f in config.xml plugins.txt scriptApproval.xml jenkins.model.JenkinsLocationConfiguration.xml; do
-              [ -f &quot;${JENKINS_HOME}/${f}&quot; ] &amp;&amp; cp -f &quot;${JENKINS_HOME}/${f}&quot; &quot;$SNAP_DIR/&quot; || true
-            done
-
-            # Nodes (agent defs)
-            [ -d &quot;${JENKINS_HOME}/nodes&quot; ] &amp;&amp; cp -a &quot;${JENKINS_HOME}/nodes&quot; &quot;$SNAP_DIR/&quot; || true
-
-            # Jobs: config.xml only
-            (
-              cd &quot;${JENKINS_HOME}/jobs&quot;
-              find . -type f -name &quot;config.xml&quot; -print0 \
-                | tar --null -T - -cf - \
-                | (cd &quot;$SNAP_DIR/jobs&quot; &amp;&amp; tar -xf -)
-            )
-
-            # --- S3 upload (instance profile auth) ---
-            aws s3 sync &quot;$SNAP_DIR/&quot; &quot;$DEST_SNAP&quot;   --only-show-errors
-            aws s3 sync &quot;$SNAP_DIR/&quot; &quot;$DEST_LATEST&quot; --delete --only-show-errors
+            # Write a small manifest to help pick restore points (versions of this file are your index)
+            cat &gt; /tmp/jenkins-home-backup-manifest.json &lt;&lt;EOF
+            {
+              &quot;ts_utc&quot;: &quot;$(date -u +%Y-%m-%dT%H:%M:%SZ)&quot;,
+              &quot;s3_latest_prefix&quot;: &quot;${DEST_LATEST}&quot;,
+              &quot;jenkins_home&quot;: &quot;${JENKINS_HOME}&quot;,
+              &quot;caller_identity&quot;: $(cat /tmp/aws-caller.json)
+            }
+EOF
+            aws s3 cp /tmp/jenkins-home-backup-manifest.json &quot;${DEST_LATEST}_manifest.json&quot; --only-show-errors
 
             # --- Git backup (rolling latest view; NO SECRETS) ---
             cd jenkins-docker
             rm -rf jobs jobs_old var nodes
             mkdir -p jobs
 
-            cp -a &quot;$SNAP_DIR/jobs/.&quot; jobs/
-            [ -d &quot;$SNAP_DIR/nodes&quot; ] &amp;&amp; cp -a &quot;$SNAP_DIR/nodes&quot; . || true
+            # jobs configs into repo (config.xml only)
+            (
+              cd &quot;${JENKINS_HOME}/jobs&quot;
+              find . -type f -name &quot;config.xml&quot; -print0 \
+                | tar --null -T - -cf - \
+                | (cd &quot;$WORKDIR/repo/jenkins-docker/jobs&quot; &amp;&amp; tar -xf -)
+            )
 
+            # controller-level files (non-secret)
             for f in config.xml plugins.txt scriptApproval.xml jenkins.model.JenkinsLocationConfiguration.xml; do
-              [ -f &quot;$SNAP_DIR/$f&quot; ] &amp;&amp; cp -f &quot;$SNAP_DIR/$f&quot; . || true
+              [ -f &quot;${JENKINS_HOME}/${f}&quot; ] &amp;&amp; cp -f &quot;${JENKINS_HOME}/${f}&quot; . || true
             done
 
-            # Hard guard: never commit secrets/credentials
+            # nodes (agent defs)
+            [ -d &quot;${JENKINS_HOME}/nodes&quot; ] &amp;&amp; cp -a &quot;${JENKINS_HOME}/nodes&quot; . || true
+
+            # Hard guard: never commit secrets/credentials (and don&apos;t even let them linger)
             rm -rf secrets secret.key credentials.xml identity.key.enc 2&gt;/dev/null || true
 
             cd ..
