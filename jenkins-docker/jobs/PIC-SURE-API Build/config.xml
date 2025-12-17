@@ -4,6 +4,10 @@
   <description>Run on Jenkins restart</description>
   <keepDependencies>false</keepDependencies>
   <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
     <hudson.model.ParametersDefinitionProperty>
       <parameterDefinitions>
         <hudson.model.StringParameterDefinition>
@@ -24,8 +28,9 @@
         </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.3.0">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.8.1">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -55,7 +60,7 @@
 install
 -DskipTests
 -U</targets>
-      <mavenName>Maven 3.6.3</mavenName>
+      <mavenName>apache-3.9.11</mavenName>
       <usePrivateRepository>false</usePrivateRepository>
       <settings class="jenkins.mvn.DefaultSettingsProvider"/>
       <globalSettings class="jenkins.mvn.DefaultGlobalSettingsProvider"/>
@@ -81,7 +86,7 @@ aws s3 --sse=AES256 cp pic-sure-aggregate-resource.tar.gz s3://$S3_BUCKET_NAME/r
   </builders>
   <publishers/>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.49">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>

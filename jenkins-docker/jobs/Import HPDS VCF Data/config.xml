@@ -3,8 +3,10 @@
   <actions/>
   <description></description>
   <keepDependencies>false</keepDependencies>
-  <properties/>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@4.1.1">
+  <properties>
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.8.1">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -43,11 +45,12 @@ unset AWS_SESSION_TOKEN
 aws s3 --sse=AES256 cp --recursive all s3://${stack_s3_bucket}/data/`git blame --abbrev=39 build-spec.json | grep source_genomic_dataset_s3_url | cut -f 1 -d &apos; &apos;`/all/
 
 </command>
+      <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>
   <publishers/>
-   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.38">
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.49">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>

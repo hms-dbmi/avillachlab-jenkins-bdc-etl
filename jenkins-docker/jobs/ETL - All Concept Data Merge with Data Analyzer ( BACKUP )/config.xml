@@ -98,7 +98,29 @@ aws s3 cp --no-progress s3://avillach-73-bdcatalyst-etl/general/completed/GLOBAL
 
 wait
 
-java -Xmx64g -DmaximumPoolSize=16 -Djava.util.concurrent.ForkJoinPool.common.parallelism=16 -jar jars/RemoveConsentZeroPatients.jar || exit 255
+CORES=&quot;$(nproc)&quot;          # 16 on r5.4xlarge
+HEAP_GB=64
+
+# Safe caps for this ETL on r5.4xlarge:
+CPU_CAP=12                # don&apos;t default to 16
+MEM_CAP=$((HEAP_GB / 6))  # ~10 (heuristic: ~6GB heap per worker)
+
+PARALLEL=&quot;$CORES&quot;
+[ &quot;$PARALLEL&quot; -gt &quot;$CPU_CAP&quot; ] &amp;&amp; PARALLEL=&quot;$CPU_CAP&quot;
+[ &quot;$PARALLEL&quot; -gt &quot;$MEM_CAP&quot; ] &amp;&amp; PARALLEL=&quot;$MEM_CAP&quot;
+[ &quot;$PARALLEL&quot; -lt 4 ] &amp;&amp; PARALLEL=4
+
+echo &quot;Using parallelism=$PARALLEL (cores=$CORES, heap=${HEAP_GB}g)&quot;
+
+java -Xms32g -Xmx${HEAP_GB}g \
+  -DmaximumPoolSize=&quot;$PARALLEL&quot; \
+  -Djava.util.concurrent.ForkJoinPool.common.parallelism=&quot;$PARALLEL&quot; \
+  -XX:+ExitOnOutOfMemoryError \
+  -XX:+HeapDumpOnOutOfMemoryError \
+  -XX:HeapDumpPath=./oom-heapdump.hprof \
+  -Xlog:gc*,safepoint:file=gc.log:time,level,tags \
+  -jar jars/RemoveConsentZeroPatients.jar || exit 255
+
 java -Xmx64g -jar jars/DbGapDataMerge.jar || exit 255
 
 
@@ -116,17 +138,14 @@ aws s3 cp --no-progress completed/allConcepts.csv s3://avillach-73-bdcatalyst-et
 
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
-unset AWS_SESSION_TOKEN</command>
+unset AWS_SESSION_TOKEN
+
+
+
+</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>
   <publishers/>
-  <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.49">
-      <deleteDirs>false</deleteDirs>
-      <cleanupParameter></cleanupParameter>
-      <externalDelete></externalDelete>
-      <disableDeferredWipeout>false</disableDeferredWipeout>
-    </hudson.plugins.ws__cleanup.PreBuildCleanup>
-  </buildWrappers>
+  <buildWrappers/>
 </project>

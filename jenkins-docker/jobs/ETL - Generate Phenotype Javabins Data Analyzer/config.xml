@@ -4,12 +4,16 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <hudson.plugins.copyartifact.CopyArtifactPermissionProperty plugin="copyartifact@757.v05365583a_455">
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
+      <doNotScan>false</doNotScan>
+    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
+    <hudson.plugins.copyartifact.CopyArtifactPermissionProperty plugin="copyartifact@770.va_6c69e063442">
       <projectNameList>
         <string>*</string>
       </projectNameList>
     </hudson.plugins.copyartifact.CopyArtifactPermissionProperty>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
@@ -25,7 +29,7 @@ change = main</description>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.5.2">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.8.1">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -52,7 +56,7 @@ change = main</description>
   <builders>
     <hudson.tasks.Maven>
       <targets>-U clean install -DskipTests</targets>
-      <mavenName>Maven 3.6.3</mavenName>
+      <mavenName>apache-3.9.11</mavenName>
       <usePrivateRepository>false</usePrivateRepository>
       <settings class="jenkins.mvn.DefaultSettingsProvider"/>
       <globalSettings class="jenkins.mvn.DefaultGlobalSettingsProvider"/>
@@ -64,8 +68,26 @@ change = main</description>
 
 GIT_BRANCH_SHORT=`echo ${GIT_BRANCH} | cut -d &quot;/&quot; -f 2` 
 GIT_COMMIT_SHORT=`echo ${GIT_COMMIT} | cut -c1-7`
-cd &quot;${WORKSPACE}&quot;/docker/pic-sure-hpds-etl
-docker build -t hms-dbmi/pic-sure-hpds-etl:${GIT_BRANCH_SHORT}_${GIT_COMMIT_SHORT} .
+#cd &quot;${WORKSPACE}&quot;/docker/pic-sure-hpds-etl
+#docker build -t hms-dbmi/pic-sure-hpds-etl:${GIT_BRANCH_SHORT}_${GIT_COMMIT_SHORT} .
+cd &quot;${WORKSPACE}/docker/pic-sure-hpds-etl&quot;
+
+DOCKERFILE=&quot;Dockerfile&quot;
+
+if grep -qE &apos;^FROM[[:space:]]+openjdk:11-jre-slim&apos; &quot;$DOCKERFILE&quot;; then
+  echo &quot;[WARN] Detected deprecated base image openjdk:11-jre-slim&quot;
+  echo &quot;[INFO] Hot-fixing to eclipse-temurin:11-jre-jammy&quot;
+
+  sed -i \
+    &apos;s|^FROM[[:space:]]\+openjdk:11-jre-slim|FROM eclipse-temurin:11-jre-jammy|&apos; \
+    &quot;$DOCKERFILE&quot;
+else
+  echo &quot;[INFO] Base image OK; no hot-fix needed&quot;
+fi
+
+docker build \
+  -t &quot;hms-dbmi/pic-sure-hpds-etl:${GIT_BRANCH_SHORT}_${GIT_COMMIT_SHORT}&quot; \
+  .
 
 mkdir -p &quot;${WORKSPACE}&quot;/docker_image_output
 cd &quot;${WORKSPACE}&quot;/docker_image_output
@@ -141,7 +163,7 @@ echo &quot;s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/biodatacatalyst_
     </hudson.tasks.ArtifactArchiver>
   </publishers>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.49">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>

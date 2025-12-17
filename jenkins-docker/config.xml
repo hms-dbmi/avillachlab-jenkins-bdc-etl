@@ -138,6 +138,7 @@
         <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
         <string>Dictionary ETL - Export DB</string>
         <string>Dictionary ETL - Start Docker Container</string>
+        <string>Dictionary ETL - Start Docker Container - (BACKUP)</string>
         <string>Dictionary ETL - Stigvar Loader</string>
         <string>Dictionary ETL - Update Meta Counts For All Consents</string>
         <string>ETL - Generate HPDS Data Dictionary Javabin</string>
@@ -252,7 +253,6 @@
         <string>ETL - Update Managed Inputs</string>
         <string>Investigate - nih-nhlbi-bdc-mds-pilot-quar</string>
         <string>TEST - sequential loader</string>
-        <string>Update Git With Latest Jobs and Config</string>
         <string>Update Git With Latest Jobs and Config - pipeline</string>
       </jobNames>
       <jobFilters/>
@@ -357,7 +357,6 @@
         <string>Create new Jenkins Server</string>
         <string>New Server Setup</string>
         <string>PIC-SURE-API Build</string>
-        <string>Update Git With Latest Jobs and Config</string>
       </jobNames>
       <jobFilters/>
       <columns>
