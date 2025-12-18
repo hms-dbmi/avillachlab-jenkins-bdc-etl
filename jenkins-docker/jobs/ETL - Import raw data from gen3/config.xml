@@ -9,7 +9,9 @@ For study abv name use abv name from Ticket or BDC Managed Inputs.  &#xd;
 &#xd;
 For accession use the assigned phs accession from dbgap.</description>
   <keepDependencies>false</keepDependencies>
-  <properties/>
+  <properties>
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+  </properties>
   <scm class="hudson.scm.NullSCM"/>
   <canRoam>true</canRoam>
   <disabled>false</disabled>

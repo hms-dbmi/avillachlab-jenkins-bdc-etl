@@ -1,0 +1,120 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>folder_path</name>
+          <description>File path to the rawData folder
+
+ex: s3://avillach-73-bdcatalyst-etl/imaging_mesa_ecg/rawData/</description>
+          <defaultValue>imaging_mesa_ecg</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>true</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+
+set -euo pipefail
+
+### Assume ETL role
+aws sts assume-role \
+  --duration-seconds 900 \
+  --role-arn arn:aws:iam::736265540791:role/dbgap-etl \
+  --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+
+export AWS_ACCESS_KEY_ID=$(grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | tr -d &apos; \&quot;,&apos;)
+export AWS_SECRET_ACCESS_KEY=$(grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | tr -d &apos; \&quot;,&apos;)
+export AWS_SESSION_TOKEN=$(grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | tr -d &apos; \&quot;,&apos;)
+
+# Create base directories
+mkdir -p &quot;./${folder_path}/rawData/&quot;
+
+# Copy the processing script once
+aws s3 cp s3://avillach-73-bdcatalyst-etl/development_imaging/execute_xml_to_csv.py ./ --no-progress
+chmod +x execute_xml_to_csv.py
+
+# Retrieve list of visit prefixes under rawData
+PREFIXES=$(aws s3api list-objects-v2 \
+  --bucket avillach-73-bdcatalyst-etl \
+  --prefix &quot;${folder_path}/rawData/&quot; \
+  --delimiter &apos;/&apos; \
+  --query &quot;CommonPrefixes[].Prefix&quot; \
+  --output text) || grep &quot;Visit&quot;
+
+echo $PREFIXES
+
+# Loop over each visit_name found
+for prefix in $PREFIXES; do
+  
+  unset AWS_ACCESS_KEY_ID
+  unset AWS_SECRET_ACCESS_KEY
+  unset AWS_SESSION_TOKEN
+  
+  aws sts assume-role \
+    --duration-seconds 900 \
+    --role-arn arn:aws:iam::736265540791:role/dbgap-etl \
+    --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+  
+  export AWS_ACCESS_KEY_ID=$(grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | tr -d &apos; \&quot;,&apos;)
+  export AWS_SECRET_ACCESS_KEY=$(grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | tr -d &apos; \&quot;,&apos;)
+  export AWS_SESSION_TOKEN=$(grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | tr -d &apos; \&quot;,&apos;)
+
+
+  visit=$(basename &quot;$prefix&quot;)
+  aws s3 cp s3://avillach-73-bdcatalyst-etl/$prefix ./${folder_path}/rawData/$visit --recursive --exclude &quot;*&quot; --include &quot;*.xml&quot; --no-progress
+
+  # Convert XML to CSV
+  python3 execute_xml_to_csv.py &quot;./${folder_path}/rawData/&quot; &quot;$visit&quot;
+
+
+done
+
+  # Upload CSV results back to S3 recursively
+
+aws s3 cp --recursive \
+&quot;./${folder_path}/rawData/&quot; \
+&quot;s3://avillach-73-bdcatalyst-etl/${folder_path}/rawData/&quot; \
+--exclude &quot;*&quot; --include &quot;*.csv&quot; --no-progress</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers>
+    <hudson.tasks.ArtifactArchiver>
+      <artifacts>**/rawData/*.csv</artifacts>
+      <allowEmptyArchive>false</allowEmptyArchive>
+      <onlyIfSuccessful>false</onlyIfSuccessful>
+      <fingerprint>false</fingerprint>
+      <defaultExcludes>true</defaultExcludes>
+      <caseSensitive>true</caseSensitive>
+      <followSymlinks>false</followSymlinks>
+    </hudson.tasks.ArtifactArchiver>
+  </publishers>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.49">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>

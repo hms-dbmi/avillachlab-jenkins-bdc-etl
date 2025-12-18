@@ -1,0 +1,104 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>api</name>
+          <defaultValue>http://172.20.0.2:8086/api</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>datasetRef</name>
+          <defaultValue>phs003708</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.8.1">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>https://github.com/hms-dbmi/ETL-MissionControl-dbgap-submodule.git</url>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>*/master</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="empty-list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>true</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+        
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+mkdir resources
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.csv data/Managed_Inputs.csv --no-progress
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json data/studies_metadata.json --no-progress
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/columnMeta/columnMeta.csv data/columnMeta.csv --no-progress
+
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+
+csvcut -c &quot;Study Identifier&quot;,&quot;Study Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot; data/Managed_Inputs.csv &gt; inputs.csv
+IFS=&apos;,&apos;
+[ ! -f inputs.csv ]
+while read study_id study_type data_ready data_processed
+do
+  if [[ &quot;${study_id}&quot; == &quot;${datasetRef}&quot; ]]; then
+	mkdir ${study_id}
+    mkdir ${study_id}/output
+    csvformat -z 100000000 -U 2 -p &apos;φ&apos; -P &apos;φ&apos; -E -H  data/columnMeta.csv &gt; data/columnMeta_formatted.csv
+	jq &apos;[.bio_data_catalyst[] | select(.&quot;study_identifier&quot;==&quot;&apos;${study_id}&apos;&quot;)]&apos; data/studies_metadata.json &gt; ${study_id}/subset_metadata.json
+    grep &quot;^\&quot;*\\\\${study_id,,}\\\\&quot; data/columnMeta.csv &gt; ${study_id}/subset_columnmeta.csv
+
+	java -jar jars/DatasetInputFileGenerator.jar --subsetDir &quot;./${study_id}/&quot; --ref &quot;${study_id}&quot;
+    
+    java -jar jars/ConceptInputFileGenerator.jar --subsetDir &quot;./${study_id}/&quot; --ref &quot;${study_id}&quot;
+    #curl --request PUT --header &apos;Content-Type: text/plain&apos; \
+    #  --data-binary @&quot;${study_id}/output/datasets.csv&quot; &quot;${api}/dataset/csv&quot; || exit 255
+    #curl --request PUT --header &apos;Content-Type: text/plain&apos; \
+    #  --data-binary @&quot;${study_id}/output/consents.csv&quot; &quot;${api}/consent/csv?datasetRef=${study_id}&quot; || exit 255
+    #curl --request PUT --header &apos;Content-Type: text/plain&apos; \
+    #  --data-binary @&quot;${study_id}/output/concepts.csv&quot; &quot;${api}/concept/csv?datasetRef=${study_id}&quot; || exit 255
+  fi
+done  &lt; inputs.csv
+
+</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.49">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>

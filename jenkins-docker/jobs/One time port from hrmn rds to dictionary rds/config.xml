@@ -1,0 +1,79 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+dict_conn_user=&apos;postgres&apos;
+dict_conn_pass=`aws secretsmanager get-secret-value --secret-id &apos;rds!db-8086eb77-cd6d-48bc-9298-4380892798ca&apos; --region &apos;us-east-1&apos; --query SecretString --output text | jq -r .password`
+if [[ $? != 0 ]] || [[ -z $dict_conn_pass ]]
+then
+	echo &quot;Dict secretsmanager call failed&quot;
+	exit 255
+else
+	echo &quot;Dict Secretsmanager call succeeded&quot;
+fi
+dict_database_psql_host_address=&apos;dictionarydb.cljahwnkfisu.us-east-1.rds.amazonaws.com&apos;
+
+hrmn_conn_user=&apos;postgres&apos;
+hrmn_conn_pass=`aws secretsmanager get-secret-value --secret-id &apos;rds!db-0c2e7d88-731d-4e37-9af3-435c54e71610&apos; --region &apos;us-east-1&apos; --query SecretString --output text | jq -r .password`
+if [[ $? != 0 ]] || [[ -z $hrmn_conn_pass ]]
+then
+	echo &quot;Secretsmanager call failed&quot;
+	exit 255
+else
+	echo &quot;Secretsmanager call succeeded&quot;
+fi
+hrmn_database_psql_host_address=&apos;harmonizeddb.cljahwnkfisu.us-east-1.rds.amazonaws.com&apos;
+
+DB=&quot;dccharmonized&quot;
+
+PGPASSWORD=&quot;$hrmn_conn_pass&quot; pg_dump --create --dbname=$DB \
+--host=&quot;$hrmn_database_psql_host_address&quot; \
+--port=&quot;5432&quot; \
+-U $hrmn_conn_user \
+   --format=d \
+   --jobs=10 \
+-f hrmn_dump
+
+PGPASSWORD=&quot;$dict_conn_pass&quot; createdb $DB --host=&quot;$dict_database_psql_host_address&quot; --port=&quot;5432&quot; -U $dict_conn_user
+
+PGPASSWORD=&quot;$dict_conn_pass&quot; pg_restore --dbname=$DB \
+--host=&quot;$dict_database_psql_host_address&quot; \
+--port=&quot;5432&quot; \
+-U $dict_conn_user \
+--format=d \
+--jobs=10 \
+&quot;hrmn_dump/&quot;
+
+</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.49">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>

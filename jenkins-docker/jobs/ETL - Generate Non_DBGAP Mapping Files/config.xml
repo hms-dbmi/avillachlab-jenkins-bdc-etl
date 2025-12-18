@@ -4,7 +4,11 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
+      <doNotScan>false</doNotScan>
+    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
@@ -23,7 +27,7 @@
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.3.0">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.8.1">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -49,6 +53,7 @@
   <builders>
     <hudson.tasks.Shell>
       <command>#!/bin/bash
+set -euo pipefail
 
 ### assume etl role
 aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
@@ -75,7 +80,7 @@ unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
 unset AWS_SESSION_TOKEN
 
-csvcut -c "Study Abbreviated Name","Study Identifier","Study Type","Data is ready to process","Data Processed","Has Multi","Use Manual Table Methods" Managed_Inputs.csv &gt; inputs.csv
+csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Study Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot;,&quot;Has Multi&quot;,&quot;Use Manual Table Methods&quot; Managed_Inputs.csv &gt; inputs.csv
 
 # Generate mappings
 cat	inputs.csv
@@ -84,9 +89,8 @@ IFS=&apos;,&apos;
 while read abv_name stdy_id stdy_type data_ready data_processed has_multi has_tables
 do
   if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]] &amp;&amp; [[ &quot;${data_processed,,}&quot; == &quot;no&quot; ]]; then
-
-	  if [[ ${stdy_type,,} != &quot;parent&quot; ]] &amp;&amp; [[ ${stdy_type,,} != &quot;topmed&quot; ]] &amp;&amp; [[ ${stdy_type,,} != &quot;substudy&quot; ]]; then
-
+#&amp;&amp; [[ ${stdy_type,,} != &quot;imaging&quot; ]]
+if [[ ${stdy_type,,} != &quot;parent&quot; ]] &amp;&amp; [[ ${stdy_type,,} != &quot;topmed&quot; ]] &amp;&amp; [[ ${stdy_type,,} != &quot;substudy&quot; ]] &amp;&amp; [[ ${stdy_type,,} != &quot;shhs&quot; ]] &amp;&amp; [[ ${stdy_type,,} != &quot;imaging&quot; ]]; then
         ### assume etl role
         aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
         
@@ -94,25 +98,26 @@ do
         export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
         export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
   
-        aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/decoded_data/ data/ --recursive --exclude &quot;*&quot; --include &quot;*.csv&quot;
-        
+        aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/decoded_data/ data/ --recursive --exclude &quot;*&quot; --include &quot;*.csv&quot; --no-progress
+        aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ data/ --recursive --exclude=&quot;*&quot; --include=&quot;${stdy_id}_${abv_name,,}*metadata.json&quot; --no-progress
+        aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/decoded_data/ data/ --recursive --exclude=&quot;*&quot; --include=&quot;${stdy_id}_${abv_name,,}*metadata.json&quot; --no-progress
+
         sed -i &apos;1s/^\xEF\xBB\xBF//&apos; data/*
         if [[ ${has_tables,,} == &apos;yes&apos; ]]; then
         echo &apos;Mapping with datatables enabled &apos; ${stdy_id}
-        java -jar jars/GenericMappingGenerator.jar -trialid ${stdy_id} -hasDataTables &gt; logs/${stdy_id}_mapping_gen1.log 
+        java -jar jars/GenericMappingGenerator.jar -trialid ${stdy_id} -hasDataTables -metadataFile data/${stdy_id}_${abv_name,,}_metadata.json &gt; logs/${stdy_id}_mapping_gen1.log 
         else
         echo &apos;Mapping with datatables disabled for &apos; ${stdy_id}
         java -jar jars/GenericMappingGenerator.jar -trialid ${stdy_id} &gt; logs/${stdy_id}_mapping_gen1.log 
         fi
-        
 
         if [[ ${has_multi} ]]; then
-            aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ data/ --recursive --exclude=&quot;*&quot; --include=&quot;${stdy_id}*&quot; --quiet
+            aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ data/ --recursive --exclude=&quot;*&quot; --include=&quot;${stdy_id}*&quot; --no-progress
         	java -jar jars/DbgapTreeBuilder3.jar -trialid ${stdy_id} &gt; logs/${stdy_id}_mapping_gen2.log 
             cat completed/${stdy_id}_mapping2.csv &gt;&gt; completed/${stdy_id}_mapping.csv
         fi 
-        find data/ -type f -exec rm -rf {} \;
-        aws s3 cp completed/${stdy_id}_mapping.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/mappings/${stdy_id}/mapping2.csv --quiet
+        #find data/ -type f -exec rm -rf {} \;
+        aws s3 cp completed/${stdy_id}_mapping.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/mappings/${stdy_id}/mapping2.csv --no-progress
         ### remove role for next iteration
         unset AWS_ACCESS_KEY_ID
         unset AWS_SECRET_ACCESS_KEY
@@ -126,7 +131,7 @@ done  &lt; inputs.csv</command>
   </builders>
   <publishers/>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.49">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>

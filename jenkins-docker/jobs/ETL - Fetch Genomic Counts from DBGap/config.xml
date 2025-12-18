@@ -5,7 +5,11 @@
 File format is csv study_id, version, consent code number</description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
+      <doNotScan>false</doNotScan>
+    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
@@ -20,38 +24,163 @@ File format is csv study_id, version, consent code number</description>
   <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Shell>
-      <command>#!/bin/bash
-aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+      <command>#!/usr/bin/env bash
+set -euo pipefail
 
-export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+LOG_TS() { date +&quot;%Y-%m-%dT%H:%M:%S%z&quot;; }
+log()    { echo &quot;[$(LOG_TS)] INFO  $*&quot; &gt;&amp;2; }
+warn()   { echo &quot;[$(LOG_TS)] WARN  $*&quot; &gt;&amp;2; }
+error()  { echo &quot;[$(LOG_TS)] ERROR $*&quot; &gt;&amp;2; }
 
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json metadata.json 
-#TODO - change this job to dictionary api job
-jq &apos;.bio_data_catalyst[] | select(.data_type | contains(&quot;G&quot;)) | select(.study_identifier | contains(&quot;phs&quot;))| {study_identifier: .study_identifier, study_version: .study_version, consent_group_code: (.consent_group_code | .[1:])}&apos; \
-	metadata.json | jq -s | in2csv -f json &gt; study_list.csv
-IFS=&apos;,&apos;
-[ ! -f study_list.csv ]
-while read stdy_id version consent
-do
-#get count from telemetry
-curl --retry 5 --show-error --silent -X &apos;GET&apos; &quot;https://www.ncbi.nlm.nih.gov/gap/sstr/api/v1/study/${stdy_id}.${version}/summary&quot;  -H &apos;accept: application/json&apos; &gt; ${stdy_id}.$consent.response.json
-count=`jq &apos;.study.consent_groups[] | select(.code == &apos;${consent}&apos; ) | .sample_count&apos; ${stdy_id}.$consent.response.json`
-#put count in doc for easy qa
-echo &quot;$stdy_id,$consent, $count&quot; &gt;&gt; genomic_counts.csv
-#update dictionary db
-curl --request PUT --data-urlencode &quot;datasetRef=${stdy_id}&quot; --data-urlencode &quot;consentCode=c${consent}&quot; \
-            --data-urlencode &quot;sampleCount=${count}&quot; http://172.20.0.2:8086/api/consent/counts    
-done &lt; study_list.csv
+need() { command -v &quot;$1&quot; &gt;/dev/null 2&gt;&amp;1 || { error &quot;Missing required command: $1&quot;; exit 2; }; }
 
-</command>
+need aws
+need jq
+need curl
+need csvgrep
+need csvcut
+need csvformat
+need in2csv
+
+ROLE_ARN=&quot;${ROLE_ARN:-arn:aws:iam::736265540791:role/dbgap-etl}&quot;
+ROLE_SESSION_NAME=&quot;${ROLE_SESSION_NAME:-s3-test}&quot;
+ASSUME_DURATION_SECONDS=&quot;${ASSUME_DURATION_SECONDS:-3600}&quot;
+
+S3_BUCKET=&quot;${S3_BUCKET:-avillach-73-bdcatalyst-etl}&quot;
+
+METADATA_URI=&quot;${METADATA_URI:-s3://${S3_BUCKET}/general/data/metadata_new_search.json}&quot;
+MANAGED_INPUTS_URI=&quot;${MANAGED_INPUTS_URI:-s3://${S3_BUCKET}/general/resources/Managed_Inputs.csv}&quot;
+
+API_BASE=&quot;${API_BASE:-http://dictionaryetl:8086/api}&quot;
+SSTR_BASE=&quot;${SSTR_BASE:-https://www.ncbi.nlm.nih.gov/gap/sstr/api/v1}&quot;
+
+cleanup() {
+  rm -f &quot;${assume_json:-}&quot; 2&gt;/dev/null || true
+  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+}
+trap cleanup EXIT
+
+assume_role() {
+  log &quot;Assuming role ${ROLE_ARN}&quot;
+  assume_json=&quot;$(mktemp)&quot;
+  aws sts assume-role \
+    --duration-seconds &quot;$ASSUME_DURATION_SECONDS&quot; \
+    --role-arn &quot;$ROLE_ARN&quot; \
+    --role-session-name &quot;$ROLE_SESSION_NAME&quot; \
+    &gt; &quot;$assume_json&quot;
+
+  export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  AWS_ACCESS_KEY_ID=&quot;$(jq -r &apos;.Credentials.AccessKeyId&apos; &quot;$assume_json&quot;)&quot;
+  AWS_SECRET_ACCESS_KEY=&quot;$(jq -r &apos;.Credentials.SecretAccessKey&apos; &quot;$assume_json&quot;)&quot;
+  AWS_SESSION_TOKEN=&quot;$(jq -r &apos;.Credentials.SessionToken&apos; &quot;$assume_json&quot;)&quot;
+  rm -f &quot;$assume_json&quot;
+  unset assume_json
+}
+
+# -----------------------------
+# Prep workspace
+# -----------------------------
+mkdir -p data
+rm -f metadata.json Managed_Inputs.csv data/Managed_Inputs.csv updated_studies.csv study_list.csv genomic_counts.csv
+
+# -----------------------------
+# Download inputs from S3
+# -----------------------------
+assume_role
+
+log &quot;Downloading metadata: ${METADATA_URI}&quot;
+aws s3 cp &quot;$METADATA_URI&quot; metadata.json --no-progress
+
+log &quot;Downloading Managed_Inputs: ${MANAGED_INPUTS_URI}&quot;
+aws s3 cp &quot;$MANAGED_INPUTS_URI&quot; Managed_Inputs.csv --no-progress
+aws s3 cp &quot;$MANAGED_INPUTS_URI&quot; data/Managed_Inputs.csv --no-progress
+
+# -----------------------------
+# Build updated studies list
+# -----------------------------
+log &quot;Computing updated studies list (ready=yes, processed=no)&quot;
+csvgrep -c &quot;Data Processed&quot; -m &quot;No&quot; data/Managed_Inputs.csv \
+| csvgrep -c &quot;Data is ready to process&quot; -m &quot;Yes&quot; \
+| csvcut -c &quot;Study Identifier&quot; \
+| csvformat -E \
+&gt; updated_studies.csv
+
+# -----------------------------
+# Build study list from metadata
+#   - data_type contains &quot;G&quot;
+#   - study_identifier contains &quot;phs&quot;
+#   - consent_group_code: strip leading &quot;c&quot; (assumes it starts with c)
+# -----------------------------
+log &quot;Extracting study/version/consent from metadata.json&quot;
+jq &apos;.bio_data_catalyst[]
+      | select(.data_type | contains(&quot;G&quot;))
+      | select(.study_identifier | contains(&quot;phs&quot;))
+      | {
+          study_identifier: .study_identifier,
+          study_version: .study_version,
+          consent_group_code: (.consent_group_code | .[1:])
+        }&apos; \
+  metadata.json \
+| jq -s \
+| in2csv -f json \
+&gt; study_list.csv
+
+# -----------------------------
+# Loop studies, query SSTR, update Dictionary ETL API
+# -----------------------------
+log &quot;Writing genomic_counts.csv&quot;
+: &gt; genomic_counts.csv
+
+# Skip header safely
+tail -n +2 study_list.csv | while IFS=&apos;,&apos; read -r stdy_id version consent; do
+  stdy_id=&quot;${stdy_id//\&quot;/}&quot;
+  version=&quot;${version//\&quot;/}&quot;
+  consent=&quot;${consent//\&quot;/}&quot;
+
+  [[ -z &quot;$stdy_id&quot; || -z &quot;$version&quot; || -z &quot;$consent&quot; ]] &amp;&amp; continue
+
+  if grep -Fxq &quot;$stdy_id&quot; updated_studies.csv; then
+    log &quot;Updating counts for ${stdy_id}.${version} consent=c${consent}&quot;
+
+    # Fetch summary
+    resp_file=&quot;${stdy_id}.c${consent}.response.json&quot;
+    curl --fail --retry 5 --show-error --silent \
+      -H &apos;accept: application/json&apos; \
+      &quot;${SSTR_BASE}/study/${stdy_id}.${version}/summary&quot; \
+      &gt; &quot;$resp_file&quot;
+
+    # Extract sample count (number, not null)
+    count=&quot;$(jq -r --arg code &quot;c${consent}&quot; &apos;
+      .study.consent_groups[]
+      | select(.code == $code)
+      | .sample_count
+    &apos; &quot;$resp_file&quot; | head -n 1)&quot;
+
+    if [[ -z &quot;${count:-}&quot; || &quot;$count&quot; == &quot;null&quot; ]]; then
+      warn &quot;No sample_count found for ${stdy_id}.${version} consent=c${consent}; skipping API update&quot;
+      continue
+    fi
+
+    echo &quot;${stdy_id},c${consent},${count}&quot; &gt;&gt; genomic_counts.csv
+
+    # Update dictionary db via Dictionary ETL API
+    curl --fail --show-error --silent \
+      --request PUT \
+      --data-urlencode &quot;datasetRef=${stdy_id}&quot; \
+      --data-urlencode &quot;consentCode=c${consent}&quot; \
+      --data-urlencode &quot;sampleCount=${count}&quot; \
+      &quot;${API_BASE}/consent/counts&quot; \
+      &gt; /dev/null
+  fi
+done
+
+log &quot;Done. Output: genomic_counts.csv&quot;</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>
   <publishers/>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.49">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>

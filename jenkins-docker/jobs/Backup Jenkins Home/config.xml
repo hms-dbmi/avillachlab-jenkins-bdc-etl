@@ -3,7 +3,9 @@
   <actions/>
   <description></description>
   <keepDependencies>false</keepDependencies>
-  <properties/>
+  <properties>
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+  </properties>
   <scm class="hudson.scm.NullSCM"/>
   <canRoam>true</canRoam>
   <disabled>false</disabled>
@@ -14,6 +16,7 @@
   <builders>
     <hudson.tasks.Shell>
       <command>tar --exclude=&quot;*.tar.gz&quot; --exclude=&quot;workspace&quot; --exclude=&quot;builds&quot; --exclude=&quot;nextBuildNumber&quot; -cvzf jenkins_home.tar.gz /var/jenkins_home</command>
+      <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>
   <publishers/>

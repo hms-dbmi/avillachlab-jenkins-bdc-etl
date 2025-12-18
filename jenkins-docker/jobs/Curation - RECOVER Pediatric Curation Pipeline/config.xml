@@ -1,0 +1,106 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job@1400.v7fd111b_ec82f">
+  <actions>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobAction plugin="pipeline-model-definition@2.2218.v56d0cda_37c72"/>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction plugin="pipeline-model-definition@2.2218.v56d0cda_37c72">
+      <jobProperties/>
+      <triggers/>
+      <parameters/>
+      <options/>
+    </org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction>
+  </actions>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>STUDY_ID</name>
+          <description>shouldnt change except in extenuating circumstances</description>
+          <defaultValue>phs003461</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>STUDY_ABV</name>
+          <description>shouldnt change except in extenuating circumstances</description>
+          <defaultValue>recover_pediatricTEST</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>VERSION</name>
+          <defaultValue>v3TEST</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>INPUT_S3_FOLDER_URI</name>
+          <description>Root folder for the data</description>
+          <defaultValue>s3://nih-nhlbi-recover-dac-phs003461-v3-r1-c1/</defaultValue>
+          <trim>true</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>manifest_file_uri</name>
+          <description>Often in separate spot from core data so needs to be imported separately</description>
+          <defaultValue>s3://nih-nhlbi-recover-dac-phs003461-v3-r1-c1/nih-nhlbi-recover-dac-phs003461-v3-r1-c1.manifest.20251003203749.tsv</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>sstr_file_uri</name>
+          <description>Often in separate spot from core data so needs to be imported separately</description>
+          <defaultValue>s3://nih-nhlbi-recover-dac-phs003461-v3-r1-c1/SSTR/phs003461.v3.txt</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@4000.v5198556e9cea_">
+    <script>pipeline {
+    agent any
+
+    stages {
+
+        stage(&apos;Import raw data and build dataset databases&apos;) {
+            steps {
+                build job: &apos;Curation - RECOVER Pediatric Import raw data&apos;, parameters: [
+                                        string(name: &apos;VERSION&apos;, value: params.VERSION),
+                                         string(name: &apos;INPUT_S3_FOLDER_URI&apos;, value: params.INPUT_S3_FOLDER_URI),
+                                         string(name: &apos;manifest_file_uri&apos;, value: params.manifest_file_uri),
+                                         string(name: &apos;sstr_file_uri&apos;, value: params.sstr_file_uri)
+                ]
+            }
+        }
+        stage(&apos;Curate files using psql scripts&apos;) {
+            steps {
+                build job: &apos;Curation - Recover Pediatric Curate Files&apos;,
+                    parameters: [
+                         string(name: &apos;VERSION&apos;, value: params.VERSION)
+                    ]
+            }
+        }
+        stage(&apos;Export curated data to s3&apos;) {
+            steps {
+                build job: &apos;Curation - Recover Pediatric Export Dataset&apos;,
+                    parameters: [
+                         string(name: &apos;VERSION&apos;, value: params.VERSION),
+                         string(name: &apos;STUDY_ABV&apos;, value: params.STUDY_ABV)
+                    ]
+                build job: &apos;Curation - Recover Pediatric Export Metadata&apos;,
+                    parameters: [
+                         string(name: &apos;VERSION&apos;, value: params.VERSION),
+                         string(name: &apos;STUDY_ABV&apos;, value: params.STUDY_ABV)
+                    ]    
+            }
+        }
+    }
+}
+
+      
+</script>
+    <sandbox>true</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>

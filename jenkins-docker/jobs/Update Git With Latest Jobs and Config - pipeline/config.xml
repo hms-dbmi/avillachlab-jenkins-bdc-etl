@@ -1,0 +1,156 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job@1559.va_a_533730b_ea_d">
+  <actions>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobAction plugin="pipeline-model-definition@2.2277.v00573e73ddf1"/>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction plugin="pipeline-model-definition@2.2277.v00573e73ddf1">
+      <jobProperties/>
+      <triggers/>
+      <parameters/>
+      <options/>
+    </org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction>
+  </actions>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
+      <doNotScan>false</doNotScan>
+    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
+      <triggers>
+        <hudson.triggers.TimerTrigger>
+          <spec>0 0 * * *</spec>
+        </hudson.triggers.TimerTrigger>
+      </triggers>
+    </org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
+  </properties>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@4238.va_6fb_65c1f699">
+    <script>pipeline {
+  agent any
+
+  environment {
+    REPO_SSH = &apos;git@github.com:hms-dbmi/avillachlab-jenkins-bdc-etl.git&apos;
+    BRANCH   = &apos;jenkins-backup-nightly-pipefail&apos;
+
+    // S3 base prefix (no trailing slash required)
+    S3_BASE  = &apos;s3://avillach-biodatacatalyst-deployments-3drb48r/pheno-server/jenkins_home&apos;
+  }
+
+  stages {
+    stage(&apos;Backup Jenkins config to git + S3 (instance profile)&apos;) {
+      steps {
+        withCredentials([sshUserPrivateKey(
+          credentialsId: &apos;bdc-etl-jenkins-push&apos;,
+          keyFileVariable: &apos;SSH_KEY&apos;,
+          usernameVariable: &apos;SSH_USER&apos;
+        )]) {
+          sh &apos;&apos;&apos;#!/usr/bin/env bash
+            set -euo pipefail
+
+            # --- sanity: instance profile auth for AWS ---
+            command -v aws &gt;/dev/null 2&gt;&amp;1
+            aws sts get-caller-identity --output json &gt; /tmp/aws-caller.json
+
+            # --- GitHub SSH setup ---
+            install -d -m 700 &quot;$HOME/.ssh&quot;
+            KNOWN_HOSTS=&quot;$HOME/.ssh/known_hosts&quot;
+            grep -v &apos;^github\\.com &apos; &quot;$KNOWN_HOSTS&quot; 2&gt;/dev/null &gt; &quot;$KNOWN_HOSTS.tmp&quot; || true
+            ssh-keyscan -t ed25519 github.com &gt;&gt; &quot;$KNOWN_HOSTS.tmp&quot; 2&gt;/dev/null
+            mv &quot;$KNOWN_HOSTS.tmp&quot; &quot;$KNOWN_HOSTS&quot;
+            chmod 600 &quot;$KNOWN_HOSTS&quot;
+
+            export GIT_SSH_COMMAND=&quot;ssh -i &apos;$SSH_KEY&apos; -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=&apos;$KNOWN_HOSTS&apos;&quot;
+
+            WORKDIR=&quot;$(mktemp -d)&quot;
+            trap &apos;rm -rf &quot;$WORKDIR&quot;&apos; EXIT
+            cd &quot;$WORKDIR&quot;
+
+            # --- clone/update branch ---
+            git clone --no-tags &quot;$REPO_SSH&quot; repo
+            cd repo
+
+            git config user.name  &quot;jenkins&quot;
+            git config user.email &quot;jenkins@hms-dbmi.local&quot;
+
+            git fetch origin &quot;$BRANCH&quot; || true
+            if git show-ref --verify --quiet &quot;refs/remotes/origin/$BRANCH&quot;; then
+              git checkout -B &quot;$BRANCH&quot; &quot;origin/$BRANCH&quot;
+            else
+              git checkout -B &quot;$BRANCH&quot;
+            fi
+            git pull --ff-only origin &quot;$BRANCH&quot; 2&gt;/dev/null || true
+
+            # --- S3 model: overwrite is fine (bucket versioning keeps history) ---
+            DEST_LATEST=&quot;${S3_BASE}/latest/&quot;
+
+            # Strict allowlist sync direct from JENKINS_HOME (NO SECRETS, NO WORKSPACE, NO BUILDS)
+            aws s3 sync &quot;${JENKINS_HOME}/&quot; &quot;$DEST_LATEST&quot; \
+              --delete \
+              --only-show-errors \
+              --exclude &quot;*&quot; \
+              --include &quot;config.xml&quot; \
+              --include &quot;plugins.txt&quot; \
+              --include &quot;scriptApproval.xml&quot; \
+              --include &quot;jenkins.model.JenkinsLocationConfiguration.xml&quot; \
+              --include &quot;nodes/**&quot; \
+              --include &quot;jobs/**/config.xml&quot;
+
+            # Write a small manifest to help pick restore points (versions of this file are your index)
+            cat &gt; /tmp/jenkins-home-backup-manifest.json &lt;&lt;EOF
+            {
+              &quot;ts_utc&quot;: &quot;$(date -u +%Y-%m-%dT%H:%M:%SZ)&quot;,
+              &quot;s3_latest_prefix&quot;: &quot;${DEST_LATEST}&quot;,
+              &quot;jenkins_home&quot;: &quot;${JENKINS_HOME}&quot;,
+              &quot;caller_identity&quot;: $(cat /tmp/aws-caller.json)
+            }
+EOF
+            aws s3 cp /tmp/jenkins-home-backup-manifest.json &quot;${DEST_LATEST}_manifest.json&quot; --only-show-errors
+
+            # --- Git backup (rolling latest view; NO SECRETS) ---
+            cd jenkins-docker
+            rm -rf jobs jobs_old var nodes
+            mkdir -p jobs
+
+            # jobs configs into repo (config.xml only)
+            (
+              cd &quot;${JENKINS_HOME}/jobs&quot;
+              find . -type f -name &quot;config.xml&quot; -print0 \
+                | tar --null -T - -cf - \
+                | (cd &quot;$WORKDIR/repo/jenkins-docker/jobs&quot; &amp;&amp; tar -xf -)
+            )
+
+            # controller-level files (non-secret)
+            for f in config.xml plugins.txt scriptApproval.xml jenkins.model.JenkinsLocationConfiguration.xml; do
+              [ -f &quot;${JENKINS_HOME}/${f}&quot; ] &amp;&amp; cp -f &quot;${JENKINS_HOME}/${f}&quot; . || true
+            done
+
+            # nodes (agent defs)
+            [ -d &quot;${JENKINS_HOME}/nodes&quot; ] &amp;&amp; cp -a &quot;${JENKINS_HOME}/nodes&quot; . || true
+
+            # Hard guard: never commit secrets/credentials (and don&apos;t even let them linger)
+            rm -rf secrets secret.key credentials.xml identity.key.enc 2&gt;/dev/null || true
+
+            cd ..
+            git add -A
+
+            if git diff --cached --quiet; then
+              echo &quot;No changes detected; nothing to push&quot;
+              exit 0
+            fi
+
+            git commit -m &quot;Jenkins backup: $(date -u +%Y-%m-%dT%H:%M:%SZ)&quot;
+            git push -u origin &quot;$BRANCH&quot;
+          &apos;&apos;&apos;
+        }
+      }
+    }
+  }
+}</script>
+    <sandbox>true</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>

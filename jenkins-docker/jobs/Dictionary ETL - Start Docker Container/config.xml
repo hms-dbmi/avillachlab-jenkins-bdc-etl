@@ -4,7 +4,11 @@
   <description>builds, starts, and connects docker container for dictionary api</description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
+      <doNotScan>false</doNotScan>
+    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
@@ -18,7 +22,7 @@
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.5.2">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.8.1">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -43,8 +47,7 @@
   <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Shell>
-      <command>#!/bin/bash
-### Postgres config
+      <command>### Postgres config
 pw=`aws secretsmanager get-secret-value --secret-id &apos;rds!db-8086eb77-cd6d-48bc-9298-4380892798ca&apos; --region &apos;us-east-1&apos; --query SecretString --output text | jq -r .password`
 echo &quot;POSTGRES_PASSWORD=&apos;${pw}&apos;&quot; &gt;&gt; .env
 echo &apos;POSTGRES_HOST=dictionarydb.cljahwnkfisu.us-east-1.rds.amazonaws.com&apos; &gt;&gt; .env
@@ -52,19 +55,81 @@ echo &apos;POSTGRES_HOST=dictionarydb.cljahwnkfisu.us-east-1.rds.amazonaws.com&a
       <configuredLocalRules/>
     </hudson.tasks.Shell>
     <hudson.tasks.Shell>
-      <command>docker compose down
-docker compose build --no-cache
-docker compose up -d
+      <command>#!/usr/bin/env bash
+set -euo pipefail
 
-docker inspect dictionaryetl | jq -r &apos;.[] | .NetworkSettings.Networks.&quot;etlnetwork&quot;.IPAddress&apos;
-docker inspect jenkins | jq -r &apos;.[] | .NetworkSettings.Networks.&quot;etlnetwork&quot;.IPAddress&apos;
-</command>
+NETWORK=&quot;etlnetwork&quot;
+CONTAINER_NAME=&quot;dictionaryetl&quot;
+PORT=&quot;8086&quot;
+HEALTH_URL=&quot;http://${CONTAINER_NAME}:${PORT}/actuator/health&quot;
+OUTFILE=&quot;container_ip_address.txt&quot;
+
+fail() { echo &quot;ERROR: $*&quot; &gt;&amp;2; exit 1; }
+
+# --- Validate external shared network exists (do NOT recreate it in Jenkins) ---
+docker network inspect &quot;$NETWORK&quot; &gt;/dev/null 2&gt;&amp;1 \
+  || fail &quot;Required external Docker network &apos;$NETWORK&apos; does not exist. Create it outside Jenkins.&quot;
+
+# --- If container exists and is healthy/up, exit success fast ---
+if docker ps --format &apos;{{.Names}}&apos; | grep -qx &quot;$CONTAINER_NAME&quot;; then
+  # If the image has a HEALTHCHECK, prefer that signal
+  hc=&quot;$(docker inspect &quot;$CONTAINER_NAME&quot; \
+    | jq -r &apos;.[0].State.Health.Status // empty&apos; || true)&quot;
+
+  if [[ &quot;$hc&quot; == &quot;healthy&quot; ]]; then
+    ip=&quot;$(docker inspect &quot;$CONTAINER_NAME&quot; | jq -r &apos;.[0].NetworkSettings.Networks[&quot;&apos;&quot;$NETWORK&quot;&apos;&quot;].IPAddress // empty&apos;)&quot;
+    [[ -n &quot;$ip&quot; ]] &amp;&amp; printf &apos;%s\n&apos; &quot;$ip&quot; &gt; &quot;$OUTFILE&quot; || true
+    echo &quot;$CONTAINER_NAME is already running and healthy.&quot;
+    exit 0
+  fi
+
+  # No healthcheck or not healthy: verify DNS+HTTP from within the shared network
+  if docker run --rm --network &quot;$NETWORK&quot; curlimages/curl:8.6.0 \
+      sh -lc &apos;getent hosts &quot;&apos;&quot;$CONTAINER_NAME&quot;&apos;&quot; &gt;/dev/null &amp;&amp; curl -fsS --max-time 3 &quot;&apos;&quot;$HEALTH_URL&quot;&apos;&quot; &gt;/dev/null&apos;
+  then
+    ip=&quot;$(docker inspect &quot;$CONTAINER_NAME&quot; | jq -r &apos;.[0].NetworkSettings.Networks[&quot;&apos;&quot;$NETWORK&quot;&apos;&quot;].IPAddress // empty&apos;)&quot;
+    [[ -n &quot;$ip&quot; ]] &amp;&amp; printf &apos;%s\n&apos; &quot;$ip&quot; &gt; &quot;$OUTFILE&quot; || true
+    echo &quot;$CONTAINER_NAME is already running and reachable.&quot;
+    exit 0
+  fi
+
+  echo &quot;$CONTAINER_NAME is running but not healthy/reachable; will attempt to (re)start via compose.&quot;
+fi
+
+# --- Not running (or unhealthy): bring it up ---
+docker compose up -d --build
+
+# --- Validate it came up and is reachable via DNS ---
+# Wait briefly for DNS/health to settle (bounded retries, not an infinite wait)
+for _ in {1..20}; do
+  if docker run --rm --network &quot;$NETWORK&quot; curlimages/curl:8.6.0 \
+      sh -lc &apos;getent hosts &quot;&apos;&quot;$CONTAINER_NAME&quot;&apos;&quot; &gt;/dev/null &amp;&amp; curl -fsS --max-time 3 &quot;&apos;&quot;$HEALTH_URL&quot;&apos;&quot; &gt;/dev/null&apos;
+  then
+    ip=&quot;$(docker inspect &quot;$CONTAINER_NAME&quot; | jq -r &apos;.[0].NetworkSettings.Networks[&quot;&apos;&quot;$NETWORK&quot;&apos;&quot;].IPAddress // empty&apos;)&quot;
+    [[ -n &quot;$ip&quot; ]] &amp;&amp; printf &apos;%s\n&apos; &quot;$ip&quot; | tee &quot;$OUTFILE&quot; &gt;/dev/null || true
+    echo &quot;$CONTAINER_NAME started and is reachable.&quot;
+    exit 0
+  fi
+  sleep 1
+done
+
+fail &quot;$CONTAINER_NAME did not become reachable at $HEALTH_URL on network $NETWORK&quot;</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>
-  <publishers/>
+  <publishers>
+    <hudson.tasks.ArtifactArchiver>
+      <artifacts>container_ip_address.txt</artifacts>
+      <allowEmptyArchive>false</allowEmptyArchive>
+      <onlyIfSuccessful>false</onlyIfSuccessful>
+      <fingerprint>false</fingerprint>
+      <defaultExcludes>true</defaultExcludes>
+      <caseSensitive>true</caseSensitive>
+      <followSymlinks>false</followSymlinks>
+    </hudson.tasks.ArtifactArchiver>
+  </publishers>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.49">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>

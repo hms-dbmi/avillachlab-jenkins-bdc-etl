@@ -4,12 +4,16 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <hudson.plugins.copyartifact.CopyArtifactPermissionProperty plugin="copyartifact@757.v05365583a_455">
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
+      <doNotScan>false</doNotScan>
+    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
+    <hudson.plugins.copyartifact.CopyArtifactPermissionProperty plugin="copyartifact@770.va_6c69e063442">
       <projectNameList>
         <string>*</string>
       </projectNameList>
     </hudson.plugins.copyartifact.CopyArtifactPermissionProperty>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
@@ -17,17 +21,20 @@
       <parameterDefinitions>
         <hudson.model.StringParameterDefinition>
           <name>git_hash</name>
+          <description>old = genomicIngestion
+change = main</description>
           <defaultValue>genomicIngestion</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.5.2">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.8.1">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
         <url>https://github.com/hms-dbmi/pic-sure-hpds</url>
+        <credentialsId>git</credentialsId>
       </hudson.plugins.git.UserRemoteConfig>
     </userRemoteConfigs>
     <branches>
@@ -43,86 +50,241 @@
   <disabled>false</disabled>
   <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
   <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
-  <jdk>(System)</jdk>
+  <jdk>jdk-24</jdk>
   <triggers/>
   <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Maven>
       <targets>-U clean install -DskipTests</targets>
-      <mavenName>Maven 3.6.3</mavenName>
+      <mavenName>apache-3.9.11</mavenName>
       <usePrivateRepository>false</usePrivateRepository>
       <settings class="jenkins.mvn.DefaultSettingsProvider"/>
       <globalSettings class="jenkins.mvn.DefaultGlobalSettingsProvider"/>
       <injectBuildVariables>false</injectBuildVariables>
     </hudson.tasks.Maven>
     <hudson.tasks.Shell>
-      <command>#!/bin/bash
+      <command>#!/usr/bin/env bash
+set -euo pipefail
 
+LOG_TS() { date +&quot;%Y-%m-%dT%H:%M:%S%z&quot;; }
+log()    { echo &quot;[$(LOG_TS)] INFO  $*&quot; &gt;&amp;2; }
+warn()   { echo &quot;[$(LOG_TS)] WARN  $*&quot; &gt;&amp;2; }
+error()  { echo &quot;[$(LOG_TS)] ERROR $*&quot; &gt;&amp;2; }
 
-GIT_BRANCH_SHORT=`echo ${GIT_BRANCH} | cut -d &quot;/&quot; -f 2` 
-GIT_COMMIT_SHORT=`echo ${GIT_COMMIT} | cut -c1-7`
-cd &quot;${WORKSPACE}&quot;/docker/pic-sure-hpds-etl
-docker build -t hms-dbmi/pic-sure-hpds-etl:${GIT_BRANCH_SHORT}_${GIT_COMMIT_SHORT} .
+need() { command -v &quot;$1&quot; &gt;/dev/null 2&gt;&amp;1 || { error &quot;Missing required command: $1&quot;; exit 2; }; }
 
-mkdir -p &quot;${WORKSPACE}&quot;/docker_image_output
-cd &quot;${WORKSPACE}&quot;/docker_image_output
-docker save hms-dbmi/pic-sure-hpds-etl:${GIT_BRANCH_SHORT}_${GIT_COMMIT_SHORT} | gzip &gt; pic-sure-hpds-etl.tar.gz
+# -----------------------------
+# Prereqs
+# -----------------------------
+need aws
+need jq
+need docker
+need tar
+need sed
+need grep
+need cut
 
-HPDS_ETL_IMAGE=`docker load &lt; ./pic-sure-hpds-etl.tar.gz  | cut -d &apos; &apos; -f 3`
+: &quot;${WORKSPACE:?WORKSPACE must be set by Jenkins}&quot;
+: &quot;${GIT_BRANCH:?GIT_BRANCH must be set by Jenkins}&quot;
+: &quot;${GIT_COMMIT:?GIT_COMMIT must be set by Jenkins}&quot;
 
-echo ${HPDS_ETL_IMAGE}
+ROLE_ARN=&quot;${ROLE_ARN:-arn:aws:iam::736265540791:role/dbgap-etl}&quot;
+ROLE_SESSION_NAME=&quot;${ROLE_SESSION_NAME:-s3-test}&quot;
+ASSUME_DURATION_SECONDS=&quot;${ASSUME_DURATION_SECONDS:-3600}&quot;
+S3_BUCKET=&quot;${S3_BUCKET:-avillach-73-bdcatalyst-etl}&quot;
 
-cd &quot;${WORKSPACE}&quot;
+cleanup() {
+  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+}
+trap cleanup EXIT
 
-# Managed Inputs
-## Data Analyzer javabin creation
-aws sts assume-role --duration-seconds 1800 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
-export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+assume_role() {
+  log &quot;Assuming role ${ROLE_ARN} (duration=${ASSUME_DURATION_SECONDS}s)&quot;
+  local assume_json
+  assume_json=&quot;$(mktemp)&quot;
+  aws sts assume-role \
+    --duration-seconds &quot;$ASSUME_DURATION_SECONDS&quot; \
+    --role-arn &quot;$ROLE_ARN&quot; \
+    --role-session-name &quot;$ROLE_SESSION_NAME&quot; \
+    &gt; &quot;$assume_json&quot;
 
-cd &quot;${WORKSPACE}&quot;/docker/pic-sure-hpds-etl/
+  export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  AWS_ACCESS_KEY_ID=&quot;$(jq -r &apos;.Credentials.AccessKeyId&apos; &quot;$assume_json&quot;)&quot;
+  AWS_SECRET_ACCESS_KEY=&quot;$(jq -r &apos;.Credentials.SecretAccessKey&apos; &quot;$assume_json&quot;)&quot;
+  AWS_SESSION_TOKEN=&quot;$(jq -r &apos;.Credentials.SessionToken&apos; &quot;$assume_json&quot;)&quot;
+  rm -f &quot;$assume_json&quot;
+  log &quot;Role assumed&quot;
+}
 
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/completed/allConcepts_data_analyzer.csv hpds/allConcepts.csv
+# -----------------------------
+# Build image (with FROM hotfix)
+# -----------------------------
+GIT_BRANCH_SHORT=&quot;$(echo &quot;${GIT_BRANCH}&quot; | awk -F&apos;/&apos; &apos;{print $NF}&apos;)&quot;
+GIT_COMMIT_SHORT=&quot;$(echo &quot;${GIT_COMMIT}&quot; | cut -c1-7)&quot;
 
+ETL_DIR=&quot;${WORKSPACE}/docker/pic-sure-hpds-etl&quot;
+HPDS_DIR=&quot;${ETL_DIR}/hpds&quot;
+
+cd &quot;$ETL_DIR&quot;
+
+DOCKERFILE=&quot;Dockerfile&quot;
+if grep -qE &apos;^FROM[[:space:]]+openjdk:11-jre-slim&apos; &quot;$DOCKERFILE&quot;; then
+  warn &quot;Detected deprecated base image openjdk:11-jre-slim&quot;
+  log  &quot;Hot-fixing to eclipse-temurin:11-jre-jammy&quot;
+  sed -i &apos;s|^FROM[[:space:]]\+openjdk:11-jre-slim|FROM eclipse-temurin:11-jre-jammy|&apos; &quot;$DOCKERFILE&quot;
+else
+  log &quot;Base image OK; no hot-fix needed&quot;
+fi
+
+IMAGE_TAG=&quot;hms-dbmi/pic-sure-hpds-etl:${GIT_BRANCH_SHORT}_${GIT_COMMIT_SHORT}&quot;
+log &quot;Building image: ${IMAGE_TAG}&quot;
+docker build -t &quot;$IMAGE_TAG&quot; .
+
+# Optional: keep your tar.gz artifact behavior (unchanged)
+mkdir -p &quot;${WORKSPACE}/docker_image_output&quot;
+cd &quot;${WORKSPACE}/docker_image_output&quot;
+docker save &quot;$IMAGE_TAG&quot; | gzip &gt; pic-sure-hpds-etl.tar.gz
+docker load &lt; ./pic-sure-hpds-etl.tar.gz &gt;/dev/null
+log &quot;Image ready: ${IMAGE_TAG}&quot;
+
+# -----------------------------
+# Prepare inputs in Jenkins workspace
+# (these files live in the Jenkins container FS)
+# -----------------------------
+mkdir -p &quot;$HPDS_DIR&quot;
+cd &quot;$ETL_DIR&quot;
+
+assume_role
+
+log &quot;Downloading allConcepts_data_analyzer.csv -&gt; hpds/allConcepts.csv&quot;
+aws s3 cp \
+  &quot;s3://${S3_BUCKET}/general/completed/allConcepts_data_analyzer.csv&quot; \
+  &quot;${HPDS_DIR}/allConcepts.csv&quot; \
+  --no-progress
+
+log &quot;Generating encryption_key -&gt; hpds/encryption_key&quot;
+#tr -dc &apos;a-zA-Z0-9&apos; &lt; /dev/urandom | fold -w 32 | head -n 1 &gt; &quot;${HPDS_DIR}/encryption_key&quot;
+set +o pipefail
 cat /dev/urandom | tr -dc &apos;a-zA-Z0-9&apos; | fold -w 32 | head -n 1 &gt; hpds/encryption_key
+set -o pipefail
+cleanup
 
-#aws s3 cp s3://avillach-73-bdcatalyst-etl/general/resources/docker-compose-csv-loader.yml .
+# -----------------------------
+# IMPORTANT FIX:
+# If Docker daemon is on the host, bind-mounting $PWD/hpds from inside Jenkins
+# often mounts an empty host path. Use a Docker VOLUME and stream files into it.
+# -----------------------------
+VOL=&quot;hpds_etl_${JOB_NAME:-job}_${BUILD_NUMBER:-0}&quot;
+# sanitize volume name (docker volume names are picky)
+VOL=&quot;$(echo &quot;$VOL&quot; | tr &apos; /:@&apos; &apos;____&apos;)&quot;
 
-docker run -i -v &quot;$(pwd)&quot;/hpds:/opt/local/hpds -v &quot;$(pwd)&quot;/hpds:/opt/local/phenocube -eNO_ROLLUP=NO_ROLLUP -eHEAPSIZE=4096 -eLOADER_NAME=CSVLoaderNewSearch ${HPDS_ETL_IMAGE}
+log &quot;Creating docker volume: ${VOL}&quot;
+docker volume rm -f &quot;$VOL&quot; &gt;/dev/null 2&gt;&amp;1 || true
+docker volume create &quot;$VOL&quot; &gt;/dev/null
 
-#docker-compose -f docker-compose-csv-loader.yml up
-unset AWS_ACCESS_KEY_ID
-unset AWS_SECRET_ACCESS_KEY
-unset AWS_SESSION_TOKEN
+log &quot;Streaming inputs into volume (allConcepts.csv, encryption_key)&quot;
+docker run --rm -i -v &quot;${VOL}:/data&quot; alpine:3.20 sh -lc &apos;cat &gt; /data/allConcepts.csv&apos; &lt; &quot;${HPDS_DIR}/allConcepts.csv&quot;
+docker run --rm -i -v &quot;${VOL}:/data&quot; alpine:3.20 sh -lc &apos;cat &gt; /data/encryption_key&apos; &lt; &quot;${HPDS_DIR}/encryption_key&quot;
 
-aws sts assume-role --duration-seconds 1800 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
-export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+log &quot;Sanity check volume contents&quot;
+docker run --rm -v &quot;${VOL}:/data&quot; alpine:3.20 sh -lc &apos;ls -la /data &amp;&amp; test -s /data/allConcepts.csv &amp;&amp; test -s /data/encryption_key&apos;
 
+# -----------------------------
+# Run loader container using the volume
+# -----------------------------
+log &quot;Running CSVLoaderNewSearch (writes *.javabin + columnMeta.csv into /opt/local/hpds)&quot;
+docker run --rm \
+  -v &quot;${VOL}:/opt/local/hpds&quot; \
+  -v &quot;${VOL}:/opt/local/phenocube&quot; \
+  -e NO_ROLLUP=NO_ROLLUP \
+  -e HEAPSIZE=8192 \
+  -e LOADER_NAME=CSVLoaderNewSearch \
+  &quot;$IMAGE_TAG&quot;
 
-cd hpds/
+# -----------------------------
+# Pull metadata + stigvars (and stream them into the same volume)
+# so we can package everything from one place.
+# -----------------------------
+assume_role
 
-ts=$(date &apos;+%m-%d-%y&apos;)
+log &quot;Downloading metadata_new_search.json -&gt; metadata.json&quot;
+aws s3 cp \
+  &quot;s3://${S3_BUCKET}/general/data/metadata_new_search.json&quot; \
+  &quot;${HPDS_DIR}/metadata.json&quot; \
+  --no-progress
 
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json metadata.json
+log &quot;Downloading conceptsToRemove.txt -&gt; conceptsToRemove.txt&quot;
+aws s3 cp \
+  &quot;s3://${S3_BUCKET}/general/data/conceptsToRemove.txt&quot; \
+  &quot;${HPDS_DIR}/conceptsToRemove.txt&quot; \
+  --no-progress
 
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/conceptsToRemove.txt .
+cleanup
 
-#docker run -i -v &quot;$(pwd)&quot;:/opt/local/hpds -eLOADER_NAME=UpdateClinicalVariableCounts $HPDS_ETL_IMAGE
+log &quot;Streaming metadata.json + conceptsToRemove.txt into volume&quot;
+docker run --rm -i -v &quot;${VOL}:/data&quot; alpine:3.20 sh -lc &apos;cat &gt; /data/metadata.json&apos; &lt; &quot;${HPDS_DIR}/metadata.json&quot;
+docker run --rm -i -v &quot;${VOL}:/data&quot; alpine:3.20 sh -lc &apos;cat &gt; /data/conceptsToRemove.txt&apos; &lt; &quot;${HPDS_DIR}/conceptsToRemove.txt&quot;
 
-tar -cf biodatacatalyst_javabins_data_analyzer_${ts}.tar columnMeta.csv *.javabin encryption_key metadata.json conceptsToRemove.txt
+# -----------------------------
+# Build final tar from volume and write it into Jenkins workspace
+# (no bind mounts required)
+# -----------------------------
+ts=&quot;$(date &apos;+%m-%d-%yT%H&apos;)&quot;
+OUT_TAR=&quot;${WORKSPACE}/biodatacatalyst_javabins_data_analyzer_${ts}.tar&quot;
 
-aws s3 cp biodatacatalyst_javabins_data_analyzer_${ts}.tar s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/
+log &quot;Creating final tar from volume -&gt; ${OUT_TAR}&quot;
+docker run --rm -v &quot;${VOL}:/data&quot; alpine:3.20 sh -lc &apos;
+  set -euo pipefail
+  cd /data
 
-aws s3 cp columnMeta.csv s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/columnMeta/columnMeta.csv
+  echo &quot;Volume listing:&quot; &gt;&amp;2
+  ls -la &gt;&amp;2
 
-unset AWS_ACCESS_KEY_ID
-unset AWS_SECRET_ACCESS_KEY
-unset AWS_SESSION_TOKEN
+  test -s columnMeta.csv
+  test -s encryption_key
+  test -s metadata.json
+  test -s conceptsToRemove.txt
 
-echo &quot;s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/biodatacatalyst_javabins_data_analyzer_${ts}.tar&quot; &gt; data_analyzer_javabin_file_name.txt</command>
+  # ensure at least one javabin exists
+  cnt=&quot;$(ls -1 *.javabin 2&gt;/dev/null | wc -l)&quot;
+  if [ &quot;$cnt&quot; -lt 1 ]; then
+    echo &quot;ERROR: no *.javabin files produced&quot; &gt;&amp;2
+    exit 3
+  fi
+
+  tar -cf - columnMeta.csv *.javabin encryption_key metadata.json conceptsToRemove.txt
+&apos; &gt; &quot;${OUT_TAR}&quot;
+
+test -s &quot;${OUT_TAR}&quot;
+log &quot;Tar created (bytes=$(wc -c &lt; &quot;${OUT_TAR}&quot;))&quot;
+
+# -----------------------------
+# Upload outputs
+# -----------------------------
+assume_role
+
+log &quot;Uploading tar -&gt; s3://${S3_BUCKET}/general/hpds/javabin/&quot;
+aws s3 cp \
+  &quot;${OUT_TAR}&quot; \
+  &quot;s3://${S3_BUCKET}/general/hpds/javabin/$(basename &quot;${OUT_TAR}&quot;)&quot; \
+  --no-progress
+
+log &quot;Uploading columnMeta.csv -&gt; s3://${S3_BUCKET}/general/hpds/javabin/columnMeta/columnMeta.csv&quot;
+# pull columnMeta.csv out of volume and upload from workspace (keeps S3 upload simple)
+docker run --rm -v &quot;${VOL}:/data&quot; alpine:3.20 sh -lc &apos;cat /data/columnMeta.csv&apos; &gt; &quot;${WORKSPACE}/columnMeta.csv&quot;
+aws s3 cp \
+  &quot;${WORKSPACE}/columnMeta.csv&quot; \
+  &quot;s3://${S3_BUCKET}/general/hpds/javabin/columnMeta/columnMeta.csv&quot; \
+  --no-progress
+
+cleanup
+
+echo &quot;s3://${S3_BUCKET}/general/hpds/javabin/$(basename &quot;${OUT_TAR}&quot;)&quot; &gt; &quot;${WORKSPACE}/data_analyzer_javabin_file_name.txt&quot;
+
+log &quot;Done&quot;
+
+# Optional cleanup of docker volume (uncomment if you don’t want to keep it)
+docker volume rm -f &quot;${VOL}&quot; &gt;/dev/null 2&gt;&amp;1 || true</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>
@@ -138,7 +300,7 @@ echo &quot;s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/biodatacatalyst_
     </hudson.tasks.ArtifactArchiver>
   </publishers>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.47">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.49">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>

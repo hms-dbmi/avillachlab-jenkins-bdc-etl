@@ -3,7 +3,9 @@
   <actions/>
   <description>This job will sync the current jenkins config.xml to the s3 location described in the global parameter &quot;jenkins_config_s3_location&quot;</description>
   <keepDependencies>false</keepDependencies>
-  <properties/>
+  <properties>
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+  </properties>
   <scm class="hudson.scm.NullSCM"/>
   <canRoam>true</canRoam>
   <disabled>false</disabled>

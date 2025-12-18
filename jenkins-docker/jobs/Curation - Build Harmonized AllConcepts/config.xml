@@ -1,0 +1,115 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+set -o pipefail
+
+aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.csv Managed_Inputs.csv
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+
+
+conn_user=&apos;postgres&apos;
+conn_pass=`aws secretsmanager get-secret-value --secret-id &apos;rds!db-8086eb77-cd6d-48bc-9298-4380892798ca&apos; --region &apos;us-east-1&apos; --query SecretString --output text | jq -r .password`
+if [[ $? != 0 ]] || [[ -z $conn_pass ]]
+then
+	echo &quot;Secretsmanager call failed&quot;
+	exit 255
+else
+	echo &quot;Secretsmanager call succeeded&quot;
+fi
+database_psql_host_address=&apos;dictionarydb.cljahwnkfisu.us-east-1.rds.amazonaws.com&apos;
+DB=&quot;dccharmonized&quot;
+
+
+echo &quot;testing connection to db&quot;
+PGPASSWORD=&quot;$conn_pass&quot; psql --quiet \
+    --host=&quot;$database_psql_host_address&quot; \
+    --port=&quot;5432&quot; \
+    --username=&quot;$conn_user&quot; \
+    --dbname=&quot;$DB&quot; \
+    -c &quot;\q&quot;  # This command tests the connection and exits
+
+if [ $? -ne 0 ]; then
+    echo &quot;Connection test failed!&quot;
+    exit 255
+else
+	echo &quot;Connection test succeeded - conn_user=$conn_user database_psql_host_address=$database_psql_host_address DB=$DB&quot;
+fi
+
+
+echo &quot;fetching applicable table list for dcc&quot;
+PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+-c &quot;\COPY (SELECT table_name from information_schema.tables where table_schema = &apos;decoded&apos; order by table_name) to dataset_list.csv WITH (FORMAT CSV)&quot;
+
+mkdir output
+mkdir output/completed
+
+
+IFS=&apos;,&apos;
+while read dataset; do
+
+	echo &quot;getting $dataset&quot;
+    PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+    -c &quot;\COPY (select hpds_id, concept_path, nval, tval, &apos;0&apos; as start_date from decoded.$dataset left join hpds_mappings.merged_mappings on dbgap_subject_id = dbgap_id and source_study_accession = merged_mappings.phs where hpds_id is not null and ( tval is not null or nval is not null ) order by concept_path, hpds_id) to output/HRMN_allConcepts_$dataset.csv with (FORMAT CSV, HEADER FALSE, FORCE_QUOTE *)&quot;
+	cat output/HRMN_allConcepts_$dataset.csv &gt;&gt; output/completed/HRMN_allConcepts.csv 
+done &lt; dataset_list.csv
+
+
+PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user --csv -Atc \
+    &quot;select json_agg(meta) from (select dataset_ref, name, display, concept_type, concept_path, JSON_BUILD_OBJECT(&apos;description&apos;, description) as metadata from dict.metadata) meta&quot; -o  output/completed/hrmn_metadata.json
+
+
+export PATH=/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin:/root/bin:/root/bin
+aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+        
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+ rm -f assume-role-output.txt
+
+aws s3 cp output/completed/HRMN_allConcepts.csv s3://avillach-73-bdcatalyst-etl/hrmn/completed/ --quiet
+aws s3 cp output/completed/hrmn_metadata.json s3://avillach-73-bdcatalyst-etl/hrmn/decoded_data/ --quiet
+aws s3 cp output/completed/hrmn_metadata.json s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/DCC_Harmonized_data_set/metadata/hrmn_metadata.json --quiet
+
+</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.49">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+    <hudson.plugins.timestamper.TimestamperBuildWrapper plugin="timestamper@1.30"/>
+  </buildWrappers>
+</project>

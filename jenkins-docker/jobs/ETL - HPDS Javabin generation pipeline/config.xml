@@ -1,8 +1,8 @@
 <?xml version='1.1' encoding='UTF-8'?>
-<flow-definition plugin="workflow-job@1400.v7fd111b_ec82f">
+<flow-definition plugin="workflow-job@1559.va_a_533730b_ea_d">
   <actions>
-    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobAction plugin="pipeline-model-definition@2.2218.v56d0cda_37c72"/>
-    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction plugin="pipeline-model-definition@2.2218.v56d0cda_37c72">
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobAction plugin="pipeline-model-definition@2.2277.v00573e73ddf1"/>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction plugin="pipeline-model-definition@2.2277.v00573e73ddf1">
       <jobProperties/>
       <triggers/>
       <parameters/>
@@ -12,61 +12,59 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
+    <org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
+      <triggers>
+        <jenkins.triggers.ReverseBuildTrigger>
+          <spec></spec>
+          <upstreamProjects>ETL - Ingest Pipeline (With Subject Multi), </upstreamProjects>
+          <threshold>
+            <name>SUCCESS</name>
+            <ordinal>0</ordinal>
+            <color>BLUE</color>
+            <completeBuild>true</completeBuild>
+          </threshold>
+        </jenkins.triggers.ReverseBuildTrigger>
+      </triggers>
+    </org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
+    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
+      <doNotScan>false</doNotScan>
+    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
   </properties>
-  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@4000.v5198556e9cea_">
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@4238.va_6fb_65c1f699">
     <script>import groovy.json.JsonSlurper;
 pipeline {
-    agent any 
+    agent any
     stages {
-        
-        stage(&apos;merge global concepts&apos;) { 
+
+        stage(&apos;merge global concepts&apos;) {
             steps {
                 script {
                     build job: &apos;ETL - Merge Global Concepts&apos;
                 }
             }
         }
-        
-        stage(&apos;Pull latest stigvars from git&apos;) { 
+
+        stage(&apos;Pull latest stigvars from git&apos;) {
             steps {
                 script {
                     build job: &apos;ETL - Upload stigmatizing variable files from git to s3&apos;
                 }
             }
         }
-        stage(&apos;merge and generate javabin&apos;) { 
+        stage(&apos;merge and generate javabin&apos;) {
             steps {
                 script {
+                    //echo &quot;Merge Job&quot;
                     build job: &apos;ETL - All Concept Data Merge with Data Analyzer&apos;
-                    
+
                 }
                 script {
+                    //echo &quot;Javabins build&quot;
                     build job: &apos;ETL - Generate Phenotype Javabins Data Analyzer&apos;
-                }
-            }
-        }
-        stage(&apos;Create dictionary javabin&apos;) { 
-            steps {
-                script {
-                    build job: &apos;ETL - Generate HPDS Data Dictionary Javabin&apos;
-                }
-            }
-        }
-        stage(&apos;Get updated study counts from hpds&apos;) { 
-            steps {
-                script {
-                    build job: &apos;ETL - Update Meta Counts For All Consents&apos;
-                }
-            }
-        }
-        stage(&apos;Convert from dictionary json to new dictionary input&apos;){
-            steps {
-                script {
-                    build job: &apos;Old JSON Dictionary to New Dictionary Input Files&apos;
                 }
             }
         }
@@ -76,8 +74,8 @@ pipeline {
                     build job: &apos;Dictionary ETL - BDC Ingest Pipeline&apos;
                 }
             }
-        } 
-        
+        }
+
     }
     post{
         success {

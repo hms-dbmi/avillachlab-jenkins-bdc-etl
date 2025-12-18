@@ -4,12 +4,16 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <hudson.plugins.copyartifact.CopyArtifactPermissionProperty plugin="copyartifact@757.v05365583a_455">
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
+      <doNotScan>false</doNotScan>
+    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
+    <hudson.plugins.copyartifact.CopyArtifactPermissionProperty plugin="copyartifact@770.va_6c69e063442">
       <projectNameList>
         <string>*</string>
       </projectNameList>
     </hudson.plugins.copyartifact.CopyArtifactPermissionProperty>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
@@ -24,53 +28,134 @@
   <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Shell>
-      <command>#!/bin/bash
-conn_user=&apos;postgres&apos;
-conn_pass=`aws secretsmanager get-secret-value --secret-id &apos;rds!db-8086eb77-cd6d-48bc-9298-4380892798ca&apos; --region &apos;us-east-1&apos; --query SecretString --output text | jq -r .password`
-database_psql_host_address=&apos;dictionarydb.cljahwnkfisu.us-east-1.rds.amazonaws.com&apos;
+      <command>#!/usr/bin/env bash
+set -euo pipefail
 
+# -------------------
+# Minimal logging
+# -------------------
+LOG_TS() { date +&quot;%Y-%m-%dT%H:%M:%S%z&quot;; }
+log()    { echo &quot;[$(LOG_TS)] INFO  $*&quot; &gt;&amp;2; }
+error()  { echo &quot;[$(LOG_TS)] ERROR $*&quot; &gt;&amp;2; }
 
-PGPASSWORD=&quot;$conn_pass&quot; psql \
-    --host=&quot;$database_psql_host_address&quot; \
-    --port=&quot;5432&quot; \
-    --username=&quot;$conn_user&quot; \
-    --dbname=&quot;dictionary_db&quot; \
-    -c &quot;\q&quot;  # This command tests the connection and exits
+# -------------------
+# Config
+# -------------------
+REGION=&quot;us-east-1&quot;
+SECRET_ID=&apos;rds!db-8086eb77-cd6d-48bc-9298-4380892798ca&apos;
 
-if [ $? -ne 0 ]; then
-    echo &quot;Connection test failed!&quot;
-    exit 1
+DB_HOST=&apos;dictionarydb.cljahwnkfisu.us-east-1.rds.amazonaws.com&apos;
+DB_PORT=&quot;5432&quot;
+DB_USER=&quot;postgres&quot;
+DB_NAME=&quot;dictionary_db&quot;
+
+ROLE_ARN=&quot;arn:aws:iam::736265540791:role/dbgap-etl&quot;
+ROLE_SESSION_NAME=&quot;s3-test&quot;
+ASSUME_DURATION_SECONDS=&quot;1800&quot;
+
+S3_BUCKET=&quot;avillach-73-bdcatalyst-etl&quot;
+S3_PREFIX=&quot;general/hpds/javabin&quot;
+
+PG_IMAGE=&quot;${PG_IMAGE:-postgres:16-bookworm}&quot;
+PG_JOBS=&quot;${PG_JOBS:-10}&quot;
+
+need() { command -v &quot;$1&quot; &gt;/dev/null 2&gt;&amp;1 || { error &quot;Missing required command: $1&quot;; exit 2; }; }
+need aws
+need jq
+need docker
+need tar
+
+WORKDIR=&quot;${WORKSPACE:-$PWD}&quot;
+ts=&quot;$(date -u &apos;+%m-%d-%yT%H&apos;)&quot;
+TAR_BASENAME=&quot;dictionary_db_${ts}.tar&quot;
+TAR_NAME=&quot;${WORKDIR}/${TAR_BASENAME}&quot;
+S3_URI=&quot;s3://${S3_BUCKET}/${S3_PREFIX}/${TAR_BASENAME}&quot;
+
+cleanup() {
+  rm -f &quot;${assume_json:-}&quot; 2&gt;/dev/null || true
+  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+}
+trap cleanup EXIT
+
+rm -f &quot;$TAR_NAME&quot;
+
+# -------------------
+# Fetch DB password (host-side)
+# -------------------
+log &quot;Fetching DB password from Secrets Manager (${SECRET_ID})&quot;
+conn_pass=&quot;$(aws secretsmanager get-secret-value \
+  --secret-id &quot;$SECRET_ID&quot; \
+  --region &quot;$REGION&quot; \
+  --query SecretString \
+  --output text | jq -r .password)&quot;
+
+if [[ -z &quot;${conn_pass:-}&quot; || &quot;${conn_pass}&quot; == &quot;null&quot; ]]; then
+  error &quot;Failed to load password from secret ${SECRET_ID}&quot;
+  exit 1
 fi
 
-echo &quot;Connection test successful!&quot;
+# -------------------
+# Run pg_dump in container, stream tar to host
+# -------------------
+log &quot;Running pg_dump in ${PG_IMAGE} (schema=dict) and writing ${TAR_NAME}&quot;
+docker run --rm \
+  -e PGPASSWORD=&quot;$conn_pass&quot; \
+  &quot;$PG_IMAGE&quot; \
+  bash -lc &quot;
+    set -euo pipefail
 
-# Run pg_restore using the dump files provided in the dump_files workspace directory
-PGPASSWORD=&quot;${conn_pass}&quot; \
-pg_dump \
-   --host=&quot;${database_psql_host_address}&quot; \
-   --port=&quot;5432&quot; \
-   --username=&quot;${conn_user}&quot; \
-   --file=&quot;dictionary_db.sql&quot; \
-   --format=d \
-   --jobs=10 \
-   --verbose \
-   --no-owner --no-privileges --no-tablespaces --no-unlogged-table-data --no-comments \
-   --no-publications --no-subscriptions --no-security-labels --no-toast-compression --no-table-access-method \
-   --schema &quot;dict&quot; --schema &quot;dict&quot; &quot;dictionary_db&quot;
-ts=$(date &apos;+%m-%d-%yT%H&apos;)   
-tar -ckvf dictionary_db_${ts}.tar dictionary_db.sql
+    echo &apos;Testing connection...&apos; &gt;&amp;2
+    psql --host=&apos;$DB_HOST&apos; --port=&apos;$DB_PORT&apos; --username=&apos;$DB_USER&apos; --dbname=&apos;$DB_NAME&apos; -c &apos;\\q&apos; &gt;&amp;2
+    echo &apos;Connection test successful!&apos; &gt;&amp;2
 
-aws sts assume-role --duration-seconds 1800 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
-export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+    rm -rf /tmp/dictionary_db.sql
+    pg_dump \
+      --host=&apos;$DB_HOST&apos; \
+      --port=&apos;$DB_PORT&apos; \
+      --username=&apos;$DB_USER&apos; \
+      --format=d \
+      --file=/tmp/dictionary_db.sql \
+      --jobs=&apos;${PG_JOBS}&apos; \
+      --verbose \
+      --no-owner --no-privileges --no-tablespaces --no-unlogged-table-data --no-comments \
+      --no-publications --no-subscriptions --no-security-labels --no-toast-compression --no-table-access-method \
+      --schema=dict \
+      &apos;$DB_NAME&apos; &gt;&amp;2
 
-aws s3 cp dictionary_db_${ts}.tar s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/
+    # tar bytes to STDOUT only
+    tar -C /tmp -cf - dictionary_db.sql
+  &quot; &gt; &quot;$TAR_NAME&quot;
 
-unset AWS_ACCESS_KEY_ID
-unset AWS_SECRET_ACCESS_KEY
-unset AWS_SESSION_TOKEN
-echo &quot;s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/dictionary_db_${ts}.tar&quot; &gt; db_dump_name.txt</command>
+# sanity checks
+if [[ ! -s &quot;$TAR_NAME&quot; ]]; then
+  error &quot;Dump tar was not created or is empty: $TAR_NAME&quot;
+  exit 1
+fi
+log &quot;Dump tar created (bytes=$(wc -c &lt; &quot;$TAR_NAME&quot;))&quot;
+log &quot;Tar contents (first 25):&quot;
+tar -tf &quot;$TAR_NAME&quot; | head -n 25 &gt;&amp;2
+
+# -------------------
+# Assume role + upload
+# -------------------
+log &quot;Assuming role for S3 upload: ${ROLE_ARN}&quot;
+assume_json=&quot;$(mktemp)&quot;
+aws sts assume-role \
+  --duration-seconds &quot;$ASSUME_DURATION_SECONDS&quot; \
+  --role-arn &quot;$ROLE_ARN&quot; \
+  --role-session-name &quot;$ROLE_SESSION_NAME&quot; \
+  &gt; &quot;$assume_json&quot;
+
+export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+AWS_ACCESS_KEY_ID=&quot;$(jq -r &apos;.Credentials.AccessKeyId&apos; &quot;$assume_json&quot;)&quot;
+AWS_SECRET_ACCESS_KEY=&quot;$(jq -r &apos;.Credentials.SecretAccessKey&apos; &quot;$assume_json&quot;)&quot;
+AWS_SESSION_TOKEN=&quot;$(jq -r &apos;.Credentials.SessionToken&apos; &quot;$assume_json&quot;)&quot;
+
+log &quot;Uploading to ${S3_URI}&quot;
+aws s3 cp &quot;$TAR_NAME&quot; &quot;$S3_URI&quot; --no-progress
+
+echo &quot;$S3_URI&quot; &gt; &quot;${WORKDIR}/db_dump_name.txt&quot;
+log &quot;Uploaded: ${S3_URI}&quot;</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>
@@ -86,7 +171,7 @@ echo &quot;s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/dictionary_db_${
     </hudson.tasks.ArtifactArchiver>
   </publishers>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.49">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>

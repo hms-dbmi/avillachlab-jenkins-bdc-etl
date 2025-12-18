@@ -1,0 +1,269 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description>In the description I am going to track things that annoy me about this.&#xd;
+&#xd;
+the ensemble datafile name is hard to target as it seems to be random study abv. </description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.TextParameterDefinition>
+          <name>bucket_s3_names</name>
+          <description>nih-nhlbi-bdc-biolincc-allhat-phs004021-v1-r1-c1
+nih-nhlbi-bdc-biolincc-concert-hf-phs004055-v1-r1-c1
+nih-nhlbi-bdc-biolincc-hifi-phs004032-v1-r1-c1
+nih-nhlbi-bdc-biolincc-ipfnet-ace-ipf-phs004070-v1-r1-c1
+nih-nhlbi-bdc-biolincc-ippb-phs004010-v1-r1-c1
+nih-nhlbi-bdc-biolincc-lhs-phs004013-v1-r1-c1
+nih-nhlbi-bdc-biolincc-pioped-phs004020-v1-r1-c1
+nih-nhlbi-bdc-biolincc-prhhp-phs003930-v1-r1-c1
+nih-nhlbi-bdc-roc-cpr-phs003818-c1
+</description>
+          <defaultValue>nih-nhlbi-bdc-biolincc-allhat-phs004021-v1-r1-c1
+nih-nhlbi-bdc-biolincc-ippb-phs004010-v1-r1-c1
+nih-nhlbi-bdc-biolincc-lhs-phs004013-v1-r1-c1
+nih-nhlbi-bdc-biolincc-pioped-phs004020-v1-r1-c1
+nih-nhlbi-bdc-biolincc-prhhp-phs003930-v1-r1-c1
+nih-nhlbi-bdc-roc-cpr-phs003818-c1
+nih-nhlbi-bdc-biolincc-concert-hf-phs004055-v1-r1-c1
+</defaultValue>
+          <trim>false</trim>
+        </hudson.model.TextParameterDefinition>
+        <hudson.model.ChoiceParameterDefinition>
+          <name>nhlbi_account_number</name>
+          <choices class="java.util.Arrays$ArrayList">
+            <a class="string-array">
+              <string>714862078411</string>
+              <string>600168050588</string>
+            </a>
+          </choices>
+        </hudson.model.ChoiceParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.8.1">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>git@github.com:hms-dbmi/bdc-etl-curation.git</url>
+        <credentialsId>bdc-etl-curation-ro-deploy-key</credentialsId>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>*/ALS-9272</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="empty-list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>true</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+
+# put this in a jenkins pipeline all with other no file rendering jobs. 
+
+mkdir -p ./biolincc/input/
+mkdir -p ./biolincc/output/
+
+for bucket_s3_name in ${bucket_s3_names}; do
+  echo &quot;Bucket: ${bucket_s3_name}&quot;
+  aws sts assume-role --role-arn arn:aws:iam::${nhlbi_account_number}:role/nih-nhlbi-TopMed-EC2Access-S3 --role-session-name &quot;get-phenotypic-data&quot; &gt; assume-role-output.txt
+  export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+  export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+  export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+      
+  # Function library is needed.
+  aws s3api list-objects --bucket &quot;${bucket_s3_name}&quot; --query &quot;Contents[?contains(Key, &apos;ensemble&apos;) &amp;&amp; ends_with(Key, &apos;.sas7bdat&apos;)].Key&quot; --output text | \
+  	while read -r key; do
+    	aws s3 cp &quot;s3://${bucket_s3_name}/${key}&quot; &quot;./biolincc/input/$(basename &quot;$key&quot;)&quot; --no-progress
+  	done
+
+  aws s3api list-objects --bucket &quot;${bucket_s3_name}&quot; --query &quot;Contents[?contains(Key, &apos;manifest&apos;) &amp;&amp; ends_with(Key, &apos;.tsv&apos;)].Key&quot; --output text | \
+  	while read -r key; do
+    	aws s3 cp &quot;s3://${bucket_s3_name}/${key}&quot; &quot;./biolincc/input/$(basename &quot;$key&quot;)&quot; --no-progress
+  	done
+  #  aws s3 cp --recursive s3://${bucket_s3_name}/ ./_etl/input/ --exclude &quot;*&quot; --include &quot;*ensemble*.sas7bdat*&quot; --only-show-errors
+  #aws s3 cp --recursive s3://${bucket_s3_name}/ ./_etl/input/ --exclude &quot;*&quot; --include &quot;*manifest*.tsv*&quot; --only-show-errors
+  
+  
+  unset AWS_ACCESS_KEY_ID
+  unset AWS_SECRET_ACCESS_KEY
+  unset AWS_SESSION_TOKEN
+done</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+
+cat &lt;&lt; &apos;EOF&apos; &gt; ./biolincc/configs/study_list_master.json
+[
+  { &quot;study_id&quot;: &quot;phs003899.v1&quot;, &quot;name&quot;: &quot;tlsrf&quot;, &quot;alt_name&quot;: &quot;BioLINCC_TOLSURF&quot; },
+  { &quot;study_id&quot;: &quot;phs003738.v1&quot;, &quot;name&quot;: &quot;aric&quot;, &quot;alt_name&quot;: &quot;BioLINCC_ARIC&quot; },
+  { &quot;study_id&quot;: &quot;phs003739.v1&quot;, &quot;name&quot;: &quot;cardia&quot;, &quot;alt_name&quot;: &quot;BioLINCC_CARDIA&quot; },
+  { &quot;study_id&quot;: &quot;phs003818.v1&quot;, &quot;name&quot;: &quot;roccpr&quot;, &quot;alt_name&quot;: &quot;BioLINCC_ROC-CPR&quot; },
+  { &quot;study_id&quot;: &quot;phs003901.v1&quot;, &quot;name&quot;: &quot;ccc&quot;, &quot;alt_name&quot;: &quot;BioLINCC_ROC-CCC&quot; },
+  { &quot;study_id&quot;: &quot;phs003902.v1&quot;, &quot;name&quot;: &quot;part&quot;, &quot;alt_name&quot;: &quot;BioLINCC_ROC-PART&quot; },
+  { &quot;study_id&quot;: &quot;phs003907.v1&quot;, &quot;name&quot;: &quot;hhp&quot;, &quot;alt_name&quot;: &quot;BioLINCC_HHP-BioLINCC&quot; },
+  { &quot;study_id&quot;: &quot;phs003913.v1&quot;, &quot;name&quot;: &quot;ltrc&quot;, &quot;alt_name&quot;: &quot;BioLINCC_LTRC-BioLINCC&quot; },
+  { &quot;study_id&quot;: &quot;phs003858.v1&quot;, &quot;name&quot;: &quot;pad&quot;, &quot;alt_name&quot;: &quot;BioLINCC_PAD-BioLINCC&quot; },
+  { &quot;study_id&quot;: &quot;phs003900.v1&quot;, &quot;name&quot;: &quot;aster&quot;, &quot;alt_name&quot;: &quot;BioLINCC_PETAL-ASTER&quot; },
+  { &quot;study_id&quot;: &quot;phs003594.v1&quot;, &quot;name&quot;: &quot;fhsg3&quot;, &quot;alt_name&quot;: &quot;BioLINCC_FHS&quot; },
+  { &quot;study_id&quot;: &quot;phs003594.v1&quot;, &quot;name&quot;: &quot;fhsos&quot;, &quot;alt_name&quot;: &quot;BioLINCC_FHS&quot; },
+  { &quot;study_id&quot;: &quot;phs003594.v1&quot;, &quot;name&quot;: &quot;fhscoh&quot;, &quot;alt_name&quot;: &quot;BioLINCC_FHS&quot; },
+  { &quot;study_id&quot;: &quot;phs003739.v1&quot;, &quot;name&quot;: &quot;cardia&quot;, &quot;alt_name&quot;: &quot;BioLINCC_CARDIA&quot; },
+  { &quot;study_id&quot;: &quot;phs003933.v1&quot;, &quot;name&quot;: &quot;lott&quot;, &quot;alt_name&quot;: &quot;BioLINCC_LOTT&quot; },
+  { &quot;study_id&quot;: &quot;phs003968.v1&quot;, &quot;name&quot;: &quot;wrap&quot;, &quot;alt_name&quot;: &quot;BioLINCC_WRAP-IPF&quot; },
+  { &quot;study_id&quot;: &quot;phs003995.v1&quot;, &quot;name&quot;: &quot;lrcps&quot;, &quot;alt_name&quot;: &quot;BioLINCC_LRC_PS&quot; },
+  { &quot;study_id&quot;: &quot;phs004010.v1&quot;, &quot;name&quot;: &quot;ippb&quot;, &quot;alt_name&quot;: &quot;BioLINCC_IPPB&quot; },
+  { &quot;study_id&quot;: &quot;phs004013.v1&quot;, &quot;name&quot;: &quot;lhs&quot;, &quot;alt_name&quot;: &quot;BioLINCC_LHS&quot; },
+  { &quot;study_id&quot;: &quot;phs004021.v1&quot;, &quot;name&quot;: &quot;allhat&quot;, &quot;alt_name&quot;: &quot;BioLINCC_ALLHAT&quot; },
+  { &quot;study_id&quot;: &quot;phs004022.v1&quot;, &quot;name&quot;: &quot;bstcpd&quot;, &quot;alt_name&quot;: &quot;BioLINCC_BEST_COPD&quot; },
+  { &quot;study_id&quot;: &quot;phs004020.v1&quot;, &quot;name&quot;: &quot;pioped&quot;, &quot;alt_name&quot;: &quot;BioLINCC_PIOPED&quot; },
+  { &quot;study_id&quot;: &quot;phs003637.v1&quot;, &quot;name&quot;: &quot;shhs&quot;, &quot;alt_name&quot;: &quot;BioLINCC_SHHS&quot; }
+]
+EOF
+
+cat &lt;&lt; &apos;EOF&apos; &gt; ./biolincc/configs/study_list.json
+[
+  { &quot;study_id&quot;: &quot;phs003818.v1&quot;, &quot;name&quot;: &quot;roccpr&quot;, &quot;alt_name&quot;: &quot;BioLINCC_ROC-CPR&quot; },
+  { &quot;study_id&quot;: &quot;phs004055.v1&quot;, &quot;name&quot;: &quot;cncrt&quot;, &quot;alt_name&quot;: &quot;BioLINCC_CONCERT_HF&quot; }
+]
+EOF
+
+cat &lt;&lt; &apos;EOF&apos; &gt; ./biolincc/configs/study_list_completed.json
+[
+  { &quot;study_id&quot;: &quot;phs004021.v1&quot;, &quot;name&quot;: &quot;allhat&quot;, &quot;alt_name&quot;: &quot;BioLINCC_ALLHAT&quot; },
+  { &quot;study_id&quot;: &quot;phs003818.v1&quot;, &quot;name&quot;: &quot;roccpr&quot;, &quot;alt_name&quot;: &quot;BioLINCC_ROC-CPR&quot; },
+  { &quot;study_id&quot;: &quot;phs004010.v1&quot;, &quot;name&quot;: &quot;ippb&quot;, &quot;alt_name&quot;: &quot;BioLINCC_IPPB&quot; },
+  { &quot;study_id&quot;: &quot;phs004013.v1&quot;, &quot;name&quot;: &quot;lhs&quot;, &quot;alt_name&quot;: &quot;BioLINCC_LHS&quot; },
+  { &quot;study_id&quot;: &quot;phs004020.v1&quot;, &quot;name&quot;: &quot;pioped&quot;, &quot;alt_name&quot;: &quot;BioLINCC_PIOPED&quot; },
+  { &quot;study_id&quot;: &quot;phs003930.v1&quot;, &quot;name&quot;: &quot;prhhp&quot;, &quot;alt_name&quot;: &quot;BioLINCC_PRHHP&quot; },
+  { &quot;study_id&quot;: &quot;phs004055.v1&quot;, &quot;name&quot;: &quot;cncrt&quot;, &quot;alt_name&quot;: &quot;BioLINCC_CONCERT_HF&quot; }
+]
+EOF
+
+
+cat &lt;&lt; &apos;EOF&apos; &gt; ./biolincc/main.py
+from src import subject_multi_generator
+from src import subject_multi_generator_xml
+from src import sas_2_csv
+from src import build_avl_lab_dict
+from src import validate_subject_multi
+from src import sas_2_csv_per_study
+import json
+import traceback
+
+def safe_run(func, *args, **kwargs):
+    try:
+        func(*args, **kwargs)
+    except Exception as e:
+        print(f&quot;\n[ERROR] An exception occurred in {getattr(func, &apos;__name__&apos;, str(func))}:&quot;)
+        traceback.print_exc()
+        print()
+
+def load_studies(file_path):
+    with open(file_path, &apos;r&apos;) as file:
+        return json.load(file)
+
+studies = load_studies(&apos;./configs/study_list.json&apos;)
+
+if __name__ == &apos;__main__&apos;:
+    print(&quot;Validate Telemetry Report&quot;)
+    #safe_run(validate_subject_multi.main)
+    print(&quot;Validation finished&quot;)
+
+    for study in studies:
+        study_id = study[&quot;study_id&quot;]
+        abv_name = study[&quot;name&quot;]
+        alt_name = study[&quot;alt_name&quot;].lower()
+
+        print(&quot;Starting SAS to CSV conversion...&quot;)
+        safe_run(sas_2_csv_per_study.main, study_id, abv_name)
+        print(&quot;SAS to CSV conversion completed.\n&quot;)
+
+        print(f&quot;Processing metadata for study {study_id} ({abv_name})...&quot;)
+        safe_run(build_avl_lab_dict.main, study_id, abv_name, alt_name)
+        print(f&quot;Metadata generation completed for {study_id}.\n&quot;)
+
+        print(f&quot;Generating subject multi files for {study_id}...&quot;)
+        safe_run(subject_multi_generator.main, study_id)
+        print(f&quot;Subject multi generation completed for {study_id}.\n&quot;)
+
+        print(f&quot;Generating XML for {study_id}...&quot;)
+        safe_run(subject_multi_generator_xml.main, study_id)
+        print(f&quot;XML generation completed for {study_id}.\n&quot;)
+
+    print(&quot;All studies processed successfully!&quot;)
+EOF
+
+
+cd ./biolincc/
+python main.py
+
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+
+for row in $(jq -c &apos;.[]&apos; ./configs/study_list.json); do
+  aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+  
+  export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+  export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+  export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+  
+  study_id=$(echo &quot;$row&quot; | jq -r &apos;.study_id&apos;)
+  name=$(echo &quot;$row&quot; | jq -r &apos;.name&apos;)
+  alt_name=$(echo &quot;$row&quot; | jq -r &apos;.alt_name&apos;)
+  
+  echo &quot;Uploading to s3 $study_id with name $name...&quot;
+  aws s3 cp ./output/ s3://avillach-73-bdcatalyst-etl/${alt_name,,}/decoded_data/ --recursive --exclude &quot;*&quot; --include &quot;*${name}*&quot; --no-progress
+  aws s3 cp ./output/ s3://avillach-73-bdcatalyst-etl/${alt_name,,}/rawData/ --recursive --exclude &quot;*&quot; --include &quot;*${name}*&quot; --no-progress
+  
+  aws s3 cp ./output/ s3://avillach-73-bdcatalyst-etl/${alt_name,,}/decoded_data/ --recursive --exclude &quot;*&quot; --include &quot;*${study_id}*&quot; --no-progress
+  aws s3 cp ./output/ s3://avillach-73-bdcatalyst-etl/${alt_name,,}/rawData/ --recursive --exclude &quot;*&quot; --include &quot;*${study_id}*&quot; --no-progress
+  
+  aws s3 cp ./output/ s3://avillach-73-bdcatalyst-etl/${alt_name,,}/decoded_data/ --recursive --exclude &quot;*&quot; --include &quot;*${alt_name,,}*&quot; --no-progress
+  aws s3 cp ./output/ s3://avillach-73-bdcatalyst-etl/${alt_name,,}/rawData/ --recursive --exclude &quot;*&quot; --include &quot;*${alt_name,,}*&quot; --no-progress
+    
+  unset AWS_ACCESS_KEY_ID
+  unset AWS_SECRET_ACCESS_KEY
+  unset AWS_SESSION_TOKEN
+done</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers>
+    <hudson.tasks.ArtifactArchiver>
+      <artifacts>biolincc/output/*report.json, biolincc/output/*metadata.json, ./biolincc/configs/study_list_master.json, ./biolincc/configs/study_list.json</artifacts>
+      <allowEmptyArchive>false</allowEmptyArchive>
+      <onlyIfSuccessful>false</onlyIfSuccessful>
+      <fingerprint>false</fingerprint>
+      <defaultExcludes>true</defaultExcludes>
+      <caseSensitive>true</caseSensitive>
+      <followSymlinks>false</followSymlinks>
+    </hudson.tasks.ArtifactArchiver>
+  </publishers>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.49">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>

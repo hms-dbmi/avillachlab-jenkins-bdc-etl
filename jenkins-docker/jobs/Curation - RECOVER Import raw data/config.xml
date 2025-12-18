@@ -1,0 +1,278 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>STUDY_ID</name>
+          <defaultValue>phs003463</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>VERSION</name>
+          <defaultValue>v4</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>INPUT_S3_FOLDER_URI</name>
+          <defaultValue>s3://nih-nhlbi-bdc-recover-adult-phs003463-v4-r1-c1/</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.ChoiceParameterDefinition>
+          <name>DATASET_NAME</name>
+          <description>should match the second level of concept paths provided by recover.</description>
+          <choices class="java.util.Arrays$ArrayList">
+            <a class="string-array">
+              <string>RECOVER_Adult</string>
+              <string>RECOVER_Pediatrics</string>
+              <string>RECOVER_Caregiver</string>
+              <string>RECOVER_Congenital</string>
+              <string>RECOVER_Autopsy</string>
+            </a>
+          </choices>
+        </hudson.model.ChoiceParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>manifest_file_uri</name>
+          <description>Often in separate spot from core data so needs to be imported separately</description>
+          <defaultValue>s3://nih-nhlbi-bdc-recover-adult-phs003463-v4-r1-c1/nih-nhlbi-bdc-recover-adult-phs003463-v4-r1-c1.manifest.20250410203413.tsv</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>true</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+set -o pipefail
+mkdir ${STUDY_ID,,}
+cd ${STUDY_ID,,}
+aws sts assume-role --role-arn arn:aws:iam::714862078411:role/nih-nhlbi-TopMed-EC2Access-S3 --role-session-name &quot;get-files&quot; &gt; assume-role-output.txt
+
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+rm -f assume-role-output.txt
+aws s3 cp ${INPUT_S3_FOLDER_URI} . --recursive
+curl &apos;https://www.ncbi.nlm.nih.gov/gap/sstr/report/study/&apos;${STUDY_ID}&apos;.&apos;${VERSION}&apos;/subjects/download?study_accession_version=&apos;${STUDY_ID}&apos;.&apos;${VERSION}&apos;&amp;order_col=0&amp;order_dir=asc&amp;filter_text=&amp;data_format=row&amp;columns=SUBJECT_ID%20%2C%20CONSENT%2C%20consent_abbreviation%20%2C%20dbgap_subject_id&apos; \
+	-H &apos;X-Requested-With: XMLHttpRequest&apos; -H &apos;Connection: keep-alive&apos; &gt; telemetry_report.tsv
+
+aws s3 cp ${manifest_file_uri} .
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+
+
+conn_user=&apos;postgres&apos;
+conn_pass=`aws secretsmanager get-secret-value --secret-id &apos;rds!db-2b115560-c8c4-4cec-8418-537a35f9c192&apos; --region &apos;us-east-1&apos; --query SecretString --output text | jq -r .password`
+if [[ $? != 0 ]] || [[ -z $conn_pass ]]
+then
+	echo &quot;Secretsmanager call failed&quot;
+	exit 255
+else
+	echo &quot;Secretsmanager call succeeded&quot;
+fi
+database_psql_host_address=&apos;recoverdb.cljahwnkfisu.us-east-1.rds.amazonaws.com&apos;
+DB=&quot;${DATASET_NAME,,}_${VERSION,,}&quot;
+
+
+#create db if not exists
+echo &quot;creating new database&quot;
+PGPASSWORD=&quot;$conn_pass&quot; createdb $DB --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; -U $conn_user
+
+echo &quot;testing connection to new db&quot;
+PGPASSWORD=&quot;$conn_pass&quot; psql --quiet \
+    --host=&quot;$database_psql_host_address&quot; \
+    --port=&quot;5432&quot; \
+    --username=&quot;$conn_user&quot; \
+    --dbname=&quot;$DB&quot; \
+    -c &quot;\q&quot;  # This command tests the connection and exits
+
+if [ $? -ne 0 ]; then
+    echo &quot;Connection test failed!&quot;
+    exit 255
+else
+	echo &quot;Connection test succeeded - conn_user=$conn_user database_psql_host_address=$database_psql_host_address DB=$DB&quot;
+fi
+
+echo &quot;Establishing necessary schemas&quot;
+PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+-c &quot;ALTER DATABASE $DB set client_min_messages=warning&quot; \
+-c &quot;CREATE SCHEMA IF NOT EXISTS input&quot; \
+-c &quot;CREATE SCHEMA IF NOT EXISTS resources&quot; \
+-c &quot;CREATE SCHEMA IF NOT EXISTS dictionary_files&quot; \
+-c &quot;CREATE EXTENSION IF NOT EXISTS tablefunc&quot;
+
+#adds appended suffix to common varids for caregiver and congenital to avoid overlap with each other/peds general
+export DATASET_SUFFIX=&apos;&apos;
+if [[ ${DATASET_NAME} == *&apos;caregiver&apos;* ]]; then
+export DATASET_SUFFIX=&apos;_ca&apos;;
+elif [[ ${DATASET_NAME} == *&apos;congenital&apos;* ]]; then
+export DATASET_SUFFIX=&apos;_co&apos;;
+fi
+
+echo &quot;add table to resources schema with key-value pairs useful for metadata generation&quot;
+PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+    -c &quot;DROP TABLE IF EXISTS resources.meta_utils&quot; \
+    -c &quot;CREATE TABLE resources.meta_utils (key text, value text)&quot; \
+    -c &quot;insert into resources.meta_utils (key, value) values (&apos;study_id&apos;, &apos;${STUDY_ID}&apos;), (&apos;dataset_name&apos;, &apos;${DATASET_NAME}&apos;), (&apos;dataset_suffix&apos;, &apos;${DATASET_SUFFIX}&apos;);&quot;
+
+#file list is sorted in reverse to put the longest run (answerdata) last and catch issues in other files early
+ls . | sort -r &gt; file_list.txt
+rm -f -r formatted_files table_scripts
+mkdir formatted_files
+mkdir table_scripts
+while read FILE; do
+    	FILE_EXT=&quot;${FILE##*.}&quot;
+    	TABLE_NAME=`echo $FILE | cut -d &quot;_&quot; -f 4`;
+    	TABLE_NAME=${TABLE_NAME,,};
+        if [[ ${FILE,,} == *&quot;biostats&quot;* ]]; then
+        	TABLE_NAME=&quot;derived_${TABLE_NAME}&quot;
+        fi
+        echo $TABLE_NAME
+
+    	if [[ ! -z $TABLE_NAME ]] &amp;&amp; [[ $TABLE_NAME != &quot;&quot; ]] &amp;&amp; [[ $TABLE_NAME != $FILE ]]; then
+        		SCHEMA_NAME=&apos;input&apos;
+            	if [[ $FILE_EXT == &quot;csv&quot; ]]; then
+                    echo &quot;processing $FILE as $FILE_EXT with table name $TABLE_NAME&quot;
+                   	iconv -t UTF-8 -c $FILE | csvformat -v &gt; formatted_files/$TABLE_NAME.csv
+            	elif [[ $FILE_EXT == &quot;tsv&quot; ]]; then
+                    echo &quot;processing $FILE as $FILE_EXT with table name $TABLE_NAME&quot;
+                    iconv -t UTF-8 -c $FILE | csvformat -t  &gt; formatted_files/$TABLE_NAME.csv
+                elif [[ $FILE_EXT == &quot;xlsx&quot; ]]; then
+            		echo &quot;processing $FILE as $FILE_EXT with table name $TABLE_NAME&quot;
+                    iconv -t UTF-8 -c $FILE | in2csv &gt; formatted_files/$TABLE_NAME.csv
+            	fi
+                if [[ -z formatted_files/$TABLE_NAME.csv ]]; then
+                	echo &quot;$FILE has a file extension that is not implemented ($FILE_EXT) or could not be converted to csv.&quot;
+               	else
+                    echo &quot;file formatted - moving to create table script&quot;
+                    #limit the type analysis to first 10k rows to avoid crazy processing times
+                    head -n 10000 formatted_files/$TABLE_NAME.csv | csvsql -v --no-constraints --blanks --db-schema ${SCHEMA_NAME} --tables ${TABLE_NAME} -i postgresql &gt; table_scripts/${TABLE_NAME}.sql
+                   	#replace the default boolean type with varchar (prevents errors when first 10k vals of column are null but vals exist later)
+                   	sed -i &apos;s/BOOLEAN/VARCHAR/g&apos; table_scripts/${TABLE_NAME}.sql
+                    
+                    echo &quot;dropping and recreating table from generated sql script then importing formatted data&quot;
+                    PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+                            -c &quot;DROP TABLE IF EXISTS ${SCHEMA_NAME}.${TABLE_NAME}&quot; \
+                            -c &quot;\i table_scripts/${TABLE_NAME}.sql&quot; \
+                            -c &quot;\COPY ${SCHEMA_NAME}.${TABLE_NAME} from formatted_files/$TABLE_NAME.csv CSV HEADER NULL &apos;NA&apos;&quot;;
+                 fi
+    	elif [[ $FILE == *&quot;manifest&quot;* ]]; then
+            TABLE_NAME=&apos;manifest&apos;;
+        	echo &quot;processing manifest file into resources schema&quot;;
+            iconv -t UTF-8 -c $FILE | csvformat -t  &gt; formatted_files/$TABLE_NAME.csv
+            
+            head -n 10000 formatted_files/$TABLE_NAME.csv | csvsql -v --no-constraints --blanks --db-schema resources --tables ${TABLE_NAME} -i postgresql &gt; table_scripts/${TABLE_NAME}.sql
+            
+        	PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+                            -c &quot;DROP TABLE IF EXISTS resources.${TABLE_NAME}&quot; \
+                            -c &quot;\i table_scripts/${TABLE_NAME}.sql&quot; \
+                            -c &quot;\COPY resources.${TABLE_NAME} from formatted_files/$TABLE_NAME.csv CSV HEADER&quot;;
+    	elif [[ $FILE == *&quot;telemetry&quot;* ]]; then
+            TABLE_NAME=&apos;telemetry_report&apos;;
+        	echo &quot;build telemetry report table into resources schema&quot;;
+            iconv -t UTF-8 -c $FILE | csvformat -t &gt; formatted_files/$TABLE_NAME.csv
+            
+            head -n 20 formatted_files/$TABLE_NAME.csv | csvsql -v --no-constraints --blanks -I --db-schema resources --tables ${TABLE_NAME} -i postgresql &gt; table_scripts/${TABLE_NAME}.sql
+            
+        	PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+                            -c &quot;DROP TABLE IF EXISTS resources.${TABLE_NAME}&quot; \
+                            -c &quot;\i table_scripts/${TABLE_NAME}.sql&quot; \
+                            -c &quot;\COPY resources.${TABLE_NAME} from formatted_files/$TABLE_NAME.csv CSV HEADER&quot; \
+                            -c &quot;UPDATE resources.${TABLE_NAME} set \&quot;CONSENT\&quot; = (&apos;c&apos;||\&quot;CONSENT\&quot;)&quot;;
+        else
+        	echo &quot;could not extract table name from $FILE, assuming it is a non-data file and skipping&quot;
+    	fi
+    	unset FILE_EXT;
+    	unset TABLE_NAME;
+done &lt; file_list.txt
+
+
+#set all column names to lowercase
+echo &quot;normalizing column names stage 1: setting all columns to lowercase&quot;
+PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+                    	-o go_to_lower -t -c &quot;select &apos;ALTER TABLE ${SCHEMA_NAME}.&apos;||quote_ident(table_name)||&apos; RENAME COLUMN &apos;||quote_ident(column_name) || &apos; TO &apos; || lower(quote_ident(column_name))||&apos;;&apos;  from information_schema.columns where table_schema = &apos;${SCHEMA_NAME}&apos; and lower(quote_ident(column_name)) != quote_ident(column_name)&quot;
+PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+ -c &quot;\g go_to_lower&quot; -c &quot;\i go_to_lower&quot;
+echo &quot;normalizing column names stage 2: replacing spaces with _&quot;
+#replace spaces in column names with _
+PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+                    	-o update_spaces -t -c &quot;select &apos;ALTER TABLE ${SCHEMA_NAME}.&apos;||quote_ident(table_name)||&apos; RENAME COLUMN &apos;||quote_ident(column_name) || &apos; TO &apos; || lower(quote_ident(replace(column_name, &apos; &apos;, &apos;_&apos;)))||&apos;;&apos;  from information_schema.columns where table_schema = &apos;${SCHEMA_NAME}&apos; and lower(quote_ident(column_name)) != quote_ident(column_name)&quot;
+PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+ -c &quot;\g update_spaces&quot; -c &quot;\i update_spaces&quot;
+ echo &quot;normalizing column names stage 3: fixing &apos;conecpt_cd&apos; typo to &apos;concept_cd&apos; to keep consistent&quot;
+PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+	-o update_conecpt_cd -t \
+	-c &quot;select &apos;ALTER TABLE ${SCHEMA_NAME}.&apos;||quote_ident(table_name)||&apos; RENAME COLUMN &apos;||quote_ident(column_name) || &apos; TO concept_cd;&apos;  from information_schema.columns where table_schema = &apos;${SCHEMA_NAME}&apos; and quote_ident(column_name) = &apos;conecpt_cd&apos;&quot;
+PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+ -c &quot;\g update_conecpt_cd&quot; -c &quot;\i update_conecpt_cd&quot;
+
+
+#import the data dictionaries used for recover adult and peds
+
+aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+        
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+ rm -f assume-role-output.txt
+ 
+aws s3 cp s3://avillach-73-bdcatalyst-etl/recover_derived_dictionaries/dictionary_files.sql.zip dictionary_files.sql.zip
+mkdir temp_extract
+unzip dictionary_files.sql.zip -d temp_extract
+
+mkdir dump_files
+find temp_extract -type f -exec mv {} dump_files/ \;
+
+
+# Run pg_restore using the dump files provided in the dump_files workspace directory
+PGPASSWORD=&quot;${conn_pass}&quot; \
+pg_restore \
+   --host=&quot;${database_psql_host_address}&quot; \
+   --port=&quot;5432&quot; \
+   --username=&quot;${conn_user}&quot; \
+   --dbname=&quot;$DB&quot; \
+   --format=d \
+   --jobs=10 \
+   --verbose \
+   --no-owner \
+   --no-privileges \
+   --no-tablespaces \
+   --no-comments \
+   --no-publications \
+   --no-subscriptions \
+   --no-security-labels \
+   --no-table-access-method \
+   --schema=&quot;dictionary_files&quot; \
+   &quot;dump_files/&quot;
+</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.49">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+    <hudson.plugins.timestamper.TimestamperBuildWrapper plugin="timestamper@1.30"/>
+  </buildWrappers>
+</project>

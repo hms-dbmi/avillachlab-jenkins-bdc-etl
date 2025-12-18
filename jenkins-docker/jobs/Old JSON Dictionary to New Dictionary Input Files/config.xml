@@ -4,7 +4,7 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
@@ -13,10 +13,15 @@
         <hudson.model.FileParameterDefinition>
           <name>managed_inputs.tsv</name>
         </hudson.model.FileParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>datasetRef</name>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
   </properties>
-  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.3.0">
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.8.1">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
@@ -25,7 +30,7 @@
     </userRemoteConfigs>
     <branches>
       <hudson.plugins.git.BranchSpec>
-        <name>*/master</name>
+        <name>22b24905faa7d31736eb249bcb764bb0d06bd762</name>
       </hudson.plugins.git.BranchSpec>
     </branches>
     <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
@@ -38,7 +43,7 @@
   <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
   <jdk>(System)</jdk>
   <triggers/>
-  <concurrentBuild>false</concurrentBuild>
+  <concurrentBuild>true</concurrentBuild>
   <builders>
     <hudson.tasks.Shell>
       <command>#!/bin/bash
@@ -52,20 +57,20 @@ mkdir oldData
 #aws s3 cp s3://avillach-73-bdcatalyst-etl/newDictionary/dictionary.json oldData/dictionary.json
 #aws s3 cp s3://avillach-73-bdcatalyst-etl/newDictionary/managed_inputs.csv oldData/managed_inputs.csv
 
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json oldData/metadata.json
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/dictionary.json oldData/dictionary.json
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.tsv oldData/managed_inputs.tsv
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json oldData/metadata.json --no-progress
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/dictionary.json oldData/dictionary.json --no-progress
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.tsv oldData/managed_inputs.tsv --no-progress
 #mv managed_inputs.tsv oldData/managed_inputs.tsv
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
 unset AWS_SESSION_TOKEN
 
-csvcut -t -c "Study Abbreviated Name","Study Identifier","Study Full Name","Data Type","Study Type","Subject Type(s)","BDC Program(s)","Data is ready to process","Data Processed","Version","Phase","More Info Link","Additional Information Link (URL)","Additional Information Link (Label)","Request Access Text","BDC Program(s)" oldData/managed_inputs.tsv | csvformat -z 10000000 -D &apos;φ&apos; &gt; inputs.csv
+csvcut -t -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Study Full Name&quot;,&quot;Data Type&quot;,&quot;Study Type&quot;,&quot;Subject Type(s)&quot;,&quot;BDC Program(s)&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot;,&quot;Version&quot;,&quot;Phase&quot;,&quot;More Info Link&quot;,&quot;Additional Information Link (URL)&quot;,&quot;Additional Information Link (Label)&quot;,&quot;Request Access Text&quot;,&quot;BDC Program(s)&quot; oldData/managed_inputs.tsv | csvformat -z 10000000 -D &apos;φ&apos; &gt; inputs.csv
 IFS=&apos;φ&apos;
 [ ! -f inputs.csv ]
 while read study_abv study_id study_name data_type study_type subject_types program_name data_ready data_processed version phase more_info_link additional_info_link additional_info request_text program_name
 do
-  if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]] &amp;&amp; [[ &quot;${data_processed,,}&quot; == &quot;no&quot; ]]; then
+  if [[ &quot;${study_id,,}&quot; == &quot;${datasetRef,,}&quot; ]]; then
 	mkdir ${study_id}
     mkdir ${study_id}/output
     echo &apos;refφfull_nameφabbreviationφdescriptionφdata_typeφstudy_typeφsubject_typesφprogram_nameφversionφphaseφadditional_info_linkφadditional_infoφstudy_accessionφstudy_linkφrequest_access_textφprogram_name&apos; &gt;&gt; ${study_id}/output/datasets.csv
@@ -94,7 +99,7 @@ done  &lt; inputs.csv
   </builders>
   <publishers/>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.46">
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.49">
       <deleteDirs>false</deleteDirs>
       <cleanupParameter></cleanupParameter>
       <externalDelete></externalDelete>
