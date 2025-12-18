@@ -17,9 +17,16 @@ BDC Managed Inputs should be updated.&#xd;
 </description>
   <keepDependencies>false</keepDependencies>
   <properties>
+    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
+      <doNotScan>false</doNotScan>
+    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
     <org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty>
       <abortPrevious>false</abortPrevious>
     </org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
   </properties>
   <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@4238.va_6fb_65c1f699">
     <script>import groovy.json.JsonSlurper;
@@ -260,7 +267,8 @@ pipeline {
             steps {
                 script {
                     def allConceptsRuns = [:]
-                    allConceptsRuns[&quot;noncomp-allconcepts&quot;] = {
+                    def disabledRuns = [:]
+                    disabledRuns[&quot;noncomp-allconcepts&quot;] = {
                         build job: &apos;ETL - Generate Non-DBGap All Concepts with Data Type Analyzer&apos;
                     }
                     allConceptsRuns[&quot;comp-allconcepts&quot;] = {

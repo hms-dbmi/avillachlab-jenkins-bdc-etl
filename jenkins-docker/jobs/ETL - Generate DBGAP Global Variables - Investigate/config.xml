@@ -80,7 +80,7 @@ do
 	
   	if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]]; then
 
-	   if [[ ${has_multi,,} == &quot;yes&quot; ]]; then
+	   #if [[ ${has_multi,,} == &quot;yes&quot; ]]; then
         echo &quot;pulling data for $abv_name&quot;
          
         aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ data/ --recursive --exclude &quot;*&quot; --include &quot;${stdy_id}*subject.multi*&quot; --include &quot;${stdy_id}*Subject.Multi*&quot; --include &quot;${stdy_id}*Subject.MULTI*&quot; --include &quot;${stdy_id}*sample.multi*&quot; --include &quot;${stdy_id}*Sample.Multi*&quot; --include &quot;${stdy_id}*Sample.MULTI*&quot; --no-progress
@@ -92,7 +92,7 @@ do
 
         #clean out old study consents so malformed/outdated consents dont get re-added
         aws s3 rm s3://avillach-73-bdcatalyst-etl/general/globalvars/study_consents/ --recursive --exclude &quot;*&quot; --include &quot;${abv_name}_${stdy_id}*&quot;
-      fi
+      #fi
    else 
       echo &quot;$abv_name not ready for processing or does not have multi files&quot;
    fi
@@ -109,19 +109,21 @@ mkdir logs
 echo &quot;generating consent group data&quot;
 java -jar jars/ConsentGroupGenerator.jar 2&gt;&gt; logs/error_logging.txt
 echo &quot;generating phs id data&quot;
-java -jar jars/PHSIdGenerator.jar 2&gt;&gt; logs/error_logging.txt
+#java -jar jars/PHSIdGenerator.jar 2&gt;&gt; logs/error_logging.txt
 echo &quot;generating rootnode data&quot;
-java -jar jars/RootNodeGenerator.jar 2&gt;&gt; logs/error_logging.txt
+#java -jar jars/RootNodeGenerator.jar 2&gt;&gt; logs/error_logging.txt
 echo &quot;generating genomic sample id global var data&quot;
-java -jar jars/GenomicSampIdGlobalVarGenerator.jar 2&gt;&gt; logs/error_logging.txt
+#java -jar jars/GenomicSampIdGlobalVarGenerator.jar 2&gt;&gt; logs/error_logging.txt
 echo &quot;generating studies consents&quot;
-java -jar jars/StudiesConsentsGenerator.jar -writedir ./completed_study_consents/ 2&gt;&gt; logs/error_logging.txt
+#java -jar jars/StudiesConsentsGenerator.jar -writedir ./completed_study_consents/ 2&gt;&gt; logs/error_logging.txt
 if [ -s logs/error_logging.txt ];
 then
  echo &quot;Errors in global var generation&quot;;
  cat logs/error_logging.txt;
- #exit 255;
+ exit 255;
 fi
+
+exit 0
 
 aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
 

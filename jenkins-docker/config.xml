@@ -245,6 +245,7 @@
         <string>Curation - Create Sample and Subject Files</string>
         <string>Delete Subject and Sample Files</string>
         <string>Dictionary ETL - Delete Dataset</string>
+        <string>Dictionary ETL - Stigvar Loader ( BACKUP )</string>
         <string>ETL - Archive Previous Study Version</string>
         <string>ETL - HPDS Javabin generation pipeline</string>
         <string>ETL - Ingest Pipeline (With Subject Multi)</string>
@@ -252,6 +253,7 @@
         <string>ETL - Update Facet Configuration</string>
         <string>ETL - Update Managed Inputs</string>
         <string>Investigate - nih-nhlbi-bdc-mds-pilot-quar</string>
+        <string>postgres_version</string>
         <string>TEST - sequential loader</string>
         <string>Update Git With Latest Jobs and Config - pipeline</string>
       </jobNames>
@@ -526,7 +528,6 @@
         <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
         <string>Curation - Compliant Data Dictionary to Metadata - George Test</string>
         <string>Dictionary ETL - BDC Ingest Pipeline - Migrate ColumnMeta</string>
-        <string>Dictionary ETL - Build Ingest Files From ColumnMeta</string>
         <string>Dictionary ETL - Build Ingest Files From ColumnMeta - Loading</string>
         <string>Dictionary ETL - Build Ingest Files From ColumnMeta - Loading - Concepts</string>
         <string>Dictionary ETL - Facet Loader</string>

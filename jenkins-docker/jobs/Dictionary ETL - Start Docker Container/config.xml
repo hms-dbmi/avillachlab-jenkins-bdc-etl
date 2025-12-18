@@ -55,20 +55,65 @@ echo &apos;POSTGRES_HOST=dictionarydb.cljahwnkfisu.us-east-1.rds.amazonaws.com&a
       <configuredLocalRules/>
     </hudson.tasks.Shell>
     <hudson.tasks.Shell>
-      <command># Recreate network with an explicit subnet (required for ipv4_address)
-#docker network inspect etlnetwork &gt;/dev/null 2&gt;&amp;1 &amp;&amp; docker network rm etlnetwork || true
+      <command>#!/usr/bin/env bash
+set -euo pipefail
 
-#docker network create \
-#  --driver bridge \
-#  --subnet 172.30.0.0/16 \
-#  --gateway 172.30.0.1 \
-#  etlnetwork
+NETWORK=&quot;etlnetwork&quot;
+CONTAINER_NAME=&quot;dictionaryetl&quot;
+PORT=&quot;8086&quot;
+HEALTH_URL=&quot;http://${CONTAINER_NAME}:${PORT}/actuator/health&quot;
+OUTFILE=&quot;container_ip_address.txt&quot;
 
-docker compose down
-docker compose build --no-cache
-docker compose up -d
-docker inspect dictionaryetl | jq -r &apos;.[] | .NetworkSettings.Networks.etlnetwork.IPAddress&apos;
-docker inspect dictionaryetl | jq -r &apos;.[] | .NetworkSettings.Networks.etlnetwork.IPAddress&apos; &gt; container_ip_address.txt</command>
+fail() { echo &quot;ERROR: $*&quot; &gt;&amp;2; exit 1; }
+
+# --- Validate external shared network exists (do NOT recreate it in Jenkins) ---
+docker network inspect &quot;$NETWORK&quot; &gt;/dev/null 2&gt;&amp;1 \
+  || fail &quot;Required external Docker network &apos;$NETWORK&apos; does not exist. Create it outside Jenkins.&quot;
+
+# --- If container exists and is healthy/up, exit success fast ---
+if docker ps --format &apos;{{.Names}}&apos; | grep -qx &quot;$CONTAINER_NAME&quot;; then
+  # If the image has a HEALTHCHECK, prefer that signal
+  hc=&quot;$(docker inspect &quot;$CONTAINER_NAME&quot; \
+    | jq -r &apos;.[0].State.Health.Status // empty&apos; || true)&quot;
+
+  if [[ &quot;$hc&quot; == &quot;healthy&quot; ]]; then
+    ip=&quot;$(docker inspect &quot;$CONTAINER_NAME&quot; | jq -r &apos;.[0].NetworkSettings.Networks[&quot;&apos;&quot;$NETWORK&quot;&apos;&quot;].IPAddress // empty&apos;)&quot;
+    [[ -n &quot;$ip&quot; ]] &amp;&amp; printf &apos;%s\n&apos; &quot;$ip&quot; &gt; &quot;$OUTFILE&quot; || true
+    echo &quot;$CONTAINER_NAME is already running and healthy.&quot;
+    exit 0
+  fi
+
+  # No healthcheck or not healthy: verify DNS+HTTP from within the shared network
+  if docker run --rm --network &quot;$NETWORK&quot; curlimages/curl:8.6.0 \
+      sh -lc &apos;getent hosts &quot;&apos;&quot;$CONTAINER_NAME&quot;&apos;&quot; &gt;/dev/null &amp;&amp; curl -fsS --max-time 3 &quot;&apos;&quot;$HEALTH_URL&quot;&apos;&quot; &gt;/dev/null&apos;
+  then
+    ip=&quot;$(docker inspect &quot;$CONTAINER_NAME&quot; | jq -r &apos;.[0].NetworkSettings.Networks[&quot;&apos;&quot;$NETWORK&quot;&apos;&quot;].IPAddress // empty&apos;)&quot;
+    [[ -n &quot;$ip&quot; ]] &amp;&amp; printf &apos;%s\n&apos; &quot;$ip&quot; &gt; &quot;$OUTFILE&quot; || true
+    echo &quot;$CONTAINER_NAME is already running and reachable.&quot;
+    exit 0
+  fi
+
+  echo &quot;$CONTAINER_NAME is running but not healthy/reachable; will attempt to (re)start via compose.&quot;
+fi
+
+# --- Not running (or unhealthy): bring it up ---
+docker compose up -d --build
+
+# --- Validate it came up and is reachable via DNS ---
+# Wait briefly for DNS/health to settle (bounded retries, not an infinite wait)
+for _ in {1..20}; do
+  if docker run --rm --network &quot;$NETWORK&quot; curlimages/curl:8.6.0 \
+      sh -lc &apos;getent hosts &quot;&apos;&quot;$CONTAINER_NAME&quot;&apos;&quot; &gt;/dev/null &amp;&amp; curl -fsS --max-time 3 &quot;&apos;&quot;$HEALTH_URL&quot;&apos;&quot; &gt;/dev/null&apos;
+  then
+    ip=&quot;$(docker inspect &quot;$CONTAINER_NAME&quot; | jq -r &apos;.[0].NetworkSettings.Networks[&quot;&apos;&quot;$NETWORK&quot;&apos;&quot;].IPAddress // empty&apos;)&quot;
+    [[ -n &quot;$ip&quot; ]] &amp;&amp; printf &apos;%s\n&apos; &quot;$ip&quot; | tee &quot;$OUTFILE&quot; &gt;/dev/null || true
+    echo &quot;$CONTAINER_NAME started and is reachable.&quot;
+    exit 0
+  fi
+  sleep 1
+done
+
+fail &quot;$CONTAINER_NAME did not become reachable at $HEALTH_URL on network $NETWORK&quot;</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>
