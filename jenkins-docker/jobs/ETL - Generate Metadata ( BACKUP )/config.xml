@@ -1,0 +1,152 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
+      <doNotScan>false</doNotScan>
+    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>managed_inputs</name>
+          <defaultValue>s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.csv</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>metadata_file</name>
+          <defaultValue>s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.8.1">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>https://github.com/hms-dbmi/ETL-MissionControl-dbgap-submodule</url>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>*/master</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="empty-list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+set -euo pipefail
+
+### assume etl role
+aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+
+mkdir data
+mkdir completed
+mkdir hierarchies
+mkdir processing
+
+find data/ -type f -exec rm -rf {} \;
+find processing/ -type f -exec rm -rf {} \;
+find completed/ -type f -exec rm -rf {} \;
+rm -rf pic-sure-hpds/
+
+aws s3 cp ${managed_inputs} data/
+
+aws s3 cp ${metadata_file} data/metadata.json
+
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/counts/ data/ --recursive
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+
+csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Study Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot;,&quot;Has Multi&quot; data/Managed_Inputs.csv &gt; inputs.csv
+
+# Generate mappings
+cat inputs.csv
+IFS=&apos;,&apos;
+[ ! -f inputs.csv ]
+while read abv_name stdy_id stdy_type data_ready data_processed has_multi
+do
+  if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]] &amp;&amp; [[ ${data_processed,,} == &quot;no&quot; ]]; then
+
+      if [[ ${has_multi,,} == &quot;yes&quot; ]]; then
+
+        ### assume etl role
+        aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+        
+        export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+        export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+        export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+  
+        echo &quot;Getting raw dictionary files for ${stdy_id}&quot;
+        
+        aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ data/raw/ --no-progress --recursive --exclude &quot;*&quot; \
+        --include &quot;${stdy_id}*ubject*data_dict*.xml*&quot; --include &quot;${stdy_id}*ample*data_dict*.xml*&quot; \
+        --include &quot;${stdy_id}*subject.multi*&quot; --include &quot;${stdy_id}*Subject.Multi*&quot; \
+        --include &quot;${stdy_id}*Subject.MULTI*&quot; --include &quot;${stdy_id}*sample.multi*&quot; --include &quot;${stdy_id}*Sample.Multi*&quot; \
+        --include &quot;${stdy_id}*Sample.MULTI*&quot;
+        
+        #aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ data/decoded/ --no-progress --recursive --exclude &quot;*&quot; \
+        #--include &quot;${stdy_id}*ubject*data_dict*.xml*&quot; --include &quot;${stdy_id}*ample*data_dict*.xml*&quot; \
+        #--include &quot;${stdy_id}*subject.multi*&quot; --include &quot;${stdy_id}*Subject.Multi*&quot; \
+        #--include &quot;${stdy_id}*Subject.MULTI*&quot; --include &quot;${stdy_id}*sample.multi*&quot; --include &quot;${stdy_id}*Sample.Multi*&quot; \
+        #--include &quot;${stdy_id}*Sample.MULTI*&quot;
+        
+       	echo &quot;Getting study/sample multi files for ${stdy_id}&quot;
+        aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/decoded_data/ data/decoded/ --no-progress --recursive \
+        --exclude &quot;*&quot; --include &quot;${stdy_id}*subject.multi*&quot; --include &quot;${stdy_id}*Subject.Multi*&quot; \
+        --include &quot;${stdy_id}*Subject.MULTI*&quot; --include &quot;${stdy_id}*sample.multi*&quot; --include &quot;${stdy_id}*Sample.Multi*&quot; \
+        --include &quot;${stdy_id}*Sample.MULTI*&quot;
+        
+        ### remove role for next iteration
+        unset AWS_ACCESS_KEY_ID
+        unset AWS_SECRET_ACCESS_KEY
+        unset AWS_SESSION_TOKEN
+     fi
+  fi
+done  &lt; inputs.csv
+
+java -jar jars/JsonMetadataGenerator.jar
+
+aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+
+aws s3 cp completed/metadata.json s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.49">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>

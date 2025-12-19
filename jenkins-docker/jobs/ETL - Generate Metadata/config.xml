@@ -52,91 +52,172 @@
   <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Shell>
-      <command>#!/bin/bash
+      <command>#!/usr/bin/env bash
 set -euo pipefail
 
-### assume etl role
-aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+LOG_TS() { date +&quot;%Y-%m-%dT%H:%M:%S%z&quot;; }
+log()    { echo &quot;[$(LOG_TS)] INFO  $*&quot; &gt;&amp;2; }
+warn()   { echo &quot;[$(LOG_TS)] WARN  $*&quot; &gt;&amp;2; }
+error()  { echo &quot;[$(LOG_TS)] ERROR $*&quot; &gt;&amp;2; }
 
-export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+need() { command -v &quot;$1&quot; &gt;/dev/null 2&gt;&amp;1 || { error &quot;Missing required command: $1&quot;; exit 2; }; }
 
-mkdir data
-mkdir completed
-mkdir hierarchies
-mkdir processing
+cleanup() { unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN; }
+trap cleanup EXIT
 
-find data/ -type f -exec rm -rf {} \;
-find processing/ -type f -exec rm -rf {} \;
-find completed/ -type f -exec rm -rf {} \;
-rm -rf pic-sure-hpds/
+assume_role() {
+  local role_arn=&quot;${ROLE_ARN:-arn:aws:iam::736265540791:role/dbgap-etl}&quot;
+  local session_name=&quot;${ROLE_SESSION_NAME:-s3-test}&quot;
+  local duration=&quot;${ASSUME_DURATION_SECONDS:-3600}&quot;
 
-aws s3 cp ${managed_inputs} data/
+  log &quot;Assuming role ${role_arn} (duration=${duration}s)&quot;
+  local assume_json
+  assume_json=&quot;$(mktemp)&quot;
 
-aws s3 cp ${metadata_file} data/metadata.json
+  aws sts assume-role \
+    --duration-seconds &quot;$duration&quot; \
+    --role-arn &quot;$role_arn&quot; \
+    --role-session-name &quot;$session_name&quot; \
+    &gt; &quot;$assume_json&quot;
 
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/counts/ data/ --recursive
-unset AWS_ACCESS_KEY_ID
-unset AWS_SECRET_ACCESS_KEY
-unset AWS_SESSION_TOKEN
+  export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  AWS_ACCESS_KEY_ID=&quot;$(jq -r &apos;.Credentials.AccessKeyId&apos; &quot;$assume_json&quot;)&quot;
+  AWS_SECRET_ACCESS_KEY=&quot;$(jq -r &apos;.Credentials.SecretAccessKey&apos; &quot;$assume_json&quot;)&quot;
+  AWS_SESSION_TOKEN=&quot;$(jq -r &apos;.Credentials.SessionToken&apos; &quot;$assume_json&quot;)&quot;
+  rm -f &quot;$assume_json&quot;
 
-csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Study Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot;,&quot;Has Multi&quot; data/Managed_Inputs.csv &gt; inputs.csv
+  log &quot;Role assumed&quot;
+}
 
-# Generate mappings
-cat inputs.csv
-IFS=&apos;,&apos;
-[ ! -f inputs.csv ]
-while read abv_name stdy_id stdy_type data_ready data_processed has_multi
-do
-  if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]] &amp;&amp; [[ ${data_processed,,} == &quot;no&quot; ]]; then
+reset_dir() {
+  local d=&quot;$1&quot;
+  rm -rf &quot;$d&quot;
+  mkdir -p &quot;$d&quot;
+}
 
-      if [[ ${has_multi,,} == &quot;yes&quot; ]]; then
+# -----------------------------
+# Prereqs + required inputs
+# -----------------------------
+need aws
+need jq
+need csvcut
+need csvformat
+need tail
+need java
 
-        ### assume etl role
-        aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
-        
-        export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-        export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-        export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-  
-        echo &quot;Getting raw dictionary files for ${stdy_id}&quot;
-        
-        aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ data/raw/ --no-progress --recursive --exclude &quot;*&quot; \
-        --include &quot;${stdy_id}*ubject*data_dict*.xml*&quot; --include &quot;${stdy_id}*ample*data_dict*.xml*&quot; \
-        --include &quot;${stdy_id}*subject.multi*&quot; --include &quot;${stdy_id}*Subject.Multi*&quot; \
-        --include &quot;${stdy_id}*Subject.MULTI*&quot; --include &quot;${stdy_id}*sample.multi*&quot; --include &quot;${stdy_id}*Sample.Multi*&quot; \
-        --include &quot;${stdy_id}*Sample.MULTI*&quot;
-        
-        #aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ data/decoded/ --no-progress --recursive --exclude &quot;*&quot; \
-        #--include &quot;${stdy_id}*ubject*data_dict*.xml*&quot; --include &quot;${stdy_id}*ample*data_dict*.xml*&quot; \
-        #--include &quot;${stdy_id}*subject.multi*&quot; --include &quot;${stdy_id}*Subject.Multi*&quot; \
-        #--include &quot;${stdy_id}*Subject.MULTI*&quot; --include &quot;${stdy_id}*sample.multi*&quot; --include &quot;${stdy_id}*Sample.Multi*&quot; \
-        #--include &quot;${stdy_id}*Sample.MULTI*&quot;
-        
-       	echo &quot;Getting study/sample multi files for ${stdy_id}&quot;
-        aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/decoded_data/ data/decoded/ --no-progress --recursive \
-        --exclude &quot;*&quot; --include &quot;${stdy_id}*subject.multi*&quot; --include &quot;${stdy_id}*Subject.Multi*&quot; \
-        --include &quot;${stdy_id}*Subject.MULTI*&quot; --include &quot;${stdy_id}*sample.multi*&quot; --include &quot;${stdy_id}*Sample.Multi*&quot; \
-        --include &quot;${stdy_id}*Sample.MULTI*&quot;
-        
-        ### remove role for next iteration
-        unset AWS_ACCESS_KEY_ID
-        unset AWS_SECRET_ACCESS_KEY
-        unset AWS_SESSION_TOKEN
-     fi
-  fi
-done  &lt; inputs.csv
+: &quot;${managed_inputs:?managed_inputs must be set (s3://.../Managed_Inputs.csv)}&quot;
+: &quot;${metadata_file:?metadata_file must be set (s3://.../metadata.json)}&quot;
 
+S3_BUCKET=&quot;${S3_BUCKET:-avillach-73-bdcatalyst-etl}&quot;
+
+# -----------------------------
+# Workspace layout (cleanly)
+# -----------------------------
+reset_dir data
+reset_dir completed
+reset_dir hierarchies
+reset_dir processing
+rm -rf pic-sure-hpds || true
+
+mkdir -p data/raw data/decoded
+
+# -----------------------------
+# Assume role once for all S3 ops
+# -----------------------------
+ASSUME_DURATION_SECONDS=&quot;${ASSUME_DURATION_SECONDS:-3600}&quot;
+assume_role
+
+# -----------------------------
+# Pull managed inputs + metadata + counts
+# -----------------------------
+log &quot;Downloading managed inputs -&gt; data/Managed_Inputs.csv&quot;
+aws s3 cp &quot;$managed_inputs&quot; &quot;data/Managed_Inputs.csv&quot; --no-progress --only-show-errors
+
+log &quot;Downloading metadata_file -&gt; data/metadata.json&quot;
+aws s3 cp &quot;$metadata_file&quot; &quot;data/metadata.json&quot; --no-progress --only-show-errors
+
+log &quot;Syncing counts -&gt; data/&quot;
+aws s3 cp &quot;s3://${S3_BUCKET}/general/counts/&quot; &quot;data/&quot; --recursive --no-progress --only-show-errors
+
+# -----------------------------
+# Build inputs.csv (add Has Multi)
+# -----------------------------
+log &quot;Building inputs.csv&quot;
+csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Study Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot;,&quot;Has Multi&quot; \
+  &quot;data/Managed_Inputs.csv&quot; &gt; inputs.csv
+
+log &quot;inputs.csv preview:&quot;
+head -n 5 inputs.csv &gt;&amp;2 || true
+
+# -----------------------------
+# Download raw/decoded multi files only for ready+unprocessed+has_multi=yes
+# -----------------------------
+DOWNLOAD_PARALLEL=&quot;${DOWNLOAD_PARALLEL:-6}&quot;
+log &quot;Downloading study multi files with parallelism=${DOWNLOAD_PARALLEL}&quot;
+
+download_multi_files() {
+  local abv_name=&quot;$1&quot; stdy_id=&quot;$2&quot;
+  local abv_lc stdy_lc
+  abv_lc=&quot;$(printf &apos;%s&apos; &quot;$abv_name&quot; | tr &apos;[:upper:]&apos; &apos;[:lower:]&apos;)&quot;
+  stdy_lc=&quot;$(printf &apos;%s&apos; &quot;$stdy_id&quot;  | tr &apos;[:upper:]&apos; &apos;[:lower:]&apos;)&quot;
+
+  log &quot;Getting raw dictionary files for ${stdy_id} (${abv_name})&quot;
+  aws s3 cp &quot;s3://${S3_BUCKET}/${abv_lc}/rawData/&quot; &quot;data/raw/&quot; \
+    --recursive --no-progress --only-show-errors --exclude &quot;*&quot; \
+    --include &quot;${stdy_id}*ubject*data_dict*.xml*&quot; \
+    --include &quot;${stdy_id}*ample*data_dict*.xml*&quot; \
+    --include &quot;${stdy_id}*subject.multi*&quot; --include &quot;${stdy_id}*Subject.Multi*&quot; --include &quot;${stdy_id}*Subject.MULTI*&quot; \
+    --include &quot;${stdy_id}*sample.multi*&quot;  --include &quot;${stdy_id}*Sample.Multi*&quot;  --include &quot;${stdy_id}*Sample.MULTI*&quot;
+
+  log &quot;Getting subject/sample multi files for ${stdy_id} (${abv_name})&quot;
+  aws s3 cp &quot;s3://${S3_BUCKET}/${abv_lc}/decoded_data/&quot; &quot;data/decoded/&quot; \
+    --recursive --no-progress --only-show-errors --exclude &quot;*&quot; \
+    --include &quot;${stdy_id}*ubject*data_dict*.xml*&quot; \
+    --include &quot;${stdy_id}*ample*data_dict*.xml*&quot; \
+	--include &quot;${stdy_id}*subject.multi*&quot; --include &quot;${stdy_id}*Subject.Multi*&quot; --include &quot;${stdy_id}*Subject.MULTI*&quot; \
+    --include &quot;${stdy_id}*sample.multi*&quot;  --include &quot;${stdy_id}*Sample.Multi*&quot;  --include &quot;${stdy_id}*Sample.MULTI*&quot;
+
+  log &quot;Done downloading multi files for ${stdy_id}&quot;
+}
+
+tail -n +2 inputs.csv \
+| csvformat -U 1 \
+| while IFS=&apos;,&apos; read -r abv_name stdy_id stdy_type data_ready data_processed has_multi; do
+    abv_name=&quot;${abv_name%\&quot;}&quot;; abv_name=&quot;${abv_name#\&quot;}&quot;
+    stdy_id=&quot;${stdy_id%\&quot;}&quot;;   stdy_id=&quot;${stdy_id#\&quot;}&quot;
+    data_ready=&quot;${data_ready%\&quot;}&quot;; data_ready=&quot;${data_ready#\&quot;}&quot;
+    data_processed=&quot;${data_processed%\&quot;}&quot;; data_processed=&quot;${data_processed#\&quot;}&quot;
+    has_multi=&quot;${has_multi%\&quot;}&quot;; has_multi=&quot;${has_multi#\&quot;}&quot;
+
+    if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]] &amp;&amp; [[ &quot;${data_processed,,}&quot; == &quot;no&quot; ]] &amp;&amp; [[ &quot;${has_multi,,}&quot; == &quot;yes&quot; ]]; then
+      while [[ &quot;$(jobs -pr | wc -l)&quot; -ge &quot;$DOWNLOAD_PARALLEL&quot; ]]; do sleep 0.2; done
+      download_multi_files &quot;$abv_name&quot; &quot;$stdy_id&quot; &amp;
+    fi
+  done
+
+log &quot;Waiting for all downloads to finish...&quot;
+wait
+log &quot;All downloads complete&quot;
+
+# -----------------------------
+# Generate metadata
+# -----------------------------
+log &quot;Running JsonMetadataGenerator.jar&quot;
 java -jar jars/JsonMetadataGenerator.jar
 
-aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+# -----------------------------
+# Upload result
+# -----------------------------
+OUT_FILE=&quot;completed/metadata.json&quot;
+if [[ ! -s &quot;$OUT_FILE&quot; ]]; then
+  error &quot;Expected output not found or empty: ${OUT_FILE}&quot;
+  exit 255
+fi
 
-export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+log &quot;Uploading ${OUT_FILE} -&gt; s3://${S3_BUCKET}/general/data/metadata_new_search.json&quot;
+aws s3 cp &quot;$OUT_FILE&quot; &quot;s3://${S3_BUCKET}/general/data/metadata_new_search.json&quot; --no-progress --only-show-errors
 
-aws s3 cp completed/metadata.json s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json</command>
+log &quot;Done&quot;</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>

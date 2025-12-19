@@ -247,7 +247,10 @@
         <string>Dictionary ETL - Delete Dataset</string>
         <string>Dictionary ETL - Stigvar Loader ( BACKUP )</string>
         <string>ETL - Archive Previous Study Version</string>
+        <string>ETL - Clear Metadata Directories ( BACKUP )</string>
+        <string>ETL - Generate Metadata ( BACKUP )</string>
         <string>ETL - HPDS Javabin generation pipeline</string>
+        <string>ETL - Import Metadata From git ( BACKUP )</string>
         <string>ETL - Ingest Pipeline (With Subject Multi)</string>
         <string>ETL - Ingest Pipeline (With Subject Multi) - Non-parallel</string>
         <string>ETL - Update Facet Configuration</string>
