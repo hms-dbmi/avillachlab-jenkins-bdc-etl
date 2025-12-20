@@ -180,9 +180,7 @@ download_multi_files() {
   log &quot;Done downloading multi files for ${stdy_id}&quot;
 }
 
-tail -n +2 inputs.csv \
-| csvformat -U 1 \
-| while IFS=&apos;,&apos; read -r abv_name stdy_id stdy_type data_ready data_processed has_multi; do
+while IFS=&apos;,&apos; read -r abv_name stdy_id stdy_type data_ready data_processed has_multi; do
     abv_name=&quot;${abv_name%\&quot;}&quot;; abv_name=&quot;${abv_name#\&quot;}&quot;
     stdy_id=&quot;${stdy_id%\&quot;}&quot;;   stdy_id=&quot;${stdy_id#\&quot;}&quot;
     data_ready=&quot;${data_ready%\&quot;}&quot;; data_ready=&quot;${data_ready#\&quot;}&quot;
@@ -193,7 +191,7 @@ tail -n +2 inputs.csv \
       while [[ &quot;$(jobs -pr | wc -l)&quot; -ge &quot;$DOWNLOAD_PARALLEL&quot; ]]; do sleep 0.2; done
       download_multi_files &quot;$abv_name&quot; &quot;$stdy_id&quot; &amp;
     fi
-  done
+done &lt; &lt;(tail -n +2 inputs.csv | csvformat -U 1)
 
 log &quot;Waiting for all downloads to finish...&quot;
 wait

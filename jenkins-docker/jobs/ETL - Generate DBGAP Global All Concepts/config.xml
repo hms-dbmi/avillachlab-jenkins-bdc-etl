@@ -52,63 +52,206 @@
   <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Shell>
-      <command>#!/bin/bash
+      <command>#!/usr/bin/env bash
 set -euo pipefail
 
-### assume etl role
-aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+LOG_TS() { date +&quot;%Y-%m-%dT%H:%M:%S%z&quot;; }
+log()    { echo &quot;[$(LOG_TS)] INFO  $*&quot; &gt;&amp;2; }
+warn()   { echo &quot;[$(LOG_TS)] WARN  $*&quot; &gt;&amp;2; }
+error()  { echo &quot;[$(LOG_TS)] ERROR $*&quot; &gt;&amp;2; }
 
-export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+need() { command -v &quot;$1&quot; &gt;/dev/null 2&gt;&amp;1 || { error &quot;Missing required command: $1&quot;; exit 2; }; }
 
-mkdir data
-mkdir completed
-mkdir hierarchies
-mkdir processing
-mkdir mappings
-mkdir resources
-mkdir reports
+cleanup() {
+  local rc=$?
+  local cmd=&quot;${BASH_COMMAND:-}&quot;
+  local line=&quot;${BASH_LINENO[0]:-}&quot;
 
-find data/ -type f -exec rm -rf {} \;
-find data/ -type d -exec rm -rf {} \;
-find processing/ -type f -exec rm -rf {} \;
-find completed/ -type f -exec rm -rf {} \;
-find mappings/ -type f -exec rm -rf {} \;
-find resources/ -type f -exec rm -rf {} \;
+  if [[ $rc -eq 0 ]]; then
+    log &quot;EXIT rc=0 (success). Cleaning AWS env vars.&quot;
+  else
+    error &quot;EXIT rc=${rc} at line=${line} cmd=${cmd}. Cleaning AWS env vars.&quot;
+  fi
 
+  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 
-rm -rf pic-sure-hpds/
+  if [[ -s logs/error_logging.txt ]]; then
+    warn &quot;logs/error_logging.txt present (last 50 lines):&quot;
+    tail -n 50 logs/error_logging.txt &gt;&amp;2 || true
+  fi
+}
+on_err() {
+  local rc=$?
+  local line=&quot;${BASH_LINENO[0]:-}&quot;
+  local cmd=&quot;${BASH_COMMAND:-}&quot;
+  error &quot;ERR rc=${rc} at line=${line} cmd=${cmd}&quot;
+  return $rc
+}
+trap on_err ERR
+trap cleanup EXIT
 
-#aws s3 cp ${managed_inputs} data/
+assume_role() {
+  local role_arn=&quot;${ROLE_ARN:-arn:aws:iam::736265540791:role/dbgap-etl}&quot;
+  local session_name=&quot;${ROLE_SESSION_NAME:-s3-test}&quot;
+  local duration=&quot;${ASSUME_DURATION_SECONDS:-3600}&quot;
 
-#aws s3 cp ${metadata_file} data/metadata.json
+  log &quot;Assuming role ${role_arn} (duration=${duration}s)&quot;
+  local assume_json
+  assume_json=&quot;$(mktemp)&quot;
 
-unset AWS_ACCESS_KEY_ID
-unset AWS_SECRET_ACCESS_KEY
-unset AWS_SESSION_TOKEN
+  aws sts assume-role \
+    --duration-seconds &quot;$duration&quot; \
+    --role-arn &quot;$role_arn&quot; \
+    --role-session-name &quot;$session_name&quot; \
+    &gt; &quot;$assume_json&quot;
 
-### assume etl role
-aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+  export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  AWS_ACCESS_KEY_ID=&quot;$(jq -r &apos;.Credentials.AccessKeyId&apos; &quot;$assume_json&quot;)&quot;
+  AWS_SECRET_ACCESS_KEY=&quot;$(jq -r &apos;.Credentials.SecretAccessKey&apos; &quot;$assume_json&quot;)&quot;
+  AWS_SESSION_TOKEN=&quot;$(jq -r &apos;.Credentials.SessionToken&apos; &quot;$assume_json&quot;)&quot;
+  rm -f &quot;$assume_json&quot;
 
-export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+  log &quot;Role assumed&quot;
+}
 
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/ data/ --recursive --no-progress
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/globalvars/study_consents/ data/ --recursive --no-progress
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/mappings/mapping.postrootnodes.csv mappings/mapping.csv --no-progress
+reset_dir() {
+  local d=&quot;$1&quot;
+  rm -rf &quot;$d&quot;
+  mkdir -p &quot;$d&quot;
+}
 
-cat data/studies_consents_mapping.csv &gt;&gt; mappings/mapping.csv
+# S3 &quot;directory&quot; safe sync:
+# - DOES NOT call head-object on &quot;prefix/&quot; (which 404s in S3)
+# - Uses s3 sync and fails if nothing was synced (unless allow_empty=true)
+s3_sync_prefix() {
+  local src_prefix=&quot;$1&quot; dst_dir=&quot;$2&quot; allow_empty=&quot;${3:-false}&quot;
+  mkdir -p &quot;$dst_dir&quot;
 
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/resources/job.config resources/ --no-progress
+  log &quot;S3 sync ${src_prefix} -&gt; ${dst_dir} (allow_empty=${allow_empty})&quot;
+  local out
+  out=&quot;$(mktemp)&quot;
+  # sync prints lines for transferred/updated files; capture output for emptiness check
+  if ! aws s3 sync &quot;$src_prefix&quot; &quot;$dst_dir&quot; --no-progress --only-show-errors | tee &quot;$out&quot; &gt;/dev/null; then
+    rm -f &quot;$out&quot;
+    error &quot;S3 sync failed: ${src_prefix} -&gt; ${dst_dir}&quot;
+    return 1
+  fi
 
-java -jar jars/GenerateAllConcepts.jar -propertiesfile resources/job.config
+  # If sync produced no output AND destination is still empty, treat as empty prefix
+  if [[ &quot;$allow_empty&quot; != &quot;true&quot; ]]; then
+    if [[ ! -s &quot;$out&quot; ]] &amp;&amp; [[ -z &quot;$(find &quot;$dst_dir&quot; -type f -print -quit 2&gt;/dev/null || true)&quot; ]]; then
+      rm -f &quot;$out&quot;
+      error &quot;S3 prefix appears empty or does not exist: ${src_prefix}&quot;
+      return 1
+    fi
+  fi
 
-aws s3 cp completed/GLOBAL_allConcepts.csv s3://avillach-73-bdcatalyst-etl/general/completed/  --no-progress</command>
+  rm -f &quot;$out&quot;
+  return 0
+}
+
+s3_cp_file() {
+  local src=&quot;$1&quot; dst=&quot;$2&quot; required=&quot;${3:-true}&quot;
+  if aws s3 cp &quot;$src&quot; &quot;$dst&quot; --no-progress --only-show-errors; then
+    return 0
+  fi
+  if [[ &quot;$required&quot; == &quot;true&quot; ]]; then
+    error &quot;S3 copy failed (required): $src -&gt; $dst&quot;
+    return 1
+  fi
+  warn &quot;S3 copy failed (optional): $src -&gt; $dst&quot;
+  return 0
+}
+
+# -----------------------------
+# Prereqs
+# -----------------------------
+need aws
+need jq
+need java
+
+S3_BUCKET=&quot;${S3_BUCKET:-avillach-73-bdcatalyst-etl}&quot;
+JOB_CONFIG_S3=&quot;${JOB_CONFIG_S3:-s3://${S3_BUCKET}/general/resources/job.config}&quot;
+MAPPING_S3=&quot;${MAPPING_S3:-s3://${S3_BUCKET}/general/mappings/mapping.postrootnodes.csv}&quot;
+OUT_S3_PREFIX=&quot;${OUT_S3_PREFIX:-s3://${S3_BUCKET}/general/completed/}&quot;
+
+ASSUME_DURATION_SECONDS=&quot;${ASSUME_DURATION_SECONDS:-3600}&quot;
+
+# -----------------------------
+# Workspace dirs (cleanly)
+# -----------------------------
+reset_dir data
+reset_dir completed
+reset_dir hierarchies
+reset_dir processing
+reset_dir mappings
+reset_dir resources
+reset_dir reports
+reset_dir logs
+rm -rf pic-sure-hpds/ || true
+
+# -----------------------------
+# Assume role once (keep creds for all S3 ops)
+# -----------------------------
+assume_role
+
+# -----------------------------
+# Pull inputs needed by GenerateAllConcepts
+# -----------------------------
+# IMPORTANT:
+# s3://bucket/prefix/ is not an object, so head-object on it will 404.
+# Use sync only for prefixes.
+s3_sync_prefix &quot;s3://${S3_BUCKET}/general/data/&quot; &quot;data&quot; false
+s3_sync_prefix &quot;s3://${S3_BUCKET}/general/globalvars/study_consents/&quot; &quot;data&quot; false
+
+log &quot;Downloading mapping.postrootnodes.csv -&gt; mappings/mapping.csv&quot;
+s3_cp_file &quot;$MAPPING_S3&quot; &quot;mappings/mapping.csv&quot; true
+
+if [[ -s &quot;data/studies_consents_mapping.csv&quot; ]]; then
+  log &quot;Appending data/studies_consents_mapping.csv -&gt; mappings/mapping.csv&quot;
+  cat &quot;data/studies_consents_mapping.csv&quot; &gt;&gt; &quot;mappings/mapping.csv&quot;
+else
+  warn &quot;data/studies_consents_mapping.csv missing/empty; not appending&quot;
+fi
+
+log &quot;Downloading job.config -&gt; resources/job.config&quot;
+s3_cp_file &quot;$JOB_CONFIG_S3&quot; &quot;resources/job.config&quot; true
+
+# -----------------------------
+# Run generator
+# -----------------------------
+log &quot;Running GenerateAllConcepts.jar&quot;
+java -jar jars/GenerateAllConcepts.jar -propertiesfile &quot;resources/job.config&quot; 2&gt;&gt;&quot;logs/error_logging.txt&quot;
+
+if [[ -s logs/error_logging.txt ]]; then
+  warn &quot;GenerateAllConcepts wrote to logs/error_logging.txt (last 50 lines):&quot;
+  tail -n 50 logs/error_logging.txt &gt;&amp;2 || true
+  # Uncomment to hard-fail on any logged errors:
+  # error &quot;Errors logged during GenerateAllConcepts&quot;; exit 1
+fi
+
+# -----------------------------
+# Upload outputs
+# -----------------------------
+if [[ ! -s &quot;completed/GLOBAL_allConcepts.csv&quot; ]]; then
+  error &quot;Expected output not found or empty: completed/GLOBAL_allConcepts.csv&quot;
+  exit 1
+fi
+
+log &quot;Uploading GLOBAL_allConcepts.csv -&gt; ${OUT_S3_PREFIX}&quot;
+aws s3 cp &quot;completed/GLOBAL_allConcepts.csv&quot; &quot;${OUT_S3_PREFIX}&quot; --no-progress --only-show-errors
+
+log &quot;Done&quot;</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>
   <publishers/>
-  <buildWrappers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.49">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
 </project>
