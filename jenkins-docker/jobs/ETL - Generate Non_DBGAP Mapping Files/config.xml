@@ -183,7 +183,7 @@ head -n 10 inputs.csv &gt;&amp;2 || true
 # -----------------------------
 should_skip_type() {
   local t=&quot;${1,,}&quot;
-  [[ &quot;$t&quot; == &quot;parent&quot; || &quot;$t&quot; == &quot;topmed&quot; || &quot;$t&quot; == &quot;substudy&quot; || &quot;$t&quot; == &quot;shhs&quot; || &quot;$t&quot; == &quot;imaging&quot; ]]
+  [[ &quot;$t&quot; == &quot;parent&quot; || &quot;$t&quot; == &quot;topmed&quot; || &quot;$t&quot; == &quot;substudy&quot; || &quot;$t&quot; == &quot;compliant&quot; || &quot;$t&quot; == &quot;imaging&quot; ]]
 }
 
 process_study() {

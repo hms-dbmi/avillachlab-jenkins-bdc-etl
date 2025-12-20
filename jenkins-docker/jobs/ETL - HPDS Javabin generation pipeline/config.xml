@@ -12,6 +12,9 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
+    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
+      <doNotScan>false</doNotScan>
+    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
     <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
@@ -30,63 +33,54 @@
         </jenkins.triggers.ReverseBuildTrigger>
       </triggers>
     </org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
-    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
-      <doNotScan>false</doNotScan>
-    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
   </properties>
   <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@4238.va_6fb_65c1f699">
-    <script>import groovy.json.JsonSlurper;
-pipeline {
-    agent any
-    stages {
+    <script>pipeline {
+  agent any
 
-        stage(&apos;merge global concepts&apos;) {
-            steps {
-                script {
-                    build job: &apos;ETL - Merge Global Concepts&apos;
-                }
-            }
-        }
-
-        stage(&apos;Pull latest stigvars from git&apos;) {
-            steps {
-                script {
-                    build job: &apos;ETL - Upload stigmatizing variable files from git to s3&apos;
-                }
-            }
-        }
-        stage(&apos;merge and generate javabin&apos;) {
-            steps {
-                script {
-                    //echo &quot;Merge Job&quot;
-                    build job: &apos;ETL - All Concept Data Merge with Data Analyzer&apos;
-
-                }
-                script {
-                    //echo &quot;Javabins build&quot;
-                    build job: &apos;ETL - Generate Phenotype Javabins Data Analyzer&apos;
-                }
-            }
-        }
-        stage(&apos;Dictionary DB Ingest&apos;){
-            steps {
-                script {
-                    build job: &apos;Dictionary ETL - BDC Ingest Pipeline&apos;
-                }
-            }
-        }
-
+  stages {
+    stage(&apos;Pull latest stigvars from git&apos;) {
+      steps {
+        build job: &apos;ETL - Upload stigmatizing variable files from git to s3&apos;
+      }
     }
-    post{
-        success {
-            copyArtifacts(projectName: &apos;Dictionary ETL - Export DB&apos;);
-            copyArtifacts(projectName: &apos;ETL - Generate Phenotype Javabins Data Analyzer&apos;);
-            archiveArtifacts artifacts: &apos;db_dump_name.txt&apos;, followSymlinks: false;
-            archiveArtifacts artifacts: &apos;docker/pic-sure-hpds-etl/hpds/data_analyzer_javabin_file_name.txt&apos;, followSymlinks: false;
-        }
+
+    stage(&apos;Merge global concepts&apos;) {
+      steps {
+        build job: &apos;ETL - Merge Global Concepts&apos;
+      }
     }
+
+    stage(&apos;Merge allConcepts&apos;) {
+      steps {
+        build job: &apos;ETL - All Concept Data Merge with Data Analyzer&apos;
+      }
+    }
+
+    stage(&apos;Generate HPDS Javabins&apos;) {
+      steps {
+        build job: &apos;ETL - Generate Phenotype Javabins Data Analyzer&apos;
+      }
+    }
+
+    stage(&apos;Dictionary DB Ingest&apos;) {
+      steps {
+        build job: &apos;Dictionary ETL - BDC Ingest Pipeline&apos;
+      }
+    }
+  }
+
+  post {
+    success {
+      copyArtifacts(projectName: &apos;Dictionary ETL - Export DB&apos;)
+      copyArtifacts(projectName: &apos;ETL - Generate Phenotype Javabins Data Analyzer&apos;)
+
+      archiveArtifacts artifacts: &apos;db_dump_name.txt&apos;, followSymlinks: false
+      archiveArtifacts artifacts: &apos;docker/pic-sure-hpds-etl/hpds/data_analyzer_javabin_file_name.txt&apos;, followSymlinks: false
+    }
+  }
 }</script>
-    <sandbox>true</sandbox>
+    <sandbox>false</sandbox>
   </definition>
   <triggers/>
   <disabled>false</disabled>

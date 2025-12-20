@@ -49,57 +49,190 @@
   <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Shell>
-      <command>#!/bin/bash
+      <command>#!/usr/bin/env bash
 set -euo pipefail
 
-### assume etl role
-aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+LOG_TS() { date +&quot;%Y-%m-%dT%H:%M:%S%z&quot;; }
+log()    { echo &quot;[$(LOG_TS)] INFO  $*&quot; &gt;&amp;2; }
+warn()   { echo &quot;[$(LOG_TS)] WARN  $*&quot; &gt;&amp;2; }
+error()  { echo &quot;[$(LOG_TS)] ERROR $*&quot; &gt;&amp;2; }
 
-export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+need() { command -v &quot;$1&quot; &gt;/dev/null 2&gt;&amp;1 || { error &quot;Missing required command: $1&quot;; exit 2; }; }
 
-mkdir data
-mkdir completed
+cleanup() {
+  local rc=$?
+  local cmd=&quot;${BASH_COMMAND:-}&quot;
+  local line=&quot;${BASH_LINENO[0]:-}&quot;
 
+  if [[ $rc -eq 0 ]]; then
+    log &quot;EXIT rc=0 (success). Cleaning AWS env vars.&quot;
+  else
+    error &quot;EXIT rc=${rc} at line=${line} cmd=${cmd}. Cleaning AWS env vars.&quot;
+  fi
 
-aws s3 cp ${managed_inputs} data/Managed_Inputs.csv
-aws s3 cp s3://avillach-73-bdcatalyst-etl/general/completed/GLOBAL_allConcepts.csv data/GLOBAL_allConcepts.csv
+  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+}
+on_err() {
+  local rc=$?
+  local line=&quot;${BASH_LINENO[0]:-}&quot;
+  local cmd=&quot;${BASH_COMMAND:-}&quot;
+  error &quot;ERR rc=${rc} at line=${line} cmd=${cmd}&quot;
+  return $rc
+}
+trap on_err ERR
+trap cleanup EXIT
 
-unset AWS_ACCESS_KEY_ID
-unset AWS_SECRET_ACCESS_KEY
-unset AWS_SESSION_TOKEN
+already_in_role() {
+  local role_arn=&quot;$1&quot;
+  local role_name
+  role_name=&quot;$(printf &apos;%s&apos; &quot;$role_arn&quot; | awk -F&apos;/&apos; &apos;{print $NF}&apos;)&quot;
+  local caller_arn
+  caller_arn=&quot;$(aws sts get-caller-identity --query Arn --output text 2&gt;/dev/null || true)&quot;
+  [[ -n &quot;$caller_arn&quot; &amp;&amp; &quot;$caller_arn&quot; == *&quot;:assumed-role/${role_name}/&quot;* ]]
+}
 
-csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Data Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot; data/Managed_Inputs.csv &gt; genomic_inputs.csv
+assume_role() {
+  local role_arn=&quot;${1:-${ROLE_ARN:-arn:aws:iam::736265540791:role/dbgap-etl}}&quot;
+  local session_name=&quot;${2:-${ROLE_SESSION_NAME:-s3-test}}&quot;
+  local duration=&quot;${3:-${ASSUME_DURATION_SECONDS:-900}}&quot;
 
+  if already_in_role &quot;$role_arn&quot;; then
+    log &quot;Already running under role ${role_arn}; skipping AssumeRole&quot;
+    return 0
+  fi
 
-IFS=&apos;,&apos;
-[ ! -f inputs.csv ]
-while read abv_name stdy_id data_type stdy_ready stdy_proc
-do
-if [[ ${data_type,,} == *&quot;g&quot;* ]]; then
-	if [[ &quot;${stdy_ready,,}&quot; == &quot;yes&quot; ]]; then
-    	if [[ &quot;${stdy_proc,,}&quot; == &quot;no&quot; ]]; then
-            aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;get-patient-mapping&quot; &gt; assume-role-output.txt
-			export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-			export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-			export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-            
-    		echo &quot;$stdy_id ready to process, fetching subject and sample multi files and patient mapping&quot;
-            aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ data/ --recursive --exclude &quot;*&quot; --include &quot;*${stdy_id}*Sample.MULTI*&quot; --include &quot;*stdy_id*sample.MULTI*&quot;
-            aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ data/ --recursive --exclude &quot;*&quot; --include &quot;*${stdy_id}*Subject.MULTI*&quot; --include &quot;*stdy_id*subject.MULTI*&quot;
-            
-            aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/data/${abv_name^^}_PatientMapping.v2.csv data/
-            unset AWS_ACCESS_KEY_ID
-			unset AWS_SECRET_ACCESS_KEY
-			unset AWS_SESSION_TOKEN
-        fi
-    fi
-fi
-done &lt; genomic_inputs.csv
+  log &quot;Assuming role ${role_arn} (session=${session_name}, duration=${duration}s)&quot;
+  local assume_json
+  assume_json=&quot;$(mktemp)&quot;
 
-java -jar jars/IndexFileGenerator.jar
-aws s3 cp completed/ s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/ingestion-indexes/ --recursive --exclude &quot;*.csv&quot;</command>
+  aws sts assume-role \
+    --duration-seconds &quot;$duration&quot; \
+    --role-arn &quot;$role_arn&quot; \
+    --role-session-name &quot;$session_name&quot; \
+    &gt; &quot;$assume_json&quot;
+
+  export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  AWS_ACCESS_KEY_ID=&quot;$(jq -r &apos;.Credentials.AccessKeyId&apos; &quot;$assume_json&quot;)&quot;
+  AWS_SECRET_ACCESS_KEY=&quot;$(jq -r &apos;.Credentials.SecretAccessKey&apos; &quot;$assume_json&quot;)&quot;
+  AWS_SESSION_TOKEN=&quot;$(jq -r &apos;.Credentials.SessionToken&apos; &quot;$assume_json&quot;)&quot;
+  rm -f &quot;$assume_json&quot;
+}
+
+s3_cp() {
+  local src=&quot;$1&quot; dst=&quot;$2&quot; required=&quot;${3:-true}&quot;
+  shift 3 || true
+  if aws s3 cp &quot;$src&quot; &quot;$dst&quot; --no-progress --only-show-errors &quot;$@&quot;; then
+    return 0
+  fi
+  if [[ &quot;$required&quot; == &quot;true&quot; ]]; then
+    error &quot;S3 copy failed (required): $src -&gt; $dst&quot;
+    return 1
+  fi
+  warn &quot;S3 copy failed (optional): $src -&gt; $dst&quot;
+  return 0
+}
+
+reset_dir() { rm -rf &quot;$1&quot;; mkdir -p &quot;$1&quot;; }
+
+# -----------------------------
+# Prereqs
+# -----------------------------
+need aws
+need jq
+need csvcut
+need csvformat
+need tail
+need java
+
+: &quot;${managed_inputs:?managed_inputs must be set (s3://.../Managed_Inputs.csv)}&quot;
+
+SRC_BUCKET=&quot;${SRC_BUCKET:-avillach-73-bdcatalyst-etl}&quot;
+GLOBAL_ALLCONCEPTS_S3=&quot;${GLOBAL_ALLCONCEPTS_S3:-s3://${SRC_BUCKET}/general/completed/GLOBAL_allConcepts.csv}&quot;
+INDEX_OUT_S3=&quot;${INDEX_OUT_S3:-s3://avillach-biodatacatalyst-deployments-3drb48r/genomic-etl/ingestion-indexes/}&quot;
+
+# -----------------------------
+# Workspace
+# -----------------------------
+reset_dir data
+reset_dir completed
+reset_dir logs
+
+# -----------------------------
+# Pull base inputs once
+# -----------------------------
+assume_role &quot;${ROLE_ARN:-arn:aws:iam::736265540791:role/dbgap-etl}&quot; &quot;s3-test&quot; &quot;900&quot;
+
+log &quot;Downloading managed inputs -&gt; data/Managed_Inputs.csv&quot;
+s3_cp &quot;$managed_inputs&quot; &quot;data/Managed_Inputs.csv&quot; true
+
+log &quot;Downloading GLOBAL_allConcepts.csv -&gt; data/GLOBAL_allConcepts.csv&quot;
+s3_cp &quot;$GLOBAL_ALLCONCEPTS_S3&quot; &quot;data/GLOBAL_allConcepts.csv&quot; true
+
+# -----------------------------
+# Build genomic_inputs.csv
+# -----------------------------
+log &quot;Building genomic_inputs.csv&quot;
+csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Data Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot; \
+  data/Managed_Inputs.csv &gt; genomic_inputs.csv
+
+log &quot;genomic_inputs.csv preview:&quot;
+head -n 10 genomic_inputs.csv &gt;&amp;2 || true
+
+# -----------------------------
+# Per-study downloads (sequential)
+# -----------------------------
+download_study_files() {
+  local abv_name=&quot;$1&quot; stdy_id=&quot;$2&quot;
+
+  local abv_lc abv_uc
+  abv_lc=&quot;$(printf &apos;%s&apos; &quot;$abv_name&quot; | tr &apos;[:upper:]&apos; &apos;[:lower:]&apos;)&quot;
+  abv_uc=&quot;$(printf &apos;%s&apos; &quot;$abv_name&quot; | tr &apos;[:lower:]&apos; &apos;[:upper:]&apos;)&quot;
+
+  log &quot;${stdy_id} ready; fetching MULTI + patient mapping for ${abv_name}&quot;
+
+  aws s3 cp &quot;s3://${SRC_BUCKET}/${abv_lc}/rawData/&quot; &quot;data/&quot; \
+    --recursive --exclude &quot;*&quot; --no-progress --only-show-errors \
+    --include &quot;*${stdy_id}*Sample.MULTI*&quot; --include &quot;*${stdy_id}*sample.MULTI*&quot; \
+    --include &quot;*${stdy_id}*Sample.Multi*&quot;  --include &quot;*${stdy_id}*sample.multi*&quot; \
+    || { error &quot;Failed to copy Sample MULTI files for ${abv_name} ${stdy_id}&quot;; return 1; }
+
+  aws s3 cp &quot;s3://${SRC_BUCKET}/${abv_lc}/rawData/&quot; &quot;data/&quot; \
+    --recursive --exclude &quot;*&quot; --no-progress --only-show-errors \
+    --include &quot;*${stdy_id}*Subject.MULTI*&quot; --include &quot;*${stdy_id}*subject.MULTI*&quot; \
+    --include &quot;*${stdy_id}*Subject.Multi*&quot;  --include &quot;*${stdy_id}*subject.multi*&quot; \
+    || { error &quot;Failed to copy Subject MULTI files for ${abv_name} ${stdy_id}&quot;; return 1; }
+
+  s3_cp &quot;s3://${SRC_BUCKET}/${abv_lc}/data/${abv_uc}_PatientMapping.v2.csv&quot; &quot;data/${abv_uc}_PatientMapping.v2.csv&quot; true
+}
+
+while IFS=&apos;,&apos; read -r abv_name stdy_id data_type stdy_ready stdy_proc; do
+  abv_name=&quot;${abv_name%\&quot;}&quot;; abv_name=&quot;${abv_name#\&quot;}&quot;
+  stdy_id=&quot;${stdy_id%\&quot;}&quot;;   stdy_id=&quot;${stdy_id#\&quot;}&quot;
+  data_type=&quot;${data_type%\&quot;}&quot;; data_type=&quot;${data_type#\&quot;}&quot;
+  stdy_ready=&quot;${stdy_ready%\&quot;}&quot;; stdy_ready=&quot;${stdy_ready#\&quot;}&quot;
+  stdy_proc=&quot;${stdy_proc%\&quot;}&quot;; stdy_proc=&quot;${stdy_proc#\&quot;}&quot;
+
+  if [[ &quot;${data_type,,}&quot; != *g* ]]; then
+    continue
+  fi
+
+  if [[ &quot;${stdy_ready,,}&quot; == &quot;yes&quot; &amp;&amp; &quot;${stdy_proc,,}&quot; == &quot;no&quot; ]]; then
+    download_study_files &quot;$abv_name&quot; &quot;$stdy_id&quot;
+  fi
+done &lt; &lt;(tail -n +2 genomic_inputs.csv | csvformat -U 1)
+
+# -----------------------------
+# Run generator + upload results
+# -----------------------------
+log &quot;Running IndexFileGenerator.jar&quot;
+java -jar jars/IndexFileGenerator.jar &gt; logs/index_file_generator.log 2&gt;&amp;1
+
+log &quot;Uploading completed/ -&gt; ${INDEX_OUT_S3}&quot;
+aws s3 cp &quot;completed/&quot; &quot;${INDEX_OUT_S3}&quot; \
+  --recursive --exclude &quot;*.csv&quot; \
+  --no-progress --only-show-errors
+
+log &quot;Done&quot;</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>
