@@ -1,7 +1,18 @@
 <?xml version='1.1' encoding='UTF-8'?>
 <project>
   <actions/>
-  <description></description>
+  <description>Caching Policy&#xd;
+&#xd;
+For each study row:&#xd;
+	•	data_ready=No&#xd;
+	•	Skip downloading&#xd;
+	•	Purge any cached file(s) for that study (so stale inputs cannot be reused later)&#xd;
+	•	data_ready=Yes and data_processed=No&#xd;
+	•	Refresh cache (download and overwrite) every run&#xd;
+	•	Rationale: this is the active work set; you want the cache to match “now”.&#xd;
+	•	data_ready=Yes and data_processed=Yes&#xd;
+	•	Use cache if present (cache hit)&#xd;
+	•	If missing, download once (cache miss)</description>
   <keepDependencies>false</keepDependencies>
   <properties>
     <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
@@ -60,30 +71,86 @@ log()    { echo &quot;[$(LOG_TS)] INFO  $*&quot; &gt;&amp;2; }
 warn()   { echo &quot;[$(LOG_TS)] WARN  $*&quot; &gt;&amp;2; }
 error()  { echo &quot;[$(LOG_TS)] ERROR $*&quot; &gt;&amp;2; }
 
+AWS_CONFIG_TMP=&quot;&quot;
+
 cleanup() {
   local rc=$?
-  local cmd=&quot;${BASH_COMMAND:-}&quot;
-  local line=&quot;${BASH_LINENO[0]:-}&quot;
-
   if [[ $rc -eq 0 ]]; then
-    log &quot;EXIT rc=0 (success). Cleaning AWS env vars.&quot;
+    log &quot;EXIT rc=0 (success)&quot;
   else
-    error &quot;EXIT rc=${rc} at line=${line} cmd=${cmd}. Cleaning AWS env vars.&quot;
+    error &quot;EXIT rc=${rc} at line=${BASH_LINENO[0]:-} cmd=${BASH_COMMAND:-}&quot;
   fi
-
   unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  [[ -n &quot;${AWS_CONFIG_TMP:-}&quot; ]] &amp;&amp; rm -f &quot;${AWS_CONFIG_TMP}&quot; || true
 }
 on_err() {
   local rc=$?
-  local line=&quot;${BASH_LINENO[0]:-}&quot;
-  local cmd=&quot;${BASH_COMMAND:-}&quot;
-  error &quot;ERR rc=${rc} at line=${line} cmd=${cmd}&quot;
+  error &quot;ERR rc=${rc} at line=${BASH_LINENO[0]:-} cmd=${BASH_COMMAND:-}&quot;
   return &quot;$rc&quot;
 }
 trap on_err ERR
 trap cleanup EXIT
 
 need() { command -v &quot;$1&quot; &gt;/dev/null 2&gt;&amp;1 || { error &quot;Missing required command: $1&quot;; exit 2; }; }
+
+# -----------------------------
+# AWS CLI / S3 performance tuning
+# -----------------------------
+AWS_DEFAULT_REGION=&quot;${AWS_DEFAULT_REGION:-us-east-1}&quot;
+export AWS_DEFAULT_REGION
+
+export AWS_RETRY_MODE=&quot;${AWS_RETRY_MODE:-adaptive}&quot;
+export AWS_MAX_ATTEMPTS=&quot;${AWS_MAX_ATTEMPTS:-10}&quot;
+export AWS_PAGER=&quot;&quot;
+export AWS_CLI_AUTO_PROMPT=&quot;off&quot;
+
+S3_MAX_CONCURRENT_REQUESTS=&quot;${S3_MAX_CONCURRENT_REQUESTS:-32}&quot;
+S3_MAX_QUEUE_SIZE=&quot;${S3_MAX_QUEUE_SIZE:-10000}&quot;
+S3_MULTIPART_THRESHOLD=&quot;${S3_MULTIPART_THRESHOLD:-64MB}&quot;
+S3_MULTIPART_CHUNKSIZE=&quot;${S3_MULTIPART_CHUNKSIZE:-64MB}&quot;
+S3_MAX_BANDWIDTH=&quot;${S3_MAX_BANDWIDTH:-}&quot;  # optional &quot;200MB/s&quot;
+
+AWS_CLI_CONNECT_TIMEOUT=&quot;${AWS_CLI_CONNECT_TIMEOUT:-10}&quot;
+AWS_CLI_READ_TIMEOUT=&quot;${AWS_CLI_READ_TIMEOUT:-0}&quot;   # 0 = no read timeout
+
+DOWNLOAD_PARALLEL=&quot;${DOWNLOAD_PARALLEL:-4}&quot;
+
+write_aws_config_for_job() {
+  AWS_CONFIG_TMP=&quot;$(mktemp)&quot;
+  export AWS_CONFIG_FILE=&quot;$AWS_CONFIG_TMP&quot;
+
+  {
+    echo &quot;[default]&quot;
+    echo &quot;region = ${AWS_DEFAULT_REGION}&quot;
+    echo &quot;s3 =&quot;
+    echo &quot;  max_concurrent_requests = ${S3_MAX_CONCURRENT_REQUESTS}&quot;
+    echo &quot;  max_queue_size = ${S3_MAX_QUEUE_SIZE}&quot;
+    echo &quot;  multipart_threshold = ${S3_MULTIPART_THRESHOLD}&quot;
+    echo &quot;  multipart_chunksize = ${S3_MULTIPART_CHUNKSIZE}&quot;
+    if [[ -n &quot;${S3_MAX_BANDWIDTH}&quot; ]]; then
+      echo &quot;  max_bandwidth = ${S3_MAX_BANDWIDTH}&quot;
+    fi
+  } &gt; &quot;${AWS_CONFIG_TMP}&quot;
+
+  log &quot;AWS S3 tuning: max_concurrent_requests=${S3_MAX_CONCURRENT_REQUESTS} multipart_threshold=${S3_MULTIPART_THRESHOLD} multipart_chunksize=${S3_MULTIPART_CHUNKSIZE} download_parallel=${DOWNLOAD_PARALLEL}&quot;
+}
+
+aws_cmd() {
+  aws --no-cli-pager \
+    --cli-connect-timeout &quot;${AWS_CLI_CONNECT_TIMEOUT}&quot; \
+    --cli-read-timeout &quot;${AWS_CLI_READ_TIMEOUT}&quot; \
+    &quot;$@&quot;
+}
+s3cp() {
+  aws_cmd s3 cp &quot;$1&quot; &quot;$2&quot; --no-progress --only-show-errors
+}
+
+require_base_credentials() {
+  if ! aws_cmd sts get-caller-identity --output text &gt;/dev/null 2&gt;&amp;1; then
+    error &quot;No AWS credentials available to this Jenkins step.&quot;
+    exit 253
+  fi
+}
 
 assume_role() {
   local role_arn=&quot;${ROLE_ARN:-arn:aws:iam::736265540791:role/dbgap-etl}&quot;
@@ -94,7 +161,7 @@ assume_role() {
   local assume_json
   assume_json=&quot;$(mktemp)&quot;
 
-  aws sts assume-role \
+  aws_cmd sts assume-role \
     --duration-seconds &quot;$duration&quot; \
     --role-arn &quot;$role_arn&quot; \
     --role-session-name &quot;$session_name&quot; \
@@ -123,91 +190,7 @@ wait_all() {
   return &quot;$rc&quot;
 }
 
-# Split CSV bytes into ~N-byte chunks WITHOUT breaking records and WITHOUT rewriting CSV.
-# - Preserves original bytes exactly (no re-quoting, no header injection).
-# - Splits only at newline that occurs outside of quoted fields.
-split_csv_record_safe_bytes() {
-  local infile=&quot;$1&quot; outprefix=&quot;$2&quot; target_bytes=&quot;${3:-250000000}&quot;
-
-  python3 - &quot;$infile&quot; &quot;$outprefix&quot; &quot;$target_bytes&quot; &lt;&lt;&apos;PY&apos;
-import os, sys
-
-infile, outprefix, target = sys.argv[1], sys.argv[2], int(sys.argv[3])
-if target &lt;= 0:
-    raise SystemExit(&quot;target_bytes must be &gt; 0&quot;)
-
-bufsize = 1024 * 1024  # 1 MiB
-
-part = 0
-written = 0
-in_quotes = False
-quote_pending = False  # saw a quote while in_quotes; need next byte to decide escape vs close
-
-def part_path(i: int) -&gt; str:
-    return f&quot;{outprefix}.{i:04d}&quot;
-
-out = open(part_path(part), &quot;wb&quot;)
-
-def rotate():
-    global part, out, written
-    out.flush()
-    out.close()
-    part += 1
-    out = open(part_path(part), &quot;wb&quot;)
-    written = 0
-
-with open(infile, &quot;rb&quot;) as f:
-    while True:
-        data = f.read(bufsize)
-        if not data:
-            break
-
-        i = 0
-        n = len(data)
-        while i &lt; n:
-            b = data[i:i+1]
-            i += 1
-
-            # Resolve pending quote decision (escape &quot;&quot; vs closing &quot;)
-            if quote_pending:
-                if b == b&apos;&quot;&apos;:
-                    # Escaped quote inside quoted field: write it and stay in_quotes
-                    out.write(b)
-                    written += 1
-                    quote_pending = False
-                    continue
-                else:
-                    # Previous quote closed the quoted field; process current byte normally
-                    in_quotes = False
-                    quote_pending = False
-                    # fall through
-
-            if b == b&apos;&quot;&apos;:
-                out.write(b)
-                written += 1
-                if in_quotes:
-                    quote_pending = True
-                else:
-                    in_quotes = True
-                continue
-
-            out.write(b)
-            written += 1
-
-            # Record boundary: newline outside quotes
-            if b == b&quot;\n&quot; and (not in_quotes) and (not quote_pending):
-                if written &gt;= target:
-                    rotate()
-
-out.flush()
-out.close()
-
-# Remove trailing empty part if created
-last = part_path(part)
-if os.path.exists(last) and os.path.getsize(last) == 0:
-    os.remove(last)
-PY
-}
+has_wait_n() { builtin help wait 2&gt;/dev/null | grep -q -- &quot;-n&quot;; }
 
 # -----------------------------
 # Prereqs + required inputs
@@ -218,147 +201,249 @@ need csvcut
 need csvformat
 need tail
 need java
-need python3
 
 : &quot;${managed_inputs:?managed_inputs must be set (s3://.../Managed_Inputs.csv)}&quot;
 
 S3_BUCKET=&quot;${S3_BUCKET:-avillach-73-bdcatalyst-etl}&quot;
-CHUNK_BYTES=&quot;${CHUNK_BYTES:-250000000}&quot;  # ~250MB
-HEAP_GB=&quot;${HEAP_GB:-64}&quot;
-PARALLEL=&quot;${PARALLEL:-16}&quot;
+HEAP_GB=&quot;${HEAP_GB:-110}&quot;
+PARALLEL=&quot;${PARALLEL:-8}&quot;
+
+REMOVE_CONSENT_JAR=&quot;${REMOVE_CONSENT_JAR:-jars/entity-generator-1.0.0-SNAPSHOT-RemoveConsentZeroPatients.jar}&quot;
+REMOVE_CONSENT_CONFIG=&quot;${REMOVE_CONSENT_CONFIG:-configs/RemoveConsentZeroPatients/application.properties}&quot;
+DBGAP_MERGE_JAR=&quot;${DBGAP_MERGE_JAR:-jars/DbGapDataMerge.jar}&quot;
+ENABLE_PREVIEW=&quot;${ENABLE_PREVIEW:-true}&quot;
 
 # -----------------------------
-# Workspace
+# Persistent cache dir
 # -----------------------------
-reset_dir beforeRemoval
+CACHE_BEFORE_DIR_REQUESTED=&quot;${CACHE_BEFORE_DIR:-/mnt/jenkins-cache/dbgap/beforeRemoval}&quot;
+CACHE_BEFORE_DIR=&quot;&quot;
+
+pick_cache_dir() {
+  local candidate=&quot;$1&quot;
+  if mkdir -p &quot;$candidate&quot; 2&gt;/dev/null &amp;&amp; [[ -w &quot;$candidate&quot; ]]; then
+    CACHE_BEFORE_DIR=&quot;$candidate&quot;
+    return 0
+  fi
+  return 1
+}
+
+if ! pick_cache_dir &quot;$CACHE_BEFORE_DIR_REQUESTED&quot;; then
+  if [[ -n &quot;${WORKSPACE:-}&quot; ]] &amp;&amp; pick_cache_dir &quot;${WORKSPACE}/.cache/dbgap/beforeRemoval&quot;; then :; \
+  elif [[ -n &quot;${JENKINS_HOME:-}&quot; ]] &amp;&amp; pick_cache_dir &quot;${JENKINS_HOME}/.cache/dbgap/beforeRemoval&quot;; then :; \
+  else
+    pick_cache_dir &quot;$PWD/.cache/dbgap/beforeRemoval&quot;
+  fi
+  warn &quot;CACHE_BEFORE_DIR not writable at &apos;$CACHE_BEFORE_DIR_REQUESTED&apos;; using &apos;$CACHE_BEFORE_DIR&apos;&quot;
+else
+  log &quot;Using persistent beforeRemoval cache dir: $CACHE_BEFORE_DIR&quot;
+fi
+
+# -----------------------------
+# Workspace (do NOT delete cache dir)
+# -----------------------------
 reset_dir data
 reset_dir completed
 reset_dir processing
 
 # -----------------------------
-# Auth once
+# Auth + job-local AWS config
 # -----------------------------
+write_aws_config_for_job
+require_base_credentials
 assume_role
 
 # -----------------------------
 # Inputs
 # -----------------------------
-log &quot;Downloading managed inputs: ${managed_inputs}&quot;
-aws s3 cp &quot;$managed_inputs&quot; ./Managed_Inputs.csv --no-progress --only-show-errors
+log &quot;Downloading managed inputs&quot;
+s3cp &quot;$managed_inputs&quot; ./Managed_Inputs.csv
 
 log &quot;Downloading metadata_new_search.json&quot;
-aws s3 cp &quot;s3://${S3_BUCKET}/general/data/metadata_new_search.json&quot; ./metadata_new_search.json --no-progress --only-show-errors
+s3cp &quot;s3://${S3_BUCKET}/general/data/metadata_new_search.json&quot; ./metadata_new_search.json
 
 log &quot;Creating inputs.csv&quot;
 csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Study Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot; \
   Managed_Inputs.csv &gt; inputs.csv
+
 # -----------------------------
-# Download per study (record-safe, byte-preserving, no header injection)
+# Cache policy:
+# - data_ready=No  =&gt; skip + purge cache for that study
+# - data_ready=Yes &amp; data_processed=No  =&gt; refresh cache (download overwrite) every run
+# - data_ready=Yes &amp; data_processed=Yes =&gt; use cache if present, else download once
 # -----------------------------
-download() {
+cache_path_for_study() {
   local abv_name=&quot;$1&quot; stdy_id=&quot;$2&quot;
   local abv_lc stdy_lc
   abv_lc=&quot;$(printf &apos;%s&apos; &quot;$abv_name&quot; | tr &apos;[:upper:]&apos; &apos;[:lower:]&apos;)&quot;
   stdy_lc=&quot;$(printf &apos;%s&apos; &quot;$stdy_id&quot;  | tr &apos;[:upper:]&apos; &apos;[:lower:]&apos;)&quot;
-
-  local s3_src=&quot;s3://${S3_BUCKET}/${abv_lc}/completed/${stdy_id}/${stdy_lc}_allConcepts_new_search_with_data_analyzer.csv&quot;
-  local dst=&quot;beforeRemoval/${stdy_lc}_allConcepts_new_search_with_data_analyzer.csv&quot;
-
-  log &quot;Downloading ${stdy_id} allConcepts&quot;
-  aws s3 cp &quot;$s3_src&quot; &quot;$dst&quot; --no-progress --only-show-errors
-  
+  printf &apos;%s/%s_allConcepts_new_search_with_data_analyzer.csv&apos; &quot;$CACHE_BEFORE_DIR&quot; &quot;$stdy_lc&quot;
 }
-
-# -----------------------------
-# Download + split per study (record-safe, byte-preserving, no header injection)
-# -----------------------------
-download_and_split() {
+s3_path_for_study() {
   local abv_name=&quot;$1&quot; stdy_id=&quot;$2&quot;
   local abv_lc stdy_lc
   abv_lc=&quot;$(printf &apos;%s&apos; &quot;$abv_name&quot; | tr &apos;[:upper:]&apos; &apos;[:lower:]&apos;)&quot;
   stdy_lc=&quot;$(printf &apos;%s&apos; &quot;$stdy_id&quot;  | tr &apos;[:upper:]&apos; &apos;[:lower:]&apos;)&quot;
+  printf &apos;s3://%s/%s/completed/%s/%s_allConcepts_new_search_with_data_analyzer.csv&apos; \
+    &quot;$S3_BUCKET&quot; &quot;$abv_lc&quot; &quot;$stdy_id&quot; &quot;$stdy_lc&quot;
+}
+purge_cache_for_study() {
+  local abv_name=&quot;$1&quot; stdy_id=&quot;$2&quot;
+  local dst
+  dst=&quot;$(cache_path_for_study &quot;$abv_name&quot; &quot;$stdy_id&quot;)&quot;
+  rm -f &quot;$dst&quot; &quot;${dst}.&quot;* 2&gt;/dev/null || true
+  log &quot;Purged cache: ${stdy_id}&quot;
+}
+download_refresh() {
+  local abv_name=&quot;$1&quot; stdy_id=&quot;$2&quot;
+  local s3_src dst tmp
+  s3_src=&quot;$(s3_path_for_study &quot;$abv_name&quot; &quot;$stdy_id&quot;)&quot;
+  dst=&quot;$(cache_path_for_study &quot;$abv_name&quot; &quot;$stdy_id&quot;)&quot;
+  tmp=&quot;${dst}.tmp.$$&quot;
 
-  local s3_src=&quot;s3://${S3_BUCKET}/${abv_lc}/completed/${stdy_id}/${stdy_lc}_allConcepts_new_search_with_data_analyzer.csv&quot;
-  local dst=&quot;beforeRemoval/${stdy_lc}_allConcepts_new_search_with_data_analyzer.csv&quot;
+  log &quot;Refreshing cache: ${stdy_id}&quot;
+  s3cp &quot;$s3_src&quot; &quot;$tmp&quot;
+  [[ -s &quot;$tmp&quot; ]] || { error &quot;Downloaded empty/missing: $tmp&quot;; rm -f &quot;$tmp&quot;; return 1; }
+  mv -f &quot;$tmp&quot; &quot;$dst&quot;
+}
+download_if_missing() {
+  local abv_name=&quot;$1&quot; stdy_id=&quot;$2&quot;
+  local s3_src dst
+  s3_src=&quot;$(s3_path_for_study &quot;$abv_name&quot; &quot;$stdy_id&quot;)&quot;
+  dst=&quot;$(cache_path_for_study &quot;$abv_name&quot; &quot;$stdy_id&quot;)&quot;
 
-  log &quot;Downloading ${stdy_id} allConcepts&quot;
-  aws s3 cp &quot;$s3_src&quot; &quot;$dst&quot; --no-progress --only-show-errors
-
-  if [[ ! -s &quot;$dst&quot; ]]; then
-    error &quot;Downloaded file missing/empty for ready study ${abv_name} ${stdy_id}: ${dst}&quot;
-    return 255
+  if [[ -s &quot;$dst&quot; ]]; then
+    log &quot;Cache hit: ${stdy_id}&quot;
+    return 0
   fi
 
-  log &quot;Record-safe splitting ${stdy_id} (target_bytes=${CHUNK_BYTES})&quot;
-  split_csv_record_safe_bytes &quot;$dst&quot; &quot;$dst&quot; &quot;$CHUNK_BYTES&quot;
-  rm -f &quot;$dst&quot;
-
-  log &quot;Downloaded and split ${stdy_id}&quot;
+  log &quot;Cache miss: downloading ${stdy_id}&quot;
+  s3cp &quot;$s3_src&quot; &quot;$dst&quot;
+  [[ -s &quot;$dst&quot; ]] || { error &quot;Downloaded empty/missing: $dst&quot;; return 1; }
 }
+handle_study_row() {
+  local abv_name=&quot;$1&quot; stdy_id=&quot;$2&quot; data_ready=&quot;$3&quot; data_processed=&quot;$4&quot;
+
+  if [[ &quot;${data_ready,,}&quot; != &quot;yes&quot; ]]; then
+    purge_cache_for_study &quot;$abv_name&quot; &quot;$stdy_id&quot;
+    return 0
+  fi
+
+  if [[ &quot;${data_processed,,}&quot; == &quot;no&quot; ]]; then
+    download_refresh &quot;$abv_name&quot; &quot;$stdy_id&quot;
+  else
+    download_if_missing &quot;$abv_name&quot; &quot;$stdy_id&quot;
+  fi
+}
+
+# -----------------------------
+# Apply per-study cache policy (optional parallelism)
+# -----------------------------
+study_pids=()
+active=0
+use_wait_n=0
+has_wait_n &amp;&amp; use_wait_n=1
 
 while IFS=&apos;,&apos; read -r abv_name stdy_id stdy_type data_ready data_processed; do
   abv_name=&quot;${abv_name%\&quot;}&quot;; abv_name=&quot;${abv_name#\&quot;}&quot;
   stdy_id=&quot;${stdy_id%\&quot;}&quot;;   stdy_id=&quot;${stdy_id#\&quot;}&quot;
   data_ready=&quot;${data_ready%\&quot;}&quot;; data_ready=&quot;${data_ready#\&quot;}&quot;
+  data_processed=&quot;${data_processed%\&quot;}&quot;; data_processed=&quot;${data_processed#\&quot;}&quot;
 
-  if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]]; then
-    download &quot;$abv_name&quot; &quot;$stdy_id&quot;
-  else
-    log &quot;${abv_name} ${stdy_id} marked not ready; skipping&quot;
+  if [[ &quot;${DOWNLOAD_PARALLEL}&quot; -le 1 ]]; then
+    handle_study_row &quot;$abv_name&quot; &quot;$stdy_id&quot; &quot;$data_ready&quot; &quot;$data_processed&quot;
+    continue
+  fi
+
+  handle_study_row &quot;$abv_name&quot; &quot;$stdy_id&quot; &quot;$data_ready&quot; &quot;$data_processed&quot; &amp; study_pids+=(&quot;$!&quot;)
+  ((active+=1))
+
+  if [[ $active -ge $DOWNLOAD_PARALLEL ]]; then
+    if [[ $use_wait_n -eq 1 ]]; then
+      wait -n || true
+      ((active-=1))
+    else
+      warn &quot;Shell lacks &apos;wait -n&apos;; falling back to sequential&quot;
+      wait_all &quot;${study_pids[@]}&quot;
+      study_pids=()
+      active=0
+    fi
   fi
 done &lt; &lt;(tail -n +2 inputs.csv | csvformat -U 1)
 
+if [[ ${#study_pids[@]} -gt 0 ]]; then
+  log &quot;Waiting for per-study cache operations...&quot;
+  wait_all &quot;${study_pids[@]}&quot;
+fi
+
 # -----------------------------
-# Download shared inputs (parallel OK)
+# Shared inputs (cached: download once if missing)
 # -----------------------------
 pids=()
 
-log &quot;Downloading HRMN_allConcepts.csv&quot;
-aws s3 cp &quot;s3://${S3_BUCKET}/hrmn/completed/HRMN_allConcepts.csv&quot; \
-  &quot;beforeRemoval/HRMN_allConcepts.csv&quot; --no-progress --only-show-errors &amp; pids+=(&quot;$!&quot;)
+if [[ ! -s &quot;${CACHE_BEFORE_DIR}/HRMN_allConcepts.csv&quot; ]]; then
+  log &quot;Downloading HRMN_allConcepts.csv&quot;
+  s3cp &quot;s3://${S3_BUCKET}/hrmn/completed/HRMN_allConcepts.csv&quot; &quot;${CACHE_BEFORE_DIR}/HRMN_allConcepts.csv&quot; &amp; pids+=(&quot;$!&quot;)
+else
+  log &quot;Cache hit: HRMN_allConcepts.csv&quot;
+fi
 
-log &quot;Downloading GLOBAL_allConcepts_merged.csv&quot;
-aws s3 cp &quot;s3://${S3_BUCKET}/general/completed/GLOBAL_allConcepts_merged.csv&quot; \
-  &quot;beforeRemoval/GLOBAL_allConcepts.csv&quot; --no-progress --only-show-errors &amp; pids+=(&quot;$!&quot;)
+if [[ ! -s &quot;${CACHE_BEFORE_DIR}/GLOBAL_allConcepts.csv&quot; ]]; then
+  log &quot;Downloading GLOBAL_allConcepts_merged.csv&quot;
+  s3cp &quot;s3://${S3_BUCKET}/general/completed/GLOBAL_allConcepts_merged.csv&quot; &quot;${CACHE_BEFORE_DIR}/GLOBAL_allConcepts.csv&quot; &amp; pids+=(&quot;$!&quot;)
+else
+  log &quot;Cache hit: GLOBAL_allConcepts.csv&quot;
+fi
 
-log &quot;Waiting for shared downloads...&quot;
-wait_all &quot;${pids[@]}&quot;
+if [[ ${#pids[@]} -gt 0 ]]; then
+  log &quot;Waiting for shared downloads...&quot;
+  wait_all &quot;${pids[@]}&quot;
+fi
 
 # -----------------------------
 # Run jars
 # -----------------------------
-log &quot;Running RemoveConsentZeroPatients.jar&quot;
-java -Xms32g -Xmx&quot;${HEAP_GB}g&quot; \
-  -DmaximumPoolSize=&quot;$PARALLEL&quot; \
-  -Djava.util.concurrent.ForkJoinPool.common.parallelism=&quot;$PARALLEL&quot; \
+[[ -r &quot;$REMOVE_CONSENT_JAR&quot; ]]     || { error &quot;Missing REMOVE_CONSENT_JAR: $REMOVE_CONSENT_JAR&quot;; exit 2; }
+[[ -r &quot;$DBGAP_MERGE_JAR&quot; ]]        || { error &quot;Missing DBGAP_MERGE_JAR: $DBGAP_MERGE_JAR&quot;; exit 2; }
+[[ -r &quot;$REMOVE_CONSENT_CONFIG&quot; ]]  || { error &quot;Missing REMOVE_CONSENT_CONFIG: $REMOVE_CONSENT_CONFIG&quot;; exit 2; }
+
+JAVA_PREVIEW_ARGS=()
+if [[ &quot;${ENABLE_PREVIEW,,}&quot; == &quot;true&quot; ]]; then
+  JAVA_PREVIEW_ARGS+=(--enable-preview)
+fi
+
+rm -rf ./beforeRemoval
+ln -s &quot;$CACHE_BEFORE_DIR&quot; ./beforeRemoval
+
+log &quot;Running RemoveConsent step&quot;
+java &quot;${JAVA_PREVIEW_ARGS[@]}&quot; \
+  -Xms32g -Xmx&quot;${HEAP_GB}g&quot; \
+  -XX:+UseG1GC \
+  -XX:+AlwaysPreTouch \
   -XX:+ExitOnOutOfMemoryError \
-  -XX:+HeapDumpOnOutOfMemoryError \
-  -XX:HeapDumpPath=./oom-heapdump.hprof \
-  -Xlog:gc*,safepoint:file=gc.log:time,level,tags \
-  -jar jars/RemoveConsentZeroPatients.jar
+  -Dconfig.file=&quot;$REMOVE_CONSENT_CONFIG&quot; \
+  -Djdk.virtualThreadScheduler.parallelism=&quot;$PARALLEL&quot; \
+  -Dprocessing.parallelism.level=&quot;$PARALLEL&quot; \
+  -DbeforeRemoval.dir=&quot;$CACHE_BEFORE_DIR&quot; \
+  -jar &quot;$REMOVE_CONSENT_JAR&quot;
 
-log &quot;Running DbGapDataMerge.jar&quot;
-java -Xmx&quot;${HEAP_GB}g&quot; -jar jars/DbGapDataMerge.jar
+log &quot;Running DbGap merge step&quot;
+java -Xmx&quot;${HEAP_GB}g&quot; -DbeforeRemoval.dir=&quot;$CACHE_BEFORE_DIR&quot; -jar &quot;$DBGAP_MERGE_JAR&quot;
 
 # -----------------------------
-# Upload output
+# Upload output (refresh role right before upload)
 # -----------------------------
+log &quot;Refreshing role before upload to avoid timeouts&quot;
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+assume_role
+
 log &quot;Uploading result to s3&quot;
-aws s3 cp &quot;completed/allConcepts.csv&quot; \
-  &quot;s3://${S3_BUCKET}/general/completed/allConcepts_data_analyzer.csv&quot; \
-  --no-progress --only-show-errors
+s3cp &quot;completed/allConcepts.csv&quot; &quot;s3://${S3_BUCKET}/general/completed/allConcepts_data_analyzer.csv&quot;
 
 log &quot;Done&quot;</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>
   <publishers/>
-  <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.49">
-      <deleteDirs>false</deleteDirs>
-      <cleanupParameter></cleanupParameter>
-      <externalDelete></externalDelete>
-      <disableDeferredWipeout>false</disableDeferredWipeout>
-    </hudson.plugins.ws__cleanup.PreBuildCleanup>
-  </buildWrappers>
+  <buildWrappers/>
 </project>

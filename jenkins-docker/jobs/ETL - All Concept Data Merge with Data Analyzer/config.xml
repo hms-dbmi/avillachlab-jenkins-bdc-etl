@@ -343,6 +343,9 @@ java -Xmx&quot;${HEAP_GB}g&quot; -jar jars/DbGapDataMerge.jar
 # -----------------------------
 # Upload output
 # -----------------------------
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
+assume_role
 log &quot;Uploading result to s3&quot;
 aws s3 cp &quot;completed/allConcepts.csv&quot; \
   &quot;s3://${S3_BUCKET}/general/completed/allConcepts_data_analyzer.csv&quot; \
