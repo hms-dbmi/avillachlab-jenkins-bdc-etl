@@ -1,43 +1,57 @@
-FROM jenkins/jenkins:2.448
+# syntax=docker/dockerfile:1
 
-ARG S3_BUCKET
-
-COPY plugins.txt /usr/share/jenkins/ref/plugins.txt
-
-COPY config.xml /var/jenkins_home/config.xml
-
-COPY scriptApproval.xml /var/jenkins_home/scriptApproval.xml
-
-COPY hudson.tasks.Maven.xml /var/jenkins_home/hudson.tasks.Maven.xml
+FROM jenkins/jenkins:lts-jdk21
 
 USER root
 
-RUN echo "s/stack_s3_bucket_var/$S3_BUCKET/"
+# ---- OS utilities commonly needed in pipelines ----
+RUN apt-get update && apt-get install -y \
+    git jq unzip curl ca-certificates gnupg lsb-release bash \
+ && rm -rf /var/lib/apt/lists/*
 
-RUN sed -i "s/stack_s3_bucket_var/$S3_BUCKET/" /var/jenkins_home/config.xml
+# ---- AWS CLI v2 (multi-arch: amd64/arm64) ----
+ARG TARGETARCH
+RUN set -eux; \
+  case "${TARGETARCH}" in \
+    amd64)  AWS_ARCH="x86_64" ;; \
+    arm64)  AWS_ARCH="aarch64" ;; \
+    *) echo "Unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
+  esac; \
+  curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${AWS_ARCH}.zip" -o /tmp/awscliv2.zip; \
+  unzip /tmp/awscliv2.zip -d /tmp; \
+  /tmp/aws/install; \
+  rm -rf /tmp/aws /tmp/awscliv2.zip
 
-RUN apt-get update -y
+# ---- tfenv (Terraform version manager) ----
+ENV TFENV_ROOT=/usr/local/tfenv
+ENV TFENV_AUTO_INSTALL=true
 
-RUN apt-get -y install apt-transport-https \
-    python3-pip \
-    wget
+RUN git clone --depth=1 https://github.com/tfutils/tfenv.git "$TFENV_ROOT" \
+ && ln -s "$TFENV_ROOT/bin/"* /usr/local/bin/ \
+ && mkdir -p "$TFENV_ROOT/versions" \
+ && chown -R jenkins:jenkins "$TFENV_ROOT"
 
-RUN pip3 install --no-input awscli --upgrade --break-system-packages
+# ---- (Optional) Preinstall multiple Terraform versions (modern) ----
+# Override at build time, e.g.:
+#   --build-arg TERRAFORM_VERSIONS="1.5.7 1.6.6 1.7.5 1.8.5 1.9.8"
+# Also choose a default with TERRAFORM_DEFAULT.
+ARG TERRAFORM_VERSIONS="1.6.6 1.7.5 1.8.5 1.9.8"
+ARG TERRAFORM_DEFAULT="1.9.8"
+RUN set -eux; \
+  for v in ${TERRAFORM_VERSIONS}; do \
+    tfenv install "$v"; \
+  done; \
+  tfenv use "${TERRAFORM_DEFAULT}"
 
-RUN curl -fsSL https://get.docker.com | sh
+# ---- Jenkins plugins ----
+COPY plugins.txt /usr/share/jenkins/ref/plugins.txt
+RUN jenkins-plugin-cli -f /usr/share/jenkins/ref/plugins.txt
 
-RUN docker --version
+# ---- Sanity checks ----
+RUN terraform version \
+ && aws --version \
+ && git --version \
+ && jq --version \
+ && tfenv --version
 
-RUN wget https://downloads.apache.org/maven/maven-3/3.8.8/binaries/apache-maven-3.8.8-bin.tar.gz -P /opt
-
-#RUN apt-get -y -t stretch-backports install openjdk-11-jdk
-
-RUN tar -xvzf /opt/apache-maven-3.8.8-bin.tar.gz -C /opt
-
-RUN rm /opt/apache-maven-3.8.8-bin.tar.gz
-
-RUN apt-get install jq -y
-
-RUN /bin/jenkins-plugin-cli -f /usr/share/jenkins/ref/plugins.txt || echo "Some errors occurred during plugin installation."
-
-RUN wget https://releases.hashicorp.com/terraform/0.12.31/terraform_0.12.31_linux_amd64.zip && unzip terraform_0.12.31_linux_amd64.zip && mv terraform /usr/local/bin/
+USER jenkins
