@@ -56,7 +56,7 @@ RUN set -eux; \
     csvkit \
     postgresql-client \
     python3 python3-venv python3-pip \
-    temurin-11-jdk temurin-17-jdk temurin-21-jdk temurin-24-jdk \
+    temurin-11-jdk temurin-17-jdk temurin-21-jdk temurin-24-jdk temurin-25-jdk \
   ; \
   rm -rf /var/lib/apt/lists/*
 
