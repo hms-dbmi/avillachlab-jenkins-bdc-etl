@@ -169,6 +169,7 @@
         <string>Dictionary ETL - AnVIL TSV Ingest</string>
         <string>Dictionary ETL - Back Fill Study Programs</string>
         <string>Dictionary ETL - BDC Ingest Pipeline</string>
+        <string>Dictionary ETL - BDC Ingest Pipeline - Legacy</string>
         <string>Dictionary ETL - Build Ingest Files From ColumnMeta</string>
         <string>Dictionary ETL - Create Files For Stigvar Identification</string>
         <string>Dictionary ETL - Curated metadata.json to dictionary db</string>
@@ -529,17 +530,10 @@
       <properties class="hudson.model.View$PropertyList"/>
       <jobNames>
         <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
-        <string>Curation - Compliant Data Dictionary to Metadata - George Test</string>
-        <string>Dictionary ETL - BDC Ingest Pipeline - Migrate ColumnMeta</string>
+        <string>Dictionary ETL - BDC Ingest Pipeline</string>
         <string>Dictionary ETL - Build Ingest Files From ColumnMeta - Loading</string>
         <string>Dictionary ETL - Build Ingest Files From ColumnMeta - Loading - Concepts</string>
-        <string>Dictionary ETL - Facet Loader</string>
-        <string>Dictionary ETL - Facet Loader Clear Facets</string>
-        <string>Dictionary ETL - Facet Pipeline</string>
         <string>ETL - Generate Non-DBGap All Concepts with Data Type Analyzer - Debug</string>
-        <string>ETL - Update Facet Configuration</string>
-        <string>Update Custom Mappings With Multis</string>
-        <string>Validation Sample and Subject Multi Files</string>
         <string>WIP - Compliant - Pre - Ingestion</string>
       </jobNames>
       <jobFilters/>

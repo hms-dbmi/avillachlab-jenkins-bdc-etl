@@ -1,8 +1,8 @@
 <?xml version='1.1' encoding='UTF-8'?>
-<flow-definition plugin="workflow-job@1400.v7fd111b_ec82f">
+<flow-definition plugin="workflow-job@1559.va_a_533730b_ea_d">
   <actions>
-    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobAction plugin="pipeline-model-definition@2.2218.v56d0cda_37c72"/>
-    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction plugin="pipeline-model-definition@2.2218.v56d0cda_37c72">
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobAction plugin="pipeline-model-definition@2.2277.v00573e73ddf1"/>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction plugin="pipeline-model-definition@2.2277.v00573e73ddf1">
       <jobProperties/>
       <triggers/>
       <parameters/>
@@ -12,17 +12,20 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <hudson.plugins.copyartifact.CopyArtifactPermissionProperty plugin="copyartifact@757.v05365583a_455">
+    <hudson.plugins.copyartifact.CopyArtifactPermissionProperty plugin="copyartifact@770.va_6c69e063442">
       <projectNameList>
         <string>*</string>
       </projectNameList>
     </hudson.plugins.copyartifact.CopyArtifactPermissionProperty>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@332.va_1ee476d8f6d">
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
+    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
+      <doNotScan>false</doNotScan>
+    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
   </properties>
-  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@4000.v5198556e9cea_">
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@4238.va_6fb_65c1f699">
     <script>pipeline {
     agent any
 
@@ -31,7 +34,7 @@
         stage(&apos;Start Dictionary Container&apos;) {
             steps {
                 build job: &apos;Dictionary ETL - Start Docker Container&apos;, parameters: [
-                                        string(name: &apos;git_hash&apos;, value: &apos;ALS-10153&apos;)
+                                        string(name: &apos;git_hash&apos;, value: &apos;Fix-Facet-Refactor&apos;)
                                     ]
             }
         }
@@ -77,7 +80,7 @@
                             
                             ingestRuns[&quot;updateRuns${inputCount}&quot;] = {
 
-                                build job: &apos;Dictionary ETL - Build Ingest Files From ColumnMeta - Loading&apos;,
+                                build job: &apos;Dictionary ETL - Build Ingest Files From ColumnMeta - FHS FIX&apos;,
                                     parameters: [
                                         string(name: &apos;api&apos;, value: &apos;http://172.20.0.2:8086/api&apos;),
                                         string(name: &apos;datasetRef&apos;, value: it[&apos;Study Identifier&apos;])
@@ -86,13 +89,6 @@
                         }
                     }
                     parallel ingestRuns
-                    
-                     // run after parallel, only API parameter
-                    build job: &apos;Dictionary ETL - Build Ingest Files From ColumnMeta - Loading - Concepts&apos;,
-                      parameters: [
-                        string(name: &apos;api&apos;, value: &apos;http://172.20.0.2:8086/&apos;)
-                      ]
-                    
                     if (hrmnUpdated == true) {
                         echo &apos;At least one updated study is harmonized - triggering refresh of DCC Harmonized Dictionary&apos;
                         build job: &apos;Dictionary ETL - Update DCC Harmonized Dictionary&apos;
@@ -165,6 +161,14 @@
                 }
             }
         }
+        stage(&apos;Run Configured Facet Loader&apos;) {
+            steps {
+                script {
+                    build job: &apos;Dictionary ETL - Facet Loader&apos;
+                }
+                copyArtifacts(projectName: &apos;Dictionary ETL - Facet Loader&apos;)
+            }
+        }
         stage(&apos;Update General Facets&apos;){
             steps{
                 script {
@@ -220,6 +224,7 @@
     post{
         success {
             archiveArtifacts artifacts: &apos;db_dump_name.txt&apos;, followSymlinks: false;
+            archiveArtifacts artifacts: &apos;facet_loader_response.json&apos;, followSymlinks: false;
         }
     }
 }

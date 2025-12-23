@@ -56,177 +56,69 @@
   <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Shell>
-      <command>#!/usr/bin/env bash
-set -euo pipefail
+      <command>#!/bin/bash
+#set -euo pipefail
 
-LOG_TS() { date +&quot;%Y-%m-%dT%H:%M:%S%z&quot;; }
-log()    { echo &quot;[$(LOG_TS)] INFO  $*&quot; &gt;&amp;2; }
-warn()   { echo &quot;[$(LOG_TS)] WARN  $*&quot; &gt;&amp;2; }
-error()  { echo &quot;[$(LOG_TS)] ERROR $*&quot; &gt;&amp;2; }
 
-need() { command -v &quot;$1&quot; &gt;/dev/null 2&gt;&amp;1 || { error &quot;Missing required command: $1&quot;; exit 2; }; }
+### assume etl role
+aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
 
-cleanup() { unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN; }
-trap cleanup EXIT
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
-assume_role() {
-  local role_arn=&quot;${ROLE_ARN:-arn:aws:iam::736265540791:role/dbgap-etl}&quot;
-  local session_name=&quot;${ROLE_SESSION_NAME:-s3-test}&quot;
-  local duration=&quot;${ASSUME_DURATION_SECONDS:-3600}&quot;
+mkdir data
+mkdir data/decoded
+mkdir completed
+mkdir hierarchies
+mkdir processing
 
-  log &quot;Assuming role ${role_arn} (duration=${duration}s)&quot;
-  local assume_json
-  assume_json=&quot;$(mktemp)&quot;
+find data/ -type f -exec rm -rf {} \;
+find processing/ -type f -exec rm -rf {} \;
+find completed/ -type f -exec rm -rf {} \;
+rm -rf pic-sure-hpds/
 
-  aws sts assume-role \
-    --duration-seconds &quot;$duration&quot; \
-    --role-arn &quot;$role_arn&quot; \
-    --role-session-name &quot;$session_name&quot; \
-    &gt; &quot;$assume_json&quot;
+aws s3 cp ${managed_inputs} data/Managed_Inputs.csv
+aws s3 cp ${managed_inputs} data/Managed_Inputs_OG.csv
 
-  export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
-  AWS_ACCESS_KEY_ID=&quot;$(jq -r &apos;.Credentials.AccessKeyId&apos; &quot;$assume_json&quot;)&quot;
-  AWS_SECRET_ACCESS_KEY=&quot;$(jq -r &apos;.Credentials.SecretAccessKey&apos; &quot;$assume_json&quot;)&quot;
-  AWS_SESSION_TOKEN=&quot;$(jq -r &apos;.Credentials.SessionToken&apos; &quot;$assume_json&quot;)&quot;
-  rm -f &quot;$assume_json&quot;
+grep -i ${abv_name^^}, data/Managed_Inputs.csv &gt; data/Managed_Inputs.csv2
+head -1 data/Managed_Inputs.csv &gt; ./data/Managed_Inputs_Headers.csv
 
-  log &quot;Role assumed&quot;
-}
+mv data/Managed_Inputs.csv2 data/Managed_Inputs.csv
 
-s3_put_metadata() {
-  local stdy_id=&quot;$1&quot; abv_lc=&quot;$2&quot; stdy_lc=&quot;$3&quot; local_file=&quot;$4&quot;
-  local dst_prefix=&quot;s3://${S3_BUCKET}/general/hpds/javabin/${stdy_id}/metadata&quot;
-  local dst_obj=&quot;${dst_prefix}/${stdy_lc}_${abv_lc}_metadata.json&quot;
+aws s3 cp ${metadata_file} data/metadata.json
 
-  log &quot;Clearing existing JSON metadata under ${dst_prefix}/&quot;
-  aws s3 rm &quot;${dst_prefix}/&quot; --recursive --exclude &quot;*&quot; --include &quot;*.json&quot; --only-show-errors
+aws s3 cp s3://avillach-73-bdcatalyst-etl/general/data/PatientPool.txt data/
 
-  log &quot;Uploading metadata -&gt; ${dst_obj}&quot;
-  aws s3 cp &quot;$local_file&quot; &quot;$dst_obj&quot; --only-show-errors
-}
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
 
-# -----------------------------
-# Prereqs + required env
-# -----------------------------
-need aws
-need jq
-need csvcut
-need csvformat
-need tail
-need git
+aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
 
-: &quot;${managed_inputs:?managed_inputs must be set (s3://.../Managed_Inputs.csv or local path)}&quot;
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
-S3_BUCKET=&quot;${S3_BUCKET:-avillach-73-bdcatalyst-etl}&quot;
 
-# Repo settings (override via env if you want)
-REPO_URL=&quot;${REPO_URL:-https://github.com/hms-dbmi/pic-sure-metadata-curation.git}&quot;
-REPO_REF=&quot;${REPO_REF:-main}&quot;   # branch or tag
-REPO_DIR=&quot;${REPO_DIR:-pic-sure-metadata-curation}&quot;
+aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/data/${abv_name^^}_PatientMapping.v2.csv data/  --quiet
+aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/rawData/ beforeConversion/ --recursive --exclude &quot;*&quot; --include &quot;*data_dict.xml*&quot; --include &quot;${stdy_id}*subject.multi*&quot; --include &quot;${stdy_id}*Subject.Multi*&quot; \
+        --include &quot;${stdy_id}*Subject.MULTI*&quot; --include &quot;${stdy_id}*sample.multi*&quot; --include &quot;${stdy_id}*Sample.Multi*&quot; \
+        --include &quot;${stdy_id}*Sample.MULTI*&quot;
 
-log &quot;Bucket     : ${S3_BUCKET}&quot;
-log &quot;Inputs src : ${managed_inputs}&quot;
-log &quot;Repo       : ${REPO_URL} (${REPO_REF})&quot;
-log &quot;Repo dir   : ${REPO_DIR}&quot;
+for  file  in  beforeConversion/*; do
+echo &quot;$file&quot;
+FILE_ENCODING=$(file -i $file)
+iconv -f 8859_1 -t UTF-8//TRANSLIT &quot;$file&quot; -o data/decoded/$(basename $file)
+done
 
-assume_role
+cp data/* data/decoded/
 
-# -----------------------------
-# Pull managed inputs
-# -----------------------------
-log &quot;Downloading Managed_Inputs.csv&quot;
-aws s3 cp &quot;$managed_inputs&quot; ./Managed_Inputs.csv --no-progress --only-show-errors
+java -jar jars/HPDSPatientNumTracker.jar
 
-log &quot;Building inputs.csv&quot;
-csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Study Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot; \
-  Managed_Inputs.csv &gt; inputs.csv
-
-log &quot;inputs.csv preview:&quot;
-head -n 5 inputs.csv &gt;&amp;2 || true
-
-# -----------------------------
-# Ensure repo exists (clone/update)
-# -----------------------------
-if [[ -d &quot;$REPO_DIR/.git&quot; ]]; then
-  log &quot;Repo already present; updating&quot;
-  git -C &quot;$REPO_DIR&quot; fetch --all --prune
-  git -C &quot;$REPO_DIR&quot; checkout &quot;$REPO_REF&quot;
-  git -C &quot;$REPO_DIR&quot; pull --ff-only
-else
-  log &quot;Cloning repo into ${REPO_DIR}&quot;
-  rm -rf &quot;$REPO_DIR&quot;
-  git clone &quot;$REPO_URL&quot; &quot;$REPO_DIR&quot;
-  git -C &quot;$REPO_DIR&quot; checkout &quot;$REPO_REF&quot;
-fi
-
-cd &quot;$REPO_DIR&quot;
-
-: &gt; ../missing_metadata.txt
-
-# -----------------------------
-# Iterate rows
-# -----------------------------
-tail -n +2 ../inputs.csv \
-| csvformat -U 1 \
-| while IFS=&apos;,&apos; read -r abv_name stdy_id stdy_type data_ready data_processed; do
-    abv_name=&quot;${abv_name%\&quot;}&quot;; abv_name=&quot;${abv_name#\&quot;}&quot;
-    stdy_id=&quot;${stdy_id%\&quot;}&quot;;   stdy_id=&quot;${stdy_id#\&quot;}&quot;
-    stdy_type=&quot;${stdy_type%\&quot;}&quot;; stdy_type=&quot;${stdy_type#\&quot;}&quot;
-    data_ready=&quot;${data_ready%\&quot;}&quot;; data_ready=&quot;${data_ready#\&quot;}&quot;
-    data_processed=&quot;${data_processed%\&quot;}&quot;; data_processed=&quot;${data_processed#\&quot;}&quot;
-
-    abv_lc=&quot;$(printf &apos;%s&apos; &quot;$abv_name&quot; | tr &apos;[:upper:]&apos; &apos;[:lower:]&apos;)&quot;
-    stdy_lc=&quot;$(printf &apos;%s&apos; &quot;$stdy_id&quot;  | tr &apos;[:upper:]&apos; &apos;[:lower:]&apos;)&quot;
-
-    if [[ &quot;${data_ready,,}&quot; != &quot;yes&quot; ]] || [[ &quot;${data_processed,,}&quot; != &quot;no&quot; ]] || [[ &quot;${stdy_type,,}&quot; == &quot;compliant&quot; ]]; then
-      log &quot;Skipping ${stdy_id} (${abv_name}) [ready=${data_ready}, processed=${data_processed}, type=${stdy_type}]&quot;
-      continue
-    fi
-
-    log &quot;Processing ${stdy_id} (${abv_name})&quot;
-
-    if [[ &quot;$abv_lc&quot; == &quot;red_coral&quot; ]]; then
-      if [[ ! -d &quot;redcoral/output&quot; ]]; then
-        warn &quot;redcoral/output not found in repo; recording missing&quot;
-        echo &quot;${abv_name} ${stdy_id}&quot; &gt;&gt; ../missing_metadata.txt
-        continue
-      fi
-      dst_prefix=&quot;s3://${S3_BUCKET}/general/hpds/javabin/${stdy_id}/metadata/&quot;
-      log &quot;Clearing existing JSON metadata under ${dst_prefix}&quot;
-      aws s3 rm &quot;${dst_prefix}&quot; --recursive --exclude &quot;*&quot; --include &quot;*.json&quot; --only-show-errors
-      log &quot;Uploading redcoral/output/*.json -&gt; ${dst_prefix}&quot;
-      aws s3 cp &quot;redcoral/output/&quot; &quot;${dst_prefix}&quot; \
-        --recursive --exclude &quot;*&quot; --include &quot;*.json&quot; --only-show-errors
-      continue
-    fi
-
-    mkdir -p &quot;${abv_lc}/output&quot;
-    s3_src=&quot;s3://${S3_BUCKET}/${abv_lc}/decoded_data/${stdy_lc}_${abv_lc}_metadata.json&quot;
-    local_dst=&quot;${abv_lc}/output/${stdy_lc}_${abv_lc}_metadata.json&quot;
-
-    log &quot;Trying S3 decoded_data: ${s3_src}&quot;
-    if aws s3 cp &quot;${s3_src}&quot; &quot;${local_dst}&quot; --only-show-errors 2&gt;/dev/null; then
-      log &quot;Metadata found on S3 for ${stdy_id} (${abv_name})&quot;
-      s3_put_metadata &quot;$stdy_id&quot; &quot;$abv_lc&quot; &quot;$stdy_lc&quot; &quot;$local_dst&quot;
-      continue
-    fi
-
-    if [[ -s &quot;${local_dst}&quot; ]]; then
-      log &quot;Metadata found in repo for ${stdy_id} (${abv_name})&quot;
-      s3_put_metadata &quot;$stdy_id&quot; &quot;$abv_lc&quot; &quot;$stdy_lc&quot; &quot;$local_dst&quot;
-      continue
-    fi
-
-    warn &quot;Metadata missing for ${stdy_id} (${abv_name}); recording and continuing&quot;
-    echo &quot;${abv_name} ${stdy_id}&quot; &gt;&gt; ../missing_metadata.txt
-  done
-
-if [[ -s ../missing_metadata.txt ]]; then
-  error &quot;Some metadata files were missing. See missing_metadata.txt&quot;
-  exit 255
-fi
-
-log &quot;Done&quot;</command>
+aws s3 cp data/${abv_name^^}_PatientMapping.v2.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/data/${abv_name^^}_PatientMapping.v2.csv
+aws s3 cp data/PatientPool.txt s3://avillach-73-bdcatalyst-etl/general/data/PatientPool.txt
+</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>

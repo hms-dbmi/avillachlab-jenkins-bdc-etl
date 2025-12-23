@@ -64,7 +64,7 @@ change = main</description>
     </hudson.tasks.Maven>
     <hudson.tasks.Shell>
       <command>#!/usr/bin/env bash
-set -euo pipefail
+#set -euo pipefail
 
 LOG_TS() { date +&quot;%Y-%m-%dT%H:%M:%S%z&quot;; }
 log()    { echo &quot;[$(LOG_TS)] INFO  $*&quot; &gt;&amp;2; }
@@ -290,7 +290,7 @@ docker volume rm -f &quot;${VOL}&quot; &gt;/dev/null 2&gt;&amp;1 || true</comman
   </builders>
   <publishers>
     <hudson.tasks.ArtifactArchiver>
-      <artifacts>docker/pic-sure-hpds-etl/hpds/data_analyzer_javabin_file_name.txt</artifacts>
+      <artifacts>data_analyzer_javabin_file_name.txt</artifacts>
       <allowEmptyArchive>false</allowEmptyArchive>
       <onlyIfSuccessful>false</onlyIfSuccessful>
       <fingerprint>false</fingerprint>

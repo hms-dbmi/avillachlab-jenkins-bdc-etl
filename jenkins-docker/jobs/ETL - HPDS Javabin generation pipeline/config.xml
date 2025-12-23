@@ -23,7 +23,7 @@
       <triggers>
         <jenkins.triggers.ReverseBuildTrigger>
           <spec></spec>
-          <upstreamProjects>ETL - Ingest Pipeline (With Subject Multi), </upstreamProjects>
+          <upstreamProjects>ETL - Ingest Pipeline (With Subject Multi)</upstreamProjects>
           <threshold>
             <name>SUCCESS</name>
             <ordinal>0</ordinal>

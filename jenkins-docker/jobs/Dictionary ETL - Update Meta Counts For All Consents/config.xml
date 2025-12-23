@@ -71,7 +71,7 @@ unset AWS_SESSION_TOKEN
 
 csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot;,&quot;Study Type&quot;,&quot;Has Multi&quot; Managed_Inputs.csv &gt; inputs.csv
 IFS=&apos;,&apos;
-[ ! -f inputs.csv ]
+#[ ! -f inputs.csv ]
 while read abv id data_ready data_processed study_type has_multi
 do
 	if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]]; then
@@ -108,7 +108,10 @@ do
                   echo &quot;Processing counts for: id: $id  consent: $consent&quot;
               fi
               
-              grep -i $id.$consent consents.csv | sort -u &gt; $id/consents_$i.csv
+              #grep -i $id.$consent consents.csv | sort -u &gt; $id/consents_$i.csv
+              # Add || true so the pipeline returns 0 even if grep finds nothing
+			  grep -i $id.$consent consents.csv | sort -u &gt; $id/consents_$i.csv || true
+              
               participantcount=`wc -l &lt; $id/consents_$i.csv`
               if [[ $? != 0 ]] || [[ $participantcount == 0 ]] || [[ -z $participantcount ]]
               then

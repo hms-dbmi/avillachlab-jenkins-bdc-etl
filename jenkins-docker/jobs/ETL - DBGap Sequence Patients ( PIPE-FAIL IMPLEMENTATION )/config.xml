@@ -1,0 +1,242 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
+      <doNotScan>false</doNotScan>
+    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>managed_inputs</name>
+          <defaultValue>s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.csv</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>metadata_file</name>
+          <defaultValue>s3://avillach-73-bdcatalyst-etl/general/data/metadata.json</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>abv_name</name>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.8.1">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>https://github.com/hms-dbmi/ETL-MissionControl-dbgap-submodule</url>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>*/master</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="empty-list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/usr/bin/env bash
+set -euo pipefail
+
+LOG_TS() { date +&quot;%Y-%m-%dT%H:%M:%S%z&quot;; }
+log()    { echo &quot;[$(LOG_TS)] INFO  $*&quot; &gt;&amp;2; }
+warn()   { echo &quot;[$(LOG_TS)] WARN  $*&quot; &gt;&amp;2; }
+error()  { echo &quot;[$(LOG_TS)] ERROR $*&quot; &gt;&amp;2; }
+
+need() { command -v &quot;$1&quot; &gt;/dev/null 2&gt;&amp;1 || { error &quot;Missing required command: $1&quot;; exit 2; }; }
+
+cleanup() { unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN; }
+trap cleanup EXIT
+
+assume_role() {
+  local role_arn=&quot;${ROLE_ARN:-arn:aws:iam::736265540791:role/dbgap-etl}&quot;
+  local session_name=&quot;${ROLE_SESSION_NAME:-s3-test}&quot;
+  local duration=&quot;${ASSUME_DURATION_SECONDS:-3600}&quot;
+
+  log &quot;Assuming role ${role_arn} (duration=${duration}s)&quot;
+  local assume_json
+  assume_json=&quot;$(mktemp)&quot;
+
+  aws sts assume-role \
+    --duration-seconds &quot;$duration&quot; \
+    --role-arn &quot;$role_arn&quot; \
+    --role-session-name &quot;$session_name&quot; \
+    &gt; &quot;$assume_json&quot;
+
+  export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  AWS_ACCESS_KEY_ID=&quot;$(jq -r &apos;.Credentials.AccessKeyId&apos; &quot;$assume_json&quot;)&quot;
+  AWS_SECRET_ACCESS_KEY=&quot;$(jq -r &apos;.Credentials.SecretAccessKey&apos; &quot;$assume_json&quot;)&quot;
+  AWS_SESSION_TOKEN=&quot;$(jq -r &apos;.Credentials.SessionToken&apos; &quot;$assume_json&quot;)&quot;
+  rm -f &quot;$assume_json&quot;
+
+  log &quot;Role assumed&quot;
+}
+
+s3_put_metadata() {
+  local stdy_id=&quot;$1&quot; abv_lc=&quot;$2&quot; stdy_lc=&quot;$3&quot; local_file=&quot;$4&quot;
+  local dst_prefix=&quot;s3://${S3_BUCKET}/general/hpds/javabin/${stdy_id}/metadata&quot;
+  local dst_obj=&quot;${dst_prefix}/${stdy_lc}_${abv_lc}_metadata.json&quot;
+
+  log &quot;Clearing existing JSON metadata under ${dst_prefix}/&quot;
+  aws s3 rm &quot;${dst_prefix}/&quot; --recursive --exclude &quot;*&quot; --include &quot;*.json&quot; --only-show-errors
+
+  log &quot;Uploading metadata -&gt; ${dst_obj}&quot;
+  aws s3 cp &quot;$local_file&quot; &quot;$dst_obj&quot; --only-show-errors
+}
+
+# -----------------------------
+# Prereqs + required env
+# -----------------------------
+need aws
+need jq
+need csvcut
+need csvformat
+need tail
+need git
+
+: &quot;${managed_inputs:?managed_inputs must be set (s3://.../Managed_Inputs.csv or local path)}&quot;
+
+S3_BUCKET=&quot;${S3_BUCKET:-avillach-73-bdcatalyst-etl}&quot;
+
+# Repo settings (override via env if you want)
+REPO_URL=&quot;${REPO_URL:-https://github.com/hms-dbmi/pic-sure-metadata-curation.git}&quot;
+REPO_REF=&quot;${REPO_REF:-main}&quot;   # branch or tag
+REPO_DIR=&quot;${REPO_DIR:-pic-sure-metadata-curation}&quot;
+
+log &quot;Bucket     : ${S3_BUCKET}&quot;
+log &quot;Inputs src : ${managed_inputs}&quot;
+log &quot;Repo       : ${REPO_URL} (${REPO_REF})&quot;
+log &quot;Repo dir   : ${REPO_DIR}&quot;
+
+assume_role
+
+# -----------------------------
+# Pull managed inputs
+# -----------------------------
+log &quot;Downloading Managed_Inputs.csv&quot;
+aws s3 cp &quot;$managed_inputs&quot; ./Managed_Inputs.csv --no-progress --only-show-errors
+
+log &quot;Building inputs.csv&quot;
+csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Study Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot; \
+  Managed_Inputs.csv &gt; inputs.csv
+
+log &quot;inputs.csv preview:&quot;
+head -n 5 inputs.csv &gt;&amp;2 || true
+
+# -----------------------------
+# Ensure repo exists (clone/update)
+# -----------------------------
+if [[ -d &quot;$REPO_DIR/.git&quot; ]]; then
+  log &quot;Repo already present; updating&quot;
+  git -C &quot;$REPO_DIR&quot; fetch --all --prune
+  git -C &quot;$REPO_DIR&quot; checkout &quot;$REPO_REF&quot;
+  git -C &quot;$REPO_DIR&quot; pull --ff-only
+else
+  log &quot;Cloning repo into ${REPO_DIR}&quot;
+  rm -rf &quot;$REPO_DIR&quot;
+  git clone &quot;$REPO_URL&quot; &quot;$REPO_DIR&quot;
+  git -C &quot;$REPO_DIR&quot; checkout &quot;$REPO_REF&quot;
+fi
+
+cd &quot;$REPO_DIR&quot;
+
+: &gt; ../missing_metadata.txt
+
+# -----------------------------
+# Iterate rows
+# -----------------------------
+tail -n +2 ../inputs.csv \
+| csvformat -U 1 \
+| while IFS=&apos;,&apos; read -r abv_name stdy_id stdy_type data_ready data_processed; do
+    abv_name=&quot;${abv_name%\&quot;}&quot;; abv_name=&quot;${abv_name#\&quot;}&quot;
+    stdy_id=&quot;${stdy_id%\&quot;}&quot;;   stdy_id=&quot;${stdy_id#\&quot;}&quot;
+    stdy_type=&quot;${stdy_type%\&quot;}&quot;; stdy_type=&quot;${stdy_type#\&quot;}&quot;
+    data_ready=&quot;${data_ready%\&quot;}&quot;; data_ready=&quot;${data_ready#\&quot;}&quot;
+    data_processed=&quot;${data_processed%\&quot;}&quot;; data_processed=&quot;${data_processed#\&quot;}&quot;
+
+    abv_lc=&quot;$(printf &apos;%s&apos; &quot;$abv_name&quot; | tr &apos;[:upper:]&apos; &apos;[:lower:]&apos;)&quot;
+    stdy_lc=&quot;$(printf &apos;%s&apos; &quot;$stdy_id&quot;  | tr &apos;[:upper:]&apos; &apos;[:lower:]&apos;)&quot;
+
+    if [[ &quot;${data_ready,,}&quot; != &quot;yes&quot; ]] || [[ &quot;${data_processed,,}&quot; != &quot;no&quot; ]] || [[ &quot;${stdy_type,,}&quot; == &quot;compliant&quot; ]]; then
+      log &quot;Skipping ${stdy_id} (${abv_name}) [ready=${data_ready}, processed=${data_processed}, type=${stdy_type}]&quot;
+      continue
+    fi
+
+    log &quot;Processing ${stdy_id} (${abv_name})&quot;
+
+    if [[ &quot;$abv_lc&quot; == &quot;red_coral&quot; ]]; then
+      if [[ ! -d &quot;redcoral/output&quot; ]]; then
+        warn &quot;redcoral/output not found in repo; recording missing&quot;
+        echo &quot;${abv_name} ${stdy_id}&quot; &gt;&gt; ../missing_metadata.txt
+        continue
+      fi
+      dst_prefix=&quot;s3://${S3_BUCKET}/general/hpds/javabin/${stdy_id}/metadata/&quot;
+      log &quot;Clearing existing JSON metadata under ${dst_prefix}&quot;
+      aws s3 rm &quot;${dst_prefix}&quot; --recursive --exclude &quot;*&quot; --include &quot;*.json&quot; --only-show-errors
+      log &quot;Uploading redcoral/output/*.json -&gt; ${dst_prefix}&quot;
+      aws s3 cp &quot;redcoral/output/&quot; &quot;${dst_prefix}&quot; \
+        --recursive --exclude &quot;*&quot; --include &quot;*.json&quot; --only-show-errors
+      continue
+    fi
+
+    mkdir -p &quot;${abv_lc}/output&quot;
+    s3_src=&quot;s3://${S3_BUCKET}/${abv_lc}/decoded_data/${stdy_lc}_${abv_lc}_metadata.json&quot;
+    local_dst=&quot;${abv_lc}/output/${stdy_lc}_${abv_lc}_metadata.json&quot;
+
+    log &quot;Trying S3 decoded_data: ${s3_src}&quot;
+    if aws s3 cp &quot;${s3_src}&quot; &quot;${local_dst}&quot; --only-show-errors 2&gt;/dev/null; then
+      log &quot;Metadata found on S3 for ${stdy_id} (${abv_name})&quot;
+      s3_put_metadata &quot;$stdy_id&quot; &quot;$abv_lc&quot; &quot;$stdy_lc&quot; &quot;$local_dst&quot;
+      continue
+    fi
+
+    if [[ -s &quot;${local_dst}&quot; ]]; then
+      log &quot;Metadata found in repo for ${stdy_id} (${abv_name})&quot;
+      s3_put_metadata &quot;$stdy_id&quot; &quot;$abv_lc&quot; &quot;$stdy_lc&quot; &quot;$local_dst&quot;
+      continue
+    fi
+
+    warn &quot;Metadata missing for ${stdy_id} (${abv_name}); recording and continuing&quot;
+    echo &quot;${abv_name} ${stdy_id}&quot; &gt;&gt; ../missing_metadata.txt
+  done
+
+if [[ -s ../missing_metadata.txt ]]; then
+  error &quot;Some metadata files were missing. See missing_metadata.txt&quot;
+  exit 255
+fi
+
+log &quot;Done&quot;</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.49">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>

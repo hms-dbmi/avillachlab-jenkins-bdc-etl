@@ -86,7 +86,8 @@ jq -n --argjson studies &quot;$(cat studies.json)&quot; &apos;
 {
   includeDefaultFacets: true,
   clearDatabase: false,
-  studies: $studies
+  studies: $studies,
+  isBDC: true
 }&apos; &gt; payload.json
 
 # --- DEBUG POST (replace your POST section with this while debugging) ---
