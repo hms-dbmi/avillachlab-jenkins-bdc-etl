@@ -65,6 +65,17 @@ change = main</description>
     <hudson.tasks.Shell>
       <command>#!/usr/bin/env bash
 #set -euo pipefail
+# Simple AWS S3 optimizations
+export AWS_MAX_ATTEMPTS=&quot;${AWS_MAX_ATTEMPTS:-10}&quot;
+export AWS_RETRY_MODE=&quot;${AWS_RETRY_MODE:-adaptive}&quot;
+export AWS_S3_MAX_CONCURRENT_REQUESTS=&quot;${AWS_S3_MAX_CONCURRENT_REQUESTS:-64}&quot;
+export AWS_S3_MAX_QUEUE_SIZE=&quot;${AWS_S3_MAX_QUEUE_SIZE:-10000}&quot;
+export AWS_S3_MULTIPART_THRESHOLD=&quot;${AWS_S3_MULTIPART_THRESHOLD:-64MB}&quot;
+export AWS_S3_MULTIPART_CHUNKSIZE=&quot;${AWS_S3_MULTIPART_CHUNKSIZE:-64MB}&quot;
+export AWS_CLI_CONNECT_TIMEOUT=&quot;${AWS_CLI_CONNECT_TIMEOUT:-10}&quot;
+export AWS_CLI_READ_TIMEOUT=&quot;${AWS_CLI_READ_TIMEOUT:-0}&quot;
+
+
 
 LOG_TS() { date +&quot;%Y-%m-%dT%H:%M:%S%z&quot;; }
 log()    { echo &quot;[$(LOG_TS)] INFO  $*&quot; &gt;&amp;2; }

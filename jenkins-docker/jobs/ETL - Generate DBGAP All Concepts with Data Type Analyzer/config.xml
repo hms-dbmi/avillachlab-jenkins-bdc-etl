@@ -55,6 +55,20 @@
       <command>#!/usr/bin/env bash
 set -euo pipefail
 
+# Simple AWS S3 optimizations (keeps aws s3 cp)
+# - Prefer many small concurrent S3 requests (helps on high-latency links)
+# - Use adaptive retry mode for transient throttling
+# - Bump timeouts so long transfers don’t fail mid-stream
+# - (Optional) limit bandwidth if you’re saturating the host/network
+export AWS_MAX_ATTEMPTS=&quot;${AWS_MAX_ATTEMPTS:-10}&quot;
+export AWS_RETRY_MODE=&quot;${AWS_RETRY_MODE:-adaptive}&quot;
+export AWS_S3_MAX_CONCURRENT_REQUESTS=&quot;${AWS_S3_MAX_CONCURRENT_REQUESTS:-64}&quot;
+export AWS_S3_MAX_QUEUE_SIZE=&quot;${AWS_S3_MAX_QUEUE_SIZE:-10000}&quot;
+export AWS_S3_MULTIPART_THRESHOLD=&quot;${AWS_S3_MULTIPART_THRESHOLD:-64MB}&quot;
+export AWS_S3_MULTIPART_CHUNKSIZE=&quot;${AWS_S3_MULTIPART_CHUNKSIZE:-64MB}&quot;
+export AWS_CLI_CONNECT_TIMEOUT=&quot;${AWS_CLI_CONNECT_TIMEOUT:-10}&quot;
+export AWS_CLI_READ_TIMEOUT=&quot;${AWS_CLI_READ_TIMEOUT:-0}&quot;   # 0 = no read timeout
+
 LOG_TS() { date +&quot;%Y-%m-%dT%H:%M:%S%z&quot;; }
 log()    { echo &quot;[$(LOG_TS)] INFO  $*&quot; &gt;&amp;2; }
 warn()   { echo &quot;[$(LOG_TS)] WARN  $*&quot; &gt;&amp;2; }
@@ -102,17 +116,17 @@ already_in_role() {
   [[ -n &quot;$caller_arn&quot; &amp;&amp; &quot;$caller_arn&quot; == *&quot;:assumed-role/${role_name}/&quot;* ]]
 }
 
+reset_assume_role() {
+ unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+}
+
 assume_role() {
   local role_arn=&quot;${ROLE_ARN:-arn:aws:iam::736265540791:role/dbgap-etl}&quot;
   local session_name=&quot;${ROLE_SESSION_NAME:-s3-test}&quot;
   local duration=&quot;${ASSUME_DURATION_SECONDS:-3600}&quot;
-
-  # If we&apos;re already running *as* this role, don&apos;t try to assume it again.
-  if already_in_role &quot;$role_arn&quot;; then
-    log &quot;Already running under role ${role_arn}; skipping AssumeRole&quot;
-    return 0
-  fi
-
+  
+  reset_assume_role
+  
   log &quot;Assuming role ${role_arn} (duration=${duration}s)&quot;
   local assume_json
   assume_json=&quot;$(mktemp)&quot;
@@ -238,6 +252,7 @@ process_study() {
   # Do NOT re-assume role here (avoids self-assume AccessDenied)
 
   # Pull study inputs
+  assume_role
   log &quot;Downloading decoded_data/${stdy_id}* -&gt; data/&quot;
   aws s3 cp &quot;s3://${S3_BUCKET}/${abv_lc}/decoded_data/&quot; &quot;data/&quot; \
     --recursive --exclude &quot;*&quot; --include &quot;${stdy_id}*&quot; \
@@ -306,6 +321,7 @@ EOF
   fi
 
   log &quot;Uploading mapping2_post_analyzer.csv&quot;
+  assume_role
   aws s3 cp &quot;data/mapping2.csv&quot; \
     &quot;s3://${S3_BUCKET}/${abv_lc}/mappings/${stdy_id}/mapping2_post_analyzer.csv&quot; \
     --no-progress --only-show-errors

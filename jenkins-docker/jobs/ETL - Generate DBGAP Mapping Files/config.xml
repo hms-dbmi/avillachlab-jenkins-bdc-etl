@@ -74,9 +74,9 @@ find completed/ -type f -exec rm -rf {} \;
 find logs/ -type f -exec rm -rf {} \;
 rm -rf pic-sure-hpds/
 
-aws s3 cp ${managed_inputs} data/
+aws s3 cp ${managed_inputs} data/ --no-progress
 
-aws s3 cp ${metadata_file} data/metadata.json
+aws s3 cp ${metadata_file} data/metadata.json --no-progress
 
 unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
