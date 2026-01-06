@@ -66,6 +66,12 @@ OUTFILE=&quot;container_ip_address.txt&quot;
 
 fail() { echo &quot;ERROR: $*&quot; &gt;&amp;2; exit 1; }
 
+# -- (Note from George): I did not modify this bash function, but it isn&apos;t currently working as intended.
+# -- It would be better to recreate the container each time. This ensures the desired branch is the one 
+# -- that is actually deployed. 
+# -- I am adding this stop &amp; rm. It can be removed/modified at a later date.
+docker compose down || true
+
 # --- Validate external shared network exists (do NOT recreate it in Jenkins) ---
 docker network inspect &quot;$NETWORK&quot; &gt;/dev/null 2&gt;&amp;1 \
   || fail &quot;Required external Docker network &apos;$NETWORK&apos; does not exist. Create it outside Jenkins.&quot;
