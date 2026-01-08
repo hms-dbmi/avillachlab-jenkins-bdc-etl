@@ -76,6 +76,14 @@ error()  { echo &quot;[$(LOG_TS)] ERROR $*&quot; &gt;&amp;2; }
 
 need() { command -v &quot;$1&quot; &gt;/dev/null 2&gt;&amp;1 || { error &quot;Missing required command: $1&quot;; exit 2; }; }
 
+#### From the Managed Inputs Study Type
+should_process_type() {
+  local t=&quot;${1,,}&quot;
+  [[ &quot;$t&quot; == &quot;parent&quot; || &quot;$t&quot; == &quot;topmed&quot; || &quot;$t&quot; == &quot;substudy&quot; || &quot;$t&quot; == &quot;compliant&quot; ]]
+}
+
+
+
 cleanup() {
   local rc=$?
   local cmd=&quot;${BASH_COMMAND:-}&quot;
@@ -196,11 +204,6 @@ need bash
 : &quot;${metadata_file:?metadata_file must be set (s3://.../metadata.json)}&quot;
 
 S3_BUCKET=&quot;${S3_BUCKET:-avillach-73-bdcatalyst-etl}&quot;
-
-should_process_type() {
-  local t=&quot;${1,,}&quot;
-  [[ &quot;$t&quot; == &quot;parent&quot; || &quot;$t&quot; == &quot;topmed&quot; || &quot;$t&quot; == &quot;substudy&quot; || &quot;$t&quot; == &quot;compliant&quot; ]]
-}
 
 # -----------------------------
 # Init workspace
