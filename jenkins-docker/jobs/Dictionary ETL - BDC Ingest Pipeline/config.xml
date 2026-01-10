@@ -34,7 +34,7 @@
         stage(&apos;Start Dictionary Container&apos;) {
             steps {
                 build job: &apos;Dictionary ETL - Start Docker Container&apos;, parameters: [
-                                        string(name: &apos;git_hash&apos;, value: &apos;ALS-10153&apos;)
+                                        string(name: &apos;git_hash&apos;, value: &apos;main&apos;)
                                     ]
             }
         }
