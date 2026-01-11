@@ -54,7 +54,7 @@ Pre-reqs: ingestion pipeline should be run</description>
   <builders>
     <hudson.tasks.Shell>
       <command>#!/bin/bash
-set -euo pipefail
+#set -euo pipefail
 
 ### assume etl role
 aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
