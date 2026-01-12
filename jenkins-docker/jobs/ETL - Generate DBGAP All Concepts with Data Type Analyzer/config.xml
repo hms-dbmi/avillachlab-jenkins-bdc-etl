@@ -79,7 +79,7 @@ need() { command -v &quot;$1&quot; &gt;/dev/null 2&gt;&amp;1 || { error &quot;Mi
 #### From the Managed Inputs Study Type
 should_process_type() {
   local t=&quot;${1,,}&quot;
-  [[ &quot;$t&quot; == &quot;parent&quot; || &quot;$t&quot; == &quot;topmed&quot; || &quot;$t&quot; == &quot;substudy&quot; || &quot;$t&quot; == &quot;compliant&quot; ]]
+  [[ &quot;$t&quot; == &quot;parent&quot; || &quot;$t&quot; == &quot;topmed&quot; || &quot;$t&quot; == &quot;substudy&quot; || &quot;$t&quot; == &quot;compliant&quot; || &quot;$t&quot; == &quot;imaging&quot; ]]
 }
 
 
