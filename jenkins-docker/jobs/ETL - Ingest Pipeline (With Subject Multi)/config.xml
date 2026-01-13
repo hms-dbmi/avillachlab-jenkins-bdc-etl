@@ -267,8 +267,8 @@ pipeline {
             steps {
                 script {
                     def allConceptsRuns = [:]
-                    def disabledRuns = [:]
-                    disabledRuns[&quot;noncomp-allconcepts&quot;] = {
+                    //def disabledRuns = [:]
+                    allConceptsRuns[&quot;noncomp-allconcepts&quot;] = {
                         build job: &apos;ETL - Generate Non-DBGap All Concepts with Data Type Analyzer&apos;
                     }
                     allConceptsRuns[&quot;comp-allconcepts&quot;] = {
