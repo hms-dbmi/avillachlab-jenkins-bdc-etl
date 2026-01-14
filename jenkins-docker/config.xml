@@ -535,6 +535,7 @@
         <string>Dictionary ETL - Build Ingest Files From ColumnMeta - Loading</string>
         <string>Dictionary ETL - Build Ingest Files From ColumnMeta - Loading - Concepts</string>
         <string>ETL - Generate Non-DBGap All Concepts with Data Type Analyzer - Debug</string>
+        <string>George - Debug - ETL - Generate Non_DBGAP Mapping Files</string>
         <string>WIP - Compliant - Pre - Ingestion</string>
       </jobNames>
       <jobFilters/>

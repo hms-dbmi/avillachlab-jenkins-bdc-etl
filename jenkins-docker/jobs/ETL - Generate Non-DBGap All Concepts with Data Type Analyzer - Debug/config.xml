@@ -4,6 +4,10 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
+      <doNotScan>false</doNotScan>
+    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
     <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
@@ -22,7 +26,6 @@
         </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
-    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
   </properties>
   <scm class="hudson.plugins.git.GitSCM" plugin="git@5.8.1">
     <configVersion>2</configVersion>
@@ -33,7 +36,7 @@
     </userRemoteConfigs>
     <branches>
       <hudson.plugins.git.BranchSpec>
-        <name>*/Test-Updated-Jars</name>
+        <name>*/master</name>
       </hudson.plugins.git.BranchSpec>
     </branches>
     <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
@@ -86,8 +89,8 @@ unset AWS_ACCESS_KEY_ID
 unset AWS_SECRET_ACCESS_KEY
 unset AWS_SESSION_TOKEN
 
-stdy_id=&quot;phs003824&quot;
-abv_name=&quot;Imaging_WHI&quot;
+stdy_id=&quot;phs004023&quot;
+abv_name=&quot;Imaging_COPDGene&quot;
 
 echo &quot;Processing ${stdy_id} ${abv_name}&quot;
 
