@@ -50,9 +50,12 @@ nih-nhlbi-topmed-freeze9-batch3-phs001040-c2</description>
       <command>#!/usr/bin/env bash
 set -euo pipefail
 
+# --- Configuration &amp; Optimizations ---
 mkdir -p downloads
+FLAT_DIR=&quot;downloads_flat&quot;
+rm -rf &quot;$FLAT_DIR&quot;
+mkdir -p &quot;$FLAT_DIR&quot;
 
-# Simple AWS S3 optimizations (keeps aws s3 cp)
 export AWS_MAX_ATTEMPTS=&quot;${AWS_MAX_ATTEMPTS:-10}&quot;
 export AWS_RETRY_MODE=&quot;${AWS_RETRY_MODE:-adaptive}&quot;
 export AWS_S3_MAX_CONCURRENT_REQUESTS=&quot;${AWS_S3_MAX_CONCURRENT_REQUESTS:-64}&quot;
@@ -62,53 +65,64 @@ export AWS_S3_MULTIPART_CHUNKSIZE=&quot;${AWS_S3_MULTIPART_CHUNKSIZE:-64MB}&quot
 export AWS_CLI_CONNECT_TIMEOUT=&quot;${AWS_CLI_CONNECT_TIMEOUT:-10}&quot;
 export AWS_CLI_READ_TIMEOUT=&quot;${AWS_CLI_READ_TIMEOUT:-0}&quot;
 
-FLAT_DIR=&quot;downloads_flat&quot;
-rm -rf &quot;$FLAT_DIR&quot;
-mkdir -p &quot;$FLAT_DIR&quot;
-
+# --- Step 1: Download &amp; Flatten (with on-the-fly decompression) ---
 for bucket_s3_name in ${bucket_s3_names}; do
-  aws sts assume-role \
+  echo &quot;Processing bucket: ${bucket_s3_name}&quot;
+  
+  # Securely assume role and parse with jq
+  CREDS=$(aws sts assume-role \
     --role-arn &quot;arn:aws:iam::${nhlbi_account_number}:role/nih-nhlbi-TopMed-EC2Access-S3&quot; \
-    --role-session-name &quot;get-phenotypic-data&quot; &gt; assume-role-output.txt
+    --role-session-name &quot;get-phenotypic-data&quot; \
+    --output json)
 
-  export AWS_ACCESS_KEY_ID=$(grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &apos;s/[ ,&quot;]//g&apos;)
-  export AWS_SECRET_ACCESS_KEY=$(grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &apos;s/[ ,&quot;]//g&apos;)
-  export AWS_SESSION_TOKEN=$(grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &apos;s/[ ,&quot;]//g&apos;)
+  export AWS_ACCESS_KEY_ID=$(echo &quot;$CREDS&quot; | jq -r &apos;.Credentials.AccessKeyId&apos;)
+  export AWS_SECRET_ACCESS_KEY=$(echo &quot;$CREDS&quot; | jq -r &apos;.Credentials.SecretAccessKey&apos;)
+  export AWS_SESSION_TOKEN=$(echo &quot;$CREDS&quot; | jq -r &apos;.Credentials.SessionToken&apos;)
 
+  # Download files
   aws s3 cp --recursive &quot;s3://${bucket_s3_name}/&quot; downloads/ \
     --exclude &quot;*&quot; --include &quot;*.txt*&quot; --exclude &quot;SOL_Metabochip*&quot; --include &quot;*.xml*&quot; --no-progress
 
-  # FAST &quot;flatten&quot;: create a flat view by hardlinking (fast) or copying (fallback)
-  # Output filenames are path-encoded to avoid dupes (README.txt, sample-file.txt, etc.)
-  set +e +o pipefail
-  find downloads/ -type f \( -iname &quot;*.txt*&quot; -o -iname &quot;*.xml*&quot; \) -print0 |
-  while IFS= read -r -d &apos;&apos; f; do
+  echo &quot;Flattening and decompressing files from ${bucket_s3_name}...&quot;
+  
+  # Find files and process them
+  # This replaces the nested while loop with a more robust version
+  find downloads/ -type f \( -iname &quot;*.txt*&quot; -o -iname &quot;*.xml*&quot; \) -print0 | while IFS= read -r -d &apos;&apos; f; do
     rel=&quot;${f#downloads/}&quot;
-    safe_rel=&quot;${rel//\//__}&quot;
-    out=&quot;${FLAT_DIR}/${safe_rel}&quot;
-    ln -f &quot;$f&quot; &quot;$out&quot; 2&gt;/dev/null || cp -f &quot;$f&quot; &quot;$out&quot;
+    safe_rel=&quot;${rel//\//__}&quot; # Replace slashes with double underscores
+    
+    if [[ &quot;$safe_rel&quot; == *.gz ]]; then
+        # Remove .gz extension for the flat destination
+        out=&quot;${FLAT_DIR}/${safe_rel%.gz}&quot;
+        # Decompress directly to the flat directory
+        gzip -dc &quot;$f&quot; &gt; &quot;$out&quot;
+    else
+        out=&quot;${FLAT_DIR}/${safe_rel}&quot;
+        # Link for efficiency, fallback to copy if linking fails
+        ln -f &quot;$f&quot; &quot;$out&quot; 2&gt;/dev/null || cp -f &quot;$f&quot; &quot;$out&quot;
+    fi
   done
-  set -euo pipefail
 
+  # Clear credentials before next loop iteration
   unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 done
 
-aws sts assume-role --duration-seconds 3600 \
+# --- Step 2: Upload Flattened Data ---
+echo &quot;Assuming ETL role for upload...&quot;
+UPLOAD_CREDS=$(aws sts assume-role --duration-seconds 3600 \
   --role-arn arn:aws:iam::736265540791:role/dbgap-etl \
-  --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+  --role-session-name &quot;s3-upload-step&quot; \
+  --output json)
 
-export AWS_ACCESS_KEY_ID=$(grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &apos;s/[ ,&quot;]//g&apos;)
-export AWS_SECRET_ACCESS_KEY=$(grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &apos;s/[ ,&quot;]//g&apos;)
-export AWS_SESSION_TOKEN=$(grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &apos;s/[ ,&quot;]//g&apos;)
+export AWS_ACCESS_KEY_ID=$(echo &quot;$UPLOAD_CREDS&quot; | jq -r &apos;.Credentials.AccessKeyId&apos;)
+export AWS_SECRET_ACCESS_KEY=$(echo &quot;$UPLOAD_CREDS&quot; | jq -r &apos;.Credentials.SecretAccessKey&apos;)
+export AWS_SESSION_TOKEN=$(echo &quot;$UPLOAD_CREDS&quot; | jq -r &apos;.Credentials.SessionToken&apos;)
 
-cd &quot;$FLAT_DIR&quot;
+echo &quot;Uploading flattened files to S3...&quot;
+aws s3 cp &quot;$FLAT_DIR/&quot; &quot;s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/rawData/&quot; \
+    --recursive --no-progress
 
-# Decompress without failing the build if some files already exist / aren’t gz
-set +e
-gzip -d -- *.txt.gz
-set -e
-
-aws s3 cp ./ &quot;s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/rawData/&quot; --recursive --no-progress</command>
+echo &quot;Pipeline complete.&quot;</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>
