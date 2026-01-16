@@ -534,6 +534,7 @@
         <string>Dictionary ETL - BDC Ingest Pipeline</string>
         <string>Dictionary ETL - Build Ingest Files From ColumnMeta - Loading</string>
         <string>Dictionary ETL - Build Ingest Files From ColumnMeta - Loading - Concepts</string>
+        <string>George - Debug - Dictionary ETL - Create Files For Stigvar Identification</string>
         <string>George - Debug - ETL - Generate DBGAP All Concepts with Data Type Analyzer</string>
         <string>George - Debug - ETL - Generate Non-DBGap All Concepts with Data Type Analyzer</string>
         <string>George - Debug - ETL - Generate Non_DBGAP Mapping Files</string>
