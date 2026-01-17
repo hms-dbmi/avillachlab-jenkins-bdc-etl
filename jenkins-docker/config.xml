@@ -416,18 +416,13 @@
       <properties class="hudson.model.View$PropertyList"/>
       <jobNames>
         <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
-        <string>Curation - Build Subject Multi</string>
-        <string>Curation - Curate Recover Files For Dataset</string>
-        <string>Curation - Export Recover Dataset</string>
-        <string>Curation - Export Recover Metadata</string>
-        <string>Curation - RECOVER Autopsy Import raw data</string>
-        <string>Curation - RECOVER Import raw data</string>
-        <string>Curation - Recover Pediatric Curate Files</string>
-        <string>Curation - RECOVER Pediatric Curation Pipeline</string>
-        <string>Curation - Recover Pediatric Export Dataset</string>
-        <string>Curation - Recover Pediatric Export Metadata</string>
-        <string>Curation - RECOVER Pediatric Import raw data</string>
-        <string>Recover Curation - Update Derived Dictionaries</string>
+        <string>Curation - Curate Recover Adult Files For Dataset</string>
+        <string>Curation - Export Recover Adult, Autopsy Dataset</string>
+        <string>Curation - Export Recover Adult, Autopsy Metadata</string>
+        <string>Curation - RECOVER Adult, Autopsy Import raw data</string>
+        <string>Curation - RECOVER Adult, Autopsy Pipeline</string>
+        <string>Curation - Update RECOVER Adult Derived Dictionaries</string>
+        <string>Pediatric</string>
       </jobNames>
       <jobFilters/>
       <columns>
