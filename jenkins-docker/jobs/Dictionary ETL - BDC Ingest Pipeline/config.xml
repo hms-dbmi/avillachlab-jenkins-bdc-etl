@@ -167,6 +167,14 @@
                 }
             }
         }
+        stage(&apos;Run Configured Facet Loader&apos;) {
+            steps {
+                script {
+                    build job: &apos;Dictionary ETL - Facet Loader&apos;
+                }
+                copyArtifacts(projectName: &apos;Dictionary ETL - Facet Loader&apos;)
+            }
+        }
         stage(&apos;Update General Facets&apos;){
             steps{
                 script {
