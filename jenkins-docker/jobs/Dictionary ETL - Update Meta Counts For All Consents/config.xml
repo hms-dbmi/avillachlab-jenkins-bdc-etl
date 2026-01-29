@@ -108,36 +108,44 @@ do
                   echo &quot;Processing counts for: id: $id  consent: $consent&quot;
               fi
               
-              #grep -i $id.$consent consents.csv | sort -u &gt; $id/consents_$i.csv
-              # Add || true so the pipeline returns 0 even if grep finds nothing
-			  grep -i $id.$consent consents.csv | sort -u &gt; $id/consents_$i.csv || true
+              # Build consent file (ignore grep &quot;no matches&quot; as non-fatal)
+              mkdir -p &quot;$id&quot;
+              grep -i -F -- &quot;$id.$consent&quot; consents.csv | sort -u &gt; &quot;$id/consents_$i.csv&quot; || true
               
-              participantcount=`wc -l &lt; $id/consents_$i.csv`
-              if [[ $? != 0 ]] || [[ $participantcount == 0 ]] || [[ -z $participantcount ]]
-              then
-                  #handling for noncompliant studies without subject multis which do not get added to general consents.csv 
-              	  #(these consents are added to allConcepts separately during global var merge and will only ever have one consent)
-                  echo &quot;No participants found in standard consents.csv. Processing counts for id: $id  as public/noncompliant study&quot;
-                  aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
-                  export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-                  export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-                  export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-                      aws s3 cp ${s3_bucket}/${abv,,}/data/${abv^^}_PatientMapping.v2.csv ./${id}/${abv^^}_PatientMapping.v2.csv || exit 255
-                  unset AWS_ACCESS_KEY_ID
-                  unset AWS_SECRET_ACCESS_KEY
-                  unset AWS_SESSION_TOKEN
-                  participantcount=`wc -l &lt; ${id}/${abv^^}_PatientMapping.v2.csv`
-                  if [[ $? != 0 ]] || [[ $participantcount == 0 ]] || [[ -z $participantcount ]]
-                  then
-                      echo &quot;Unable to get participant count- failing&quot;
-                      exit 255
-                  else
-                      export participantcount
+              # Count participants (0 if file missing/empty)
+              participantcount=$(wc -l &lt; &quot;$id/consents_$i.csv&quot; 2&gt;/dev/null || echo 0)
+              
+              if (( participantcount == 0 )); then
+                if [[ &quot;${study_type,,}&quot; == &quot;public&quot; ]]; then
+                  echo &quot;No participants found in standard consents.csv. Processing counts for id: $id as public/noncompliant study&quot;
+              
+                  aws sts assume-role \
+                    --duration-seconds 3600 \
+                    --role-arn arn:aws:iam::736265540791:role/dbgap-etl \
+                    --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+              
+                  export AWS_ACCESS_KEY_ID=$(grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f2 | sed &apos;s/[ ,&quot;]//g&apos;)
+                  export AWS_SECRET_ACCESS_KEY=$(grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f2 | sed &apos;s/[ ,&quot;]//g&apos;)
+                  export AWS_SESSION_TOKEN=$(grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f2 | sed &apos;s/[ ,&quot;]//g&apos;)
+              
+                  aws s3 cp \
+                    &quot;${s3_bucket}/${abv,,}/data/${abv^^}_PatientMapping.v2.csv&quot; \
+                    &quot;./${id}/${abv^^}_PatientMapping.v2.csv&quot; || exit 255
+              
+                  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+              
+                  participantcount=$(wc -l &lt; &quot;./${id}/${abv^^}_PatientMapping.v2.csv&quot; 2&gt;/dev/null || echo 0)
+                  if (( participantcount == 0 )); then
+                    echo &quot;Unable to get participant count- failing&quot;
+                    exit 255
                   fi
+                fi
               else
-                  export participantcount
-                  echo &quot;Participant count &quot; $participantcount
+                echo &quot;Participant count $participantcount&quot;
               fi
+              
+              export participantcount
+
 
           grep &quot;^\&quot;*\\\\${id}\\\\&quot;  columnMeta.csv &gt; ${id}/vars.csv
           varcount=`wc -l &lt; ${id}/vars.csv`
@@ -149,6 +157,11 @@ do
           export varcount
           echo &quot;Variable count &quot; $varcount
           fi
+          
+          echo &quot;Dataset Ref: &quot; $id
+          echo &quot;Consent: &quot; $consent
+          echo &quot;Participant Count: &quot; $participantcount
+          echo &quot;Variable Count: &quot; $varcount
           
           curl --retry 5 --max-time 10 --retry-connrefused  --retry-delay 0 --show-error --silent --request PUT --data-urlencode &quot;datasetRef=${id}&quot; --data-urlencode &quot;consentCode=${consent}&quot; \
               --data-urlencode &quot;participantCount=${participantcount}&quot; --data-urlencode &quot;variableCount=${varcount}&quot; ${api}/consent/counts || exit 255

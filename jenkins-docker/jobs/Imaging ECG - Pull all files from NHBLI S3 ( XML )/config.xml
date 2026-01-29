@@ -83,7 +83,11 @@ export AWS_SESSION_TOKEN=$(    jq -r .Credentials.SessionToken    &lt;&lt;&lt;&q
 #aws s3 cp &quot;s3://nih-nhlbi-bdc-imaging-fhs-phs003593-v2-r1-c1&quot; ./c1/ --recursive --exclude &quot;*&quot; --include &quot;*.manifest.*&quot; --include &quot;*DD*&quot; --include &quot;*DS*&quot; --include &quot;*sstr*&quot;
 #aws s3 cp &quot;s3://nih-nhlbi-bdc-imaging-fhs-phs003593-v2-r1-c2&quot; ./c2/ --recursive --exclude &quot;*&quot; --include &quot;*.manifest.*&quot; --include &quot;*DD*&quot; --include &quot;*DS*&quot; --include &quot;*sstr*&quot;
 
-aws s3 cp s3://nih-nhlbi-bdc-connects-activ4a-phs002694-v4-r3-c1 ./activ4a_r3 --recursive
+#aws s3 cp s3://nih-nhlbi-bdc-connects-activ4a-phs002694-v4-r3-c1 ./activ4a_r3 --recursive
+
+#aws s3 cp s3://nih-nhlbi-bdc-neurocovid-phs004278-v1-r1-c1 ./neurocovid --recursive
+
+aws s3 cp s3://nih-nhlbi-bdc-rose-ards-phs003929-v1-r1-c1 ./bdc-rose-ards --recursive --exclude &quot;*.fastq.gz&quot;
 
 unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN</command>
       <configuredLocalRules/>
