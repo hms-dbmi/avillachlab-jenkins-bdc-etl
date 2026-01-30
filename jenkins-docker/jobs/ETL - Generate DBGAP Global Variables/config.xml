@@ -186,7 +186,7 @@ log &quot;Downloading metadata.json&quot;
 s3_cp &quot;s3://${S3_BUCKET}/general/data/metadata.json&quot; &quot;data/metadata.json&quot; true
 
 log &quot;Building inputs.csv&quot;
-csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Study Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot;,&quot;Has Multi&quot; \
+csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Version&quot;,&quot;Study Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot;,&quot;Has Multi&quot; \
   &quot;data/Managed_Inputs.csv&quot; &gt; inputs.csv
 
 log &quot;inputs.csv preview:&quot;
@@ -209,7 +209,7 @@ DOWNLOAD_PARALLEL=&quot;${DOWNLOAD_PARALLEL:-6}&quot;
 log &quot;Downloading per-study multi assets with parallelism=${DOWNLOAD_PARALLEL}&quot;
 
 download_study_assets() {
-  local abv_name=&quot;$1&quot; stdy_id=&quot;$2&quot;
+  local abv_name=&quot;$1&quot; stdy_id=&quot;$2&quot; version=&quot;$3&quot;
   local abv_lc stdy_lc abv_uc
   abv_lc=&quot;$(printf &apos;%s&apos; &quot;$abv_name&quot; | tr &apos;[:upper:]&apos; &apos;[:lower:]&apos;)&quot;
   stdy_lc=&quot;$(printf &apos;%s&apos; &quot;$stdy_id&quot;  | tr &apos;[:upper:]&apos; &apos;[:lower:]&apos;)&quot;
@@ -219,14 +219,14 @@ download_study_assets() {
 
   aws s3 cp &quot;s3://${S3_BUCKET}/${abv_lc}/rawData/&quot; &quot;data/&quot; \
     --recursive --exclude &quot;*&quot; --no-progress --only-show-errors \
-    --include &quot;${stdy_id}*subject.multi*&quot; --include &quot;${stdy_id}*Subject.Multi*&quot; --include &quot;${stdy_id}*Subject.MULTI*&quot; \
-    --include &quot;${stdy_id}*sample.multi*&quot;  --include &quot;${stdy_id}*Sample.Multi*&quot;  --include &quot;${stdy_id}*Sample.MULTI*&quot; \
+    --include &quot;${stdy_id}*${version}*subject.multi*&quot; --include &quot;${stdy_id}*${version}*Subject.Multi*&quot; --include &quot;${stdy_id}*${version}*Subject.MULTI*&quot; \
+    --include &quot;${stdy_id}*${version}*sample.multi*&quot;  --include &quot;${stdy_id}*${version}*Sample.Multi*&quot;  --include &quot;${stdy_id}*${version}*Sample.MULTI*&quot; \
     || { error &quot;rawData multi copy failed for ${abv_name} ${stdy_id}&quot;; return 1; }
 
   aws s3 cp &quot;s3://${S3_BUCKET}/${abv_lc}/decoded_data/&quot; &quot;data/decoded/&quot; \
     --recursive --exclude &quot;*&quot; --no-progress --only-show-errors \
-    --include &quot;${stdy_id}*subject.multi*&quot; --include &quot;${stdy_id}*Subject.Multi*&quot; --include &quot;${stdy_id}*Subject.MULTI*&quot; \
-    --include &quot;${stdy_id}*sample.multi*&quot;  --include &quot;${stdy_id}*Sample.Multi*&quot;  --include &quot;${stdy_id}*Sample.MULTI*&quot; \
+    --include &quot;${stdy_id}*${version}*subject.multi*&quot; --include &quot;${stdy_id}*${version}*Subject.Multi*&quot; --include &quot;${stdy_id}*${version}*Subject.MULTI*&quot; \
+    --include &quot;${stdy_id}*${version}*sample.multi*&quot;  --include &quot;${stdy_id}*${version}*Sample.Multi*&quot;  --include &quot;${stdy_id}*${version}*Sample.MULTI*&quot; \
     || { error &quot;decoded_data multi copy failed for ${abv_name} ${stdy_id}&quot;; return 1; }
 
   s3_cp &quot;s3://${S3_BUCKET}/${abv_lc}/data/${abv_uc}_PatientMapping.v2.csv&quot; &quot;data/${abv_uc}_PatientMapping.v2.csv&quot; true
@@ -256,10 +256,11 @@ throttle() {
 declare -a DL_PIDS=()
 declare -i SCHEDULED=0
 
-while IFS=&apos;,&apos; read -r abv_name stdy_id stdy_type data_ready data_processed has_multi; do
+while IFS=&apos;,&apos; read -r abv_name stdy_id version stdy_type data_ready data_processed has_multi; do
   # Trim possible quotes
   abv_name=&quot;${abv_name%\&quot;}&quot;; abv_name=&quot;${abv_name#\&quot;}&quot;
   stdy_id=&quot;${stdy_id%\&quot;}&quot;;   stdy_id=&quot;${stdy_id#\&quot;}&quot;
+  version=&quot;${version%\&quot;}&quot;;   version=&quot;${version#\&quot;}&quot;
   data_ready=&quot;${data_ready%\&quot;}&quot;; data_ready=&quot;${data_ready#\&quot;}&quot;
   has_multi=&quot;${has_multi%\&quot;}&quot;; has_multi=&quot;${has_multi#\&quot;}&quot;
 
@@ -270,7 +271,7 @@ while IFS=&apos;,&apos; read -r abv_name stdy_id stdy_type data_ready data_proce
       SCHEDULED+=1
     else
       throttle
-      download_study_assets &quot;$abv_name&quot; &quot;$stdy_id&quot; &amp;
+      download_study_assets &quot;$abv_name&quot; &quot;$stdy_id&quot; &quot;$version&quot; &amp;
       DL_PIDS+=(&quot;$!&quot;)
       SCHEDULED+=1
       log &quot;scheduled ${abv_name} ${stdy_id} (pid=$!)&quot;

@@ -81,7 +81,7 @@ for bucket_s3_name in ${bucket_s3_names}; do
 
   # Download files
   aws s3 cp --recursive &quot;s3://${bucket_s3_name}/&quot; downloads/ \
-    --exclude &quot;*&quot; --include &quot;*.txt*&quot; --exclude &quot;SOL_Metabochip*&quot; --include &quot;*.xml*&quot; --no-progress
+    --exclude &quot;*&quot; --include &quot;*.txt*&quot; --exclude &quot;*.gtc.*&quot; --exclude &quot;*phg00*&quot; --exclude &quot;*genotype-BAF*&quot; --exclude &quot;SOL_Metabochip*&quot; --include &quot;*.xml*&quot; --no-progress
 
   echo &quot;Flattening and decompressing files from ${bucket_s3_name}...&quot;
   
