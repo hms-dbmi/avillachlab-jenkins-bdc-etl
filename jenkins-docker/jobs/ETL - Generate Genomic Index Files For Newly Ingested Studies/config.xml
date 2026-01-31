@@ -96,11 +96,12 @@ assume_role() {
   local session_name=&quot;${2:-${ROLE_SESSION_NAME:-s3-test}}&quot;
   local duration=&quot;${3:-${ASSUME_DURATION_SECONDS:-1800}}&quot;
 
-  if already_in_role &quot;$role_arn&quot;; then
-    log &quot;Already running under role ${role_arn}; skipping AssumeRole&quot;
-    return 0
-  fi
-
+  #if already_in_role &quot;$role_arn&quot;; then
+  #  log &quot;Already running under role ${role_arn}; skipping AssumeRole&quot;
+  #  return 0
+  #fi
+  
+  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
   log &quot;Assuming role ${role_arn} (session=${session_name}, duration=${duration}s)&quot;
   local assume_json
   assume_json=&quot;$(mktemp)&quot;
@@ -233,6 +234,7 @@ done &lt; &lt;(tail -n +2 genomic_inputs.csv | csvformat -U 1)
 log &quot;Running IndexFileGenerator.jar&quot;
 java -jar jars/IndexFileGenerator.jar &gt; logs/index_file_generator.log 2&gt;&amp;1
 
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 log &quot;Uploading completed/ -&gt; ${INDEX_OUT_S3}&quot;
 aws s3 cp &quot;completed/&quot; &quot;${INDEX_OUT_S3}&quot; \
   --recursive --exclude &quot;*.csv&quot; \

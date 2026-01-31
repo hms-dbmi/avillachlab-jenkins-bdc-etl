@@ -33,7 +33,7 @@
     </userRemoteConfigs>
     <branches>
       <hudson.plugins.git.BranchSpec>
-        <name>*/master</name>
+        <name>*/ALS-10762</name>
       </hudson.plugins.git.BranchSpec>
     </branches>
     <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
@@ -96,11 +96,12 @@ assume_role() {
   local session_name=&quot;${2:-${ROLE_SESSION_NAME:-s3-test}}&quot;
   local duration=&quot;${3:-${ASSUME_DURATION_SECONDS:-1800}}&quot;
 
-  if already_in_role &quot;$role_arn&quot;; then
-    log &quot;Already running under role ${role_arn}; skipping AssumeRole&quot;
-    return 0
-  fi
-
+  #if already_in_role &quot;$role_arn&quot;; then
+  #  log &quot;Already running under role ${role_arn}; skipping AssumeRole&quot;
+  #  return 0
+  #fi
+  
+  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
   log &quot;Assuming role ${role_arn} (session=${session_name}, duration=${duration}s)&quot;
   local assume_json
   assume_json=&quot;$(mktemp)&quot;
@@ -121,7 +122,7 @@ assume_role() {
 s3_cp() {
   local src=&quot;$1&quot; dst=&quot;$2&quot; required=&quot;${3:-true}&quot;
   shift 3 || true
-  if aws s3 cp &quot;$src&quot; &quot;$dst&quot; --no-progress --only-show-errors &quot;$@&quot;; then
+  if aws s3 cp &quot;$src&quot; &quot;$dst&quot; &quot;$@&quot;; then
     return 0
   fi
   if [[ &quot;$required&quot; == &quot;true&quot; ]]; then
@@ -172,11 +173,27 @@ s3_cp &quot;$GLOBAL_ALLCONCEPTS_S3&quot; &quot;data/GLOBAL_allConcepts.csv&quot;
 # Build genomic_inputs.csv
 # -----------------------------
 log &quot;Building genomic_inputs.csv&quot;
-csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Version&quot;,&quot;Data Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot; \
-  data/Managed_Inputs.csv &gt; genomic_inputs.csv
+
+log &quot;Restricting Managed_Inputs.csv to HCHSSOL only&quot;
+
+awk -F&apos;,&apos; &apos;NR==1 || $1==&quot;FHS&quot;&apos; \
+  data/Managed_Inputs.csv \
+  &gt; data/Managed_Inputs.hchssol.csv
+
+mv data/Managed_Inputs.hchssol.csv data/Managed_Inputs.csv
+
+log &quot;Managed_Inputs.csv contents (HCHSSOL only):&quot;
+cat data/Managed_Inputs.csv &gt;&amp;2 || true
+
+csvcut -c \
+  &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Version&quot;,&quot;Data Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot; \
+  data/Managed_Inputs.csv \
+| awk -F&apos;,&apos; &apos;NR==1 || $1==&quot;FHS&quot;&apos; \
+&gt; genomic_inputs.csv
 
 log &quot;genomic_inputs.csv preview:&quot;
-head -n 10 genomic_inputs.csv &gt;&amp;2 || true
+cat genomic_inputs.csv &gt;&amp;2 || true
+
 
 # -----------------------------
 # Per-study downloads (sequential)
@@ -192,7 +209,7 @@ download_study_files() {
 
   assume_role &quot;${ROLE_ARN:-arn:aws:iam::736265540791:role/dbgap-etl}&quot; &quot;s3-test&quot; &quot;900&quot;
   aws s3 cp &quot;s3://${SRC_BUCKET}/${abv_lc}/rawData/&quot; &quot;data/&quot; \
-    --recursive --exclude &quot;*&quot; --no-progress --only-show-errors \
+    --recursive --exclude &quot;*&quot; \
     --include &quot;*${stdy_id}*${version}*Sample.MULTI*&quot; \
     --include &quot;*${stdy_id}*${version}*sample.MULTI*&quot; \
     --include &quot;*${stdy_id}*${version}*Sample.Multi*&quot;  \
@@ -200,7 +217,7 @@ download_study_files() {
     || { error &quot;Failed to copy Sample MULTI files for ${abv_name} ${stdy_id}&quot;; return 1; }
 
   aws s3 cp &quot;s3://${SRC_BUCKET}/${abv_lc}/rawData/&quot; &quot;data/&quot; \
-    --recursive --exclude &quot;*&quot; --no-progress --only-show-errors \
+    --recursive --exclude &quot;*&quot; \
     --include &quot;*${stdy_id}*${version}*Subject.MULTI*&quot; \
     --include &quot;*${stdy_id}*${version}*subject.MULTI*&quot; \
     --include &quot;*${stdy_id}*${version}*Subject.Multi*&quot;  \
@@ -233,10 +250,11 @@ done &lt; &lt;(tail -n +2 genomic_inputs.csv | csvformat -U 1)
 log &quot;Running IndexFileGenerator.jar&quot;
 java -jar jars/IndexFileGenerator.jar &gt; logs/index_file_generator.log 2&gt;&amp;1
 
-log &quot;Uploading completed/ -&gt; ${INDEX_OUT_S3}&quot;
-aws s3 cp &quot;completed/&quot; &quot;${INDEX_OUT_S3}&quot; \
-  --recursive --exclude &quot;*.csv&quot; \
-  --no-progress --only-show-errors
+#unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+#log &quot;Uploading completed/ -&gt; ${INDEX_OUT_S3}&quot;
+#aws s3 cp &quot;completed/&quot; &quot;${INDEX_OUT_S3}&quot; \
+#  --recursive --exclude &quot;*.csv&quot; \
+#  --no-progress --only-show-errors
 
 log &quot;Done&quot;</command>
       <configuredLocalRules/>

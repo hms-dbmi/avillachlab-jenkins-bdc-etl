@@ -242,23 +242,14 @@
       <jobNames>
         <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
         <string>_standalone_Curate Data Dictionaries_</string>
-        <string>Curation - Compliant Data Dictionary to Metadata - bk</string>
         <string>Curation - Create Sample and Subject Files</string>
         <string>Delete Subject and Sample Files</string>
         <string>Dictionary ETL - Delete Dataset</string>
-        <string>Dictionary ETL - Stigvar Loader ( BACKUP )</string>
         <string>ETL - Archive Previous Study Version</string>
-        <string>ETL - Clear Metadata Directories ( BACKUP )</string>
-        <string>ETL - Generate Metadata ( BACKUP )</string>
         <string>ETL - HPDS Javabin generation pipeline</string>
-        <string>ETL - Import Metadata From git ( BACKUP )</string>
         <string>ETL - Ingest Pipeline (With Subject Multi)</string>
-        <string>ETL - Ingest Pipeline (With Subject Multi) - Non-parallel</string>
         <string>ETL - Update Facet Configuration</string>
         <string>ETL - Update Managed Inputs</string>
-        <string>Investigate - nih-nhlbi-bdc-mds-pilot-quar</string>
-        <string>postgres_version</string>
-        <string>TEST - sequential loader</string>
         <string>Update Git With Latest Jobs and Config - pipeline</string>
       </jobNames>
       <jobFilters/>

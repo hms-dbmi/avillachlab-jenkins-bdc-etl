@@ -76,7 +76,7 @@
       copyArtifacts(projectName: &apos;ETL - Generate Phenotype Javabins Data Analyzer&apos;)
 
       archiveArtifacts artifacts: &apos;db_dump_name.txt&apos;, followSymlinks: false
-      archiveArtifacts artifacts: &apos;docker/pic-sure-hpds-etl/hpds/data_analyzer_javabin_file_name.txt&apos;, followSymlinks: false
+      archiveArtifacts artifacts: &apos;data_analyzer_javabin_file_name.txt&apos;, followSymlinks: false
     }
   }
 }</script>
