@@ -52,111 +52,58 @@
   <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Shell>
-      <command>#!/usr/bin/env bash
-set -euo pipefail
+      <command>#!/bin/bash
 
-# ----- clean dirs (your original had logic + directory-name mixups) -----
-mkdir -p beforeRemoval data completed processing
-find beforeRemoval -type f -delete || true
-find data         -type f -delete || true
-find completed    -type f -delete || true
-find processing   -type f -delete || true
+mkdir beforeRemoval || find beforeRemoval -type f -exec rm -rf {} \;
+mkdir data || find data/ -type f -exec rm -rf {} \;
+mkdir completed || find processing/ -type f -exec rm -rf {} \;
+mkdir processing || find completed -type f -exec rm -rf {} \;
 
-# ----- assume role (use jq instead of grep/cut/sed) -----
-assume_role() {
-  local role_arn=&quot;$1&quot;
-  local session_name=&quot;$2&quot;
-  local duration=&quot;${3:-3600}&quot;
 
-  aws sts assume-role \
-    --duration-seconds &quot;$duration&quot; \
-    --role-arn &quot;$role_arn&quot; \
-    --role-session-name &quot;$session_name&quot; \
-    &gt; assume-role-output.json
+aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+        
+        export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+        export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+        export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 
-  export AWS_ACCESS_KEY_ID
-  export AWS_SECRET_ACCESS_KEY
-  export AWS_SESSION_TOKEN
+aws s3 cp ${managed_inputs} .
 
-  AWS_ACCESS_KEY_ID=&quot;$(jq -r &apos;.Credentials.AccessKeyId&apos; assume-role-output.json)&quot;
-  AWS_SECRET_ACCESS_KEY=&quot;$(jq -r &apos;.Credentials.SecretAccessKey&apos; assume-role-output.json)&quot;
-  AWS_SESSION_TOKEN=&quot;$(jq -r &apos;.Credentials.SessionToken&apos; assume-role-output.json)&quot;
-}
+aws s3 cp --quiet s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json .
 
-unset_role() {
-  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
-}
+csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Study Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot; Managed_Inputs.csv &gt; inputs.csv
 
-assume_role &quot;arn:aws:iam::736265540791:role/dbgap-etl&quot; &quot;s3-test&quot; 3600
 
-# ----- pull inputs + metadata -----
-aws s3 cp &quot;$managed_inputs&quot; .
-aws s3 cp --quiet &quot;s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json&quot; .
-
-# Produce a TSV so bash can read reliably (avoids CSV quoting/comma problems)
-csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Study Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot; Managed_Inputs.csv \
-  | csvformat -T \
-  &gt; inputs.tsv
-
-if [[ ! -f inputs.tsv ]]; then
-  echo &quot;ERROR: inputs.tsv not created&quot;
-  exit 2
-fi
-
-# ----- download + split per ready study (parallel) -----
-# Skip header row from csvcut output:
-tail -n +2 inputs.tsv | while IFS=$&apos;\t&apos; read -r abv_name stdy_id stdy_type data_ready data_processed; do
-  # skip blank lines
-  [[ -z &quot;${abv_name:-}&quot; || -z &quot;${stdy_id:-}&quot; ]] &amp;&amp; continue
-
+IFS=&apos;,&apos;
+[ ! -f inputs.csv ]
+while read abv_name stdy_id stdy_type data_ready data_processed
+do
   if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]]; then
-    (
-      src=&quot;s3://avillach-73-bdcatalyst-etl/${abv_name,,}/completed/${stdy_id}/${stdy_id,,}_allConcepts_new_search_with_data_analyzer.csv&quot;
-      dst=&quot;beforeRemoval/${stdy_id,,}_allConcepts_new_search_with_data_analyzer.csv&quot;
-      prefix=&quot;beforeRemoval/${stdy_id,,}_allConcepts_new_search_with_data_analyzer.part_&quot;
+   aws s3 cp --no-progress s3://avillach-73-bdcatalyst-etl/${abv_name,,}/completed/${stdy_id}/${stdy_id,,}_allConcepts_new_search_with_data_analyzer.csv beforeRemoval/${stdy_id,,}_allConcepts_new_search_with_data_analyzer.csv --quiet 
+        if [[ -z beforeRemoval/${stdy_id,,}_allConcepts_new_search_with_data_analyzer.csv ]]; then
+        	echo &quot;No data found for &apos;ready&apos; study ${abv_name} ${stdy_id}&quot;
+            exit 255
+        fi
+   		split -d --line-bytes=250MB beforeRemoval/${stdy_id,,}_allConcepts_new_search_with_data_analyzer.csv beforeRemoval/${stdy_id,,}_allConcepts_new_search_with_data_analyzer.csv &amp;&amp; \
+        rm -f beforeRemoval/${stdy_id,,}_allConcepts_new_search_with_data_analyzer.csv &amp;&amp; \
+   		echo &quot;Downloaded and split ${stdy_id}&quot; &amp;       
 
-      # download
-      if ! aws s3 cp --no-progress --quiet &quot;$src&quot; &quot;$dst&quot;; then
-        echo &quot;No data found for &apos;ready&apos; study ${abv_name} ${stdy_id} (download failed)&quot;
-        exit 255
-      fi
+   else 
+      echo &quot;$abv_name marked not ready for processing in managed inputs&quot;
+   fi
+done &lt; inputs.csv
 
-      # file must exist and be non-empty
-      if [[ ! -s &quot;$dst&quot; ]]; then
-        echo &quot;No data found for &apos;ready&apos; study ${abv_name} ${stdy_id} (empty file)&quot;
-        rm -f &quot;$dst&quot;
-        exit 255
-      fi
+aws s3 cp --no-progress s3://avillach-73-bdcatalyst-etl/hrmn/completed/HRMN_allConcepts.csv beforeRemoval/HRMN_allConcepts.csv &amp;
 
-      # split into ~250MB chunks WITHOUT breaking lines
-      # output files: ...part_00.csv, ...part_01.csv, ...
-      split -d -C 250M --additional-suffix=.csv &quot;$dst&quot; &quot;$prefix&quot;
-
-      rm -f &quot;$dst&quot;
-      echo &quot;Downloaded and split ${stdy_id}&quot;
-    ) &amp;
-  else
-    echo &quot;${abv_name} marked not ready for processing in managed inputs&quot;
-  fi
-done
-
-# Extra downloads you had (also parallel)
-aws s3 cp --no-progress --quiet \
-  &quot;s3://avillach-73-bdcatalyst-etl/hrmn/completed/HRMN_allConcepts.csv&quot; \
-  &quot;beforeRemoval/HRMN_allConcepts.csv&quot; &amp;
-
-aws s3 cp --no-progress --quiet \
-  &quot;s3://avillach-73-bdcatalyst-etl/general/completed/GLOBAL_allConcepts_merged.csv&quot; \
-  &quot;beforeRemoval/GLOBAL_allConcepts.csv&quot; &amp;
+aws s3 cp --no-progress s3://avillach-73-bdcatalyst-etl/general/completed/GLOBAL_allConcepts_merged.csv beforeRemoval/GLOBAL_allConcepts.csv &amp;
 
 wait
 
-# ----- your parallelism sizing + java steps (kept as-is) -----
 CORES=&quot;$(nproc)&quot;          # 16 on r5.4xlarge
 HEAP_GB=64
 
-CPU_CAP=12
-MEM_CAP=$((HEAP_GB / 6))
+# Safe caps for this ETL on r5.4xlarge:
+CPU_CAP=12                # don&apos;t default to 16
+MEM_CAP=$((HEAP_GB / 6))  # ~10 (heuristic: ~6GB heap per worker)
 
 PARALLEL=&quot;$CORES&quot;
 [ &quot;$PARALLEL&quot; -gt &quot;$CPU_CAP&quot; ] &amp;&amp; PARALLEL=&quot;$CPU_CAP&quot;
@@ -176,16 +123,26 @@ java -Xms32g -Xmx${HEAP_GB}g \
 
 java -Xmx64g -jar jars/DbGapDataMerge.jar || exit 255
 
-# ----- re-assume for upload (you can keep this pattern, but jq makes it reliable) -----
-unset_role
-assume_role &quot;arn:aws:iam::736265540791:role/dbgap-etl&quot; &quot;s3-test&quot; 3600
 
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+
+aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
 echo &quot;copying to s3&quot;
-aws s3 cp --no-progress \
-  &quot;completed/allConcepts.csv&quot; \
-  &quot;s3://avillach-73-bdcatalyst-etl/general/completed/allConcepts_data_analyzer.csv&quot;
+aws s3 cp --no-progress completed/allConcepts.csv s3://avillach-73-bdcatalyst-etl/general/completed/allConcepts_data_analyzer.csv
 
-unset_role</command>
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+
+
+
+</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>
