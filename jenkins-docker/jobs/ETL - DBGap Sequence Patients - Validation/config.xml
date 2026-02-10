@@ -1,0 +1,177 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
+      <doNotScan>false</doNotScan>
+    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>managed_inputs</name>
+          <defaultValue>s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.csv</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.8.1">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>https://github.com/hms-dbmi/ETL-MissionControl-dbgap-submodule</url>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>*/validate-patient-mapping</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="empty-list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>jdk-24</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+set -euo pipefail
+
+ts() { date -u +%FT%TZ; }
+log() { echo &quot;[$(ts)] $*&quot; &gt;&amp;2; }
+
+# Config
+PARALLEL=&quot;${PARALLEL:-8}&quot;
+BUCKET=&quot;avillach-73-bdcatalyst-etl&quot;
+EXCLUDE_STUDY_ID=&quot;&quot;
+
+mkdir -p logs data completed hierarchies processing
+
+# Clean working dirs
+rm -f data/* processing/* completed/* logs/* 2&gt;/dev/null || true
+rm -rf pic-sure-hpds/ || true
+
+# Require managed_inputs
+: &quot;${managed_inputs:?managed_inputs env var is required (e.g. s3://.../Managed_Inputs.csv)}&quot;
+
+# ---- assume role once (covers all aws calls below) ----
+log &quot;Assuming role arn:aws:iam::736265540791:role/dbgap-etl ...&quot;
+read -r AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN &lt; &lt;(
+  aws sts assume-role \
+    --duration-seconds 3600 \
+    --role-arn arn:aws:iam::736265540791:role/dbgap-etl \
+    --role-session-name &quot;s3-test&quot; \
+    --query &apos;Credentials.[AccessKeyId,SecretAccessKey,SessionToken]&apos; \
+    --output text
+)
+export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
+aws sts get-caller-identity --output text &gt;/dev/null
+log &quot;Role assumed successfully.&quot;
+
+# Download Managed_Inputs
+log &quot;Downloading Managed_Inputs from: ${managed_inputs}&quot;
+aws s3 cp &quot;${managed_inputs}&quot; data/ --no-progress --only-show-errors
+log &quot;Downloaded Managed_Inputs to data/&quot;
+
+# Build inputs.csv (keeps header)
+log &quot;Building inputs.csv&quot;
+csvcut -c \
+  &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Study Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot;,&quot;Has Multi&quot; \
+  data/Managed_Inputs.csv &gt; inputs.csv
+
+if [ ! -s inputs.csv ]; then
+  log &quot;ERROR: inputs.csv missing or empty&quot;
+  exit 1
+fi
+log &quot;inputs.csv ready.&quot;
+
+# Build a null-delimited list of ready Study Abbreviated Name values (excluding Study Identifier == phs003463)
+log &quot;Filtering ready studies (excluding Study Identifier == ${EXCLUDE_STUDY_ID})&quot;
+python3 - &lt;&lt;PY &gt; /tmp/ready_studies.nul
+import csv, sys
+EXCLUDE_STUDY_ID = &quot;${EXCLUDE_STUDY_ID}&quot;
+
+count = 0
+with open(&quot;inputs.csv&quot;, newline=&quot;&quot;) as f:
+    r = csv.DictReader(f)
+    for row in r:
+        ready = (row.get(&quot;Data is ready to process&quot;) or &quot;&quot;).strip().lower()
+        study_id = (row.get(&quot;Study Identifier&quot;) or &quot;&quot;).strip()
+        if ready != &quot;yes&quot;:
+            continue
+        if study_id == EXCLUDE_STUDY_ID:
+            continue
+        name = (row.get(&quot;Study Abbreviated Name&quot;) or &quot;&quot;).strip()
+        if name:
+            sys.stdout.write(name + &quot;\0&quot;)
+            count += 1
+
+sys.stderr.write(f&quot;READY_STUDIES_COUNT={count}\n&quot;)
+PY
+log &quot;Ready studies list built.&quot;
+
+# Parallel downloads of PatientMapping files
+log &quot;Starting parallel downloads (PARALLEL=${PARALLEL}) ...&quot;
+xargs -0 -P &quot;$PARALLEL&quot; -I{} bash -c &apos;
+  set -euo pipefail
+  ts() { date -u +%FT%TZ; }
+  slog() { echo &quot;[$(ts)] $*&quot; &gt;&amp;2; }
+
+  abv=&quot;$1&quot;
+  lower=&quot;${abv,,}&quot;
+  upper=&quot;${abv^^}&quot;
+
+  src=&quot;s3://&apos;&quot;$BUCKET&quot;&apos;/${lower}/data/${upper}_PatientMapping.v2.csv&quot;
+  dest=&quot;data/${upper}_PatientMapping.v2.csv&quot;
+
+  slog &quot;START  ${upper}  $src&quot;
+  for attempt in 1 2 3; do
+    if aws s3 cp &quot;$src&quot; &quot;$dest&quot; --no-progress --only-show-errors; then
+      bytes=&quot;$(wc -c &lt; &quot;$dest&quot; 2&gt;/dev/null || echo &quot;?&quot;)&quot;
+      slog &quot;DONE   ${upper}  -&gt; $dest (${bytes} bytes)&quot;
+      exit 0
+    fi
+    slog &quot;RETRY  ${upper}  attempt=${attempt} failed; sleeping $((attempt*2))s&quot;
+    sleep $((attempt * 2))
+  done
+
+  slog &quot;FAIL   ${upper}  after retries&quot;
+  exit 1
+&apos; _ {} &lt; /tmp/ready_studies.nul
+
+log &quot;All PatientMapping downloads completed.&quot;
+
+# Drop creds
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+log &quot;AWS credentials unset.&quot;
+
+log &quot;Running HPDSPatientNumTracker.jar --revengineer&quot;
+java -jar jars/entity-generator-1.0.0-SNAPSHOT-HPDSPatientNumTracker.jar --auditcollisions
+log &quot;Done.&quot;</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.49">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>
