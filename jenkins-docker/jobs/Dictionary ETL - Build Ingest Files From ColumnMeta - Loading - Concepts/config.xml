@@ -33,7 +33,7 @@
   <builders>
     <hudson.tasks.Shell>
       <command>#!/bin/bash
-set -euo pipefail
+#set -euo pipefail
 
 # --- Config ---
 dictionary_api=&quot;${api}&quot;
