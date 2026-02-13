@@ -93,15 +93,16 @@ pipeline {
 
                 script {
                     def inputs = readCSV file: &apos;Managed_Inputs.csv&apos;, format: CSVFormat.DEFAULT.withHeader()
-                    def importRuns = [:]
+                    def metaRuns = [:]
                     def inputCount = 0
                     inputs.each() {
-                        if (
+                       if (
                                 it[&apos;Data is ready to process&apos;] == &apos;Yes&apos; &amp; it[&quot;Data Processed&quot;] == &apos;No&apos; &amp; it[&quot;Has Multi&quot;] == &apos;Yes&apos;
-                                        &amp; (it[&apos;Study Type&apos;].equalsIgnoreCase(&apos;topmed&apos;) || it[&apos;Study Type&apos;].equalsIgnoreCase(&apos;parent&apos;) || it[&apos;Study Type&apos;].equalsIgnoreCase(&apos;substudy&apos;)) || it[&apos;Study Type&apos;].equalsIgnoreCase(&apos;compliant&apos;)
+                                        &amp; (it[&apos;Study Type&apos;].equalsIgnoreCase(&apos;topmed&apos;) || it[&apos;Study Type&apos;].equalsIgnoreCase(&apos;parent&apos;) || it[&apos;Study Type&apos;].equalsIgnoreCase(&apos;substudy&apos;) 
+                                        || it[&apos;Study Type&apos;].equalsIgnoreCase(&apos;compliant&apos;))
                         ) {
                             def stdy_id = it[&quot;Study Identifier&quot;]
-                            importRuns[&quot;importRuns${stdy_id}&quot;] = {
+                            metaRuns[&quot;metaRuns${stdy_id}&quot;] = {
                                 build job: &apos;Curation - Compliant Data Dictionary to Metadata&apos;,
                                         parameters: [
                                                 string(name: &apos;study_abv&apos;, value: it[&apos;Study Abbreviated Name&apos;]),
@@ -110,7 +111,7 @@ pipeline {
                             }
                         }
                     }
-                    parallel importRuns
+                    parallel metaRuns
                 }
             }
         }
