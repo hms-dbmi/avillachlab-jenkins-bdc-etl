@@ -36,7 +36,7 @@
     </userRemoteConfigs>
     <branches>
       <hudson.plugins.git.BranchSpec>
-        <name>*/master</name>
+        <name>*/fix-generic-mapping</name>
       </hudson.plugins.git.BranchSpec>
     </branches>
     <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
@@ -47,7 +47,7 @@
   <disabled>false</disabled>
   <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
   <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
-  <jdk>(System)</jdk>
+  <jdk>jdk-24</jdk>
   <triggers/>
   <concurrentBuild>false</concurrentBuild>
   <builders>
@@ -183,7 +183,7 @@ head -n 10 inputs.csv &gt;&amp;2 || true
 # -----------------------------
 should_skip_type() {
   local t=&quot;${1,,}&quot;
-  [[ &quot;$t&quot; == &quot;parent&quot; || &quot;$t&quot; == &quot;topmed&quot; || &quot;$t&quot; == &quot;substudy&quot; || &quot;$t&quot; == &quot;compliant&quot; || &quot;$t&quot; == &quot;imaging&quot; || &quot;$t&quot; == &quot;biolincc&quot; || &quot;$t&quot; == &quot;other&quot; ]]
+  [[ &quot;$t&quot; == &quot;parent&quot; || &quot;$t&quot; == &quot;topmed&quot; || &quot;$t&quot; == &quot;substudy&quot; || &quot;$t&quot; == &quot;compliant&quot; || &quot;$t&quot; == &quot;imaging&quot; || &quot;$t&quot; != &quot;biolincc&quot; || &quot;$t&quot; == &quot;other&quot; ]]
 }
 
 process_study() {
@@ -212,6 +212,11 @@ process_study() {
   # Decoded CSVs (required)
   aws s3 cp &quot;s3://${S3_BUCKET}/${abv_lc}/decoded_data/&quot; &quot;data/&quot; \
     --recursive --exclude &quot;*&quot; --include &quot;*.csv&quot; \
+    --no-progress --only-show-errors \
+    || { error &quot;Failed: decoded_data/*.csv for ${abv_name} ${stdy_id}&quot;; return 1; }
+
+  aws s3 cp &quot;s3://${S3_BUCKET}/${abv_lc}/decoded_data/&quot; &quot;data/&quot; \
+    --recursive --exclude &quot;*&quot; --include &quot;*.txt&quot; \
     --no-progress --only-show-errors \
     || { error &quot;Failed: decoded_data/*.csv for ${abv_name} ${stdy_id}&quot;; return 1; }
 
@@ -257,23 +262,24 @@ process_study() {
   fi
 
   # ---- optional multi step ----
-  if [[ &quot;${has_multi,,}&quot; == &quot;yes&quot; ]]; then
-    log &quot;Multi enabled: pulling rawData ${stdy_id}*&quot;
-    aws s3 cp &quot;s3://${S3_BUCKET}/${abv_lc}/rawData/&quot; &quot;data/&quot; \
-      --recursive --exclude &quot;*&quot; --include &quot;${stdy_id}*&quot; \
-      --no-progress --only-show-errors \
-      || { error &quot;Failed: rawData/${stdy_id}* for ${abv_name} ${stdy_id}&quot;; return 1; }
-
-    log &quot;DbgapTreeBuilder3 (${stdy_id})&quot;
-    java -jar jars/DbgapTreeBuilder3.jar -trialid &quot;$stdy_id&quot; \
-      &gt; &quot;logs/${stdy_id}_mapping_gen2.log&quot;
-
-    if [[ -s &quot;completed/${stdy_id}_mapping2.csv&quot; ]]; then
-      cat &quot;completed/${stdy_id}_mapping2.csv&quot; &gt;&gt; &quot;completed/${stdy_id}_mapping.csv&quot;
-    else
-      warn &quot;Multi run produced no completed/${stdy_id}_mapping2.csv; continuing&quot;
-    fi
-  fi
+  #if [[ &quot;${has_multi,,}&quot; == &quot;yes&quot; ]]; then
+  #  log &quot;Multi enabled: pulling rawData ${stdy_id}*&quot;
+  #  aws s3 cp &quot;s3://${S3_BUCKET}/${abv_lc}/rawData/&quot; &quot;data/&quot; \
+  #    --recursive --exclude &quot;*&quot; --include &quot;${stdy_id}*&quot; \
+  #    --no-progress --only-show-errors \
+  #    || { error &quot;Failed: rawData/${stdy_id}* for ${abv_name} ${stdy_id}&quot;; return 1; }
+#
+ #   log &quot;DbgapTreeBuilder3 (${stdy_id})&quot;
+  #  java -jar jars/DbgapTreeBuilder3.jar -trialid &quot;$stdy_id&quot; \
+  #    &gt; &quot;logs/${stdy_id}_mapping_gen2.log&quot;
+#
+ #   if [[ -s &quot;completed/${stdy_id}_mapping2.csv&quot; ]]; then
+  #    cat &quot;completed/${stdy_id}_mapping2.csv&quot; &gt;&gt; &quot;completed/${stdy_id}_mapping.csv&quot;
+   # else
+    #  warn &quot;Multi run produced no completed/${stdy_id}_mapping2.csv; continuing&quot;
+    
+#fi
+#  fi
 
   # ---- upload result ----
   local dst=&quot;s3://${S3_BUCKET}/${abv_lc}/mappings/${stdy_id}/mapping2.csv&quot;
