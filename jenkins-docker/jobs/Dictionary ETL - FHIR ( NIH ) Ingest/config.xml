@@ -33,6 +33,7 @@
   <builders>
     <hudson.tasks.Shell>
       <command>#!/bin/bash
+set -euo pipefail
 
 curl -X PATCH http://172.20.0.2:8086/api/fhir/load/metadata/refresh</command>
       <configuredLocalRules/>
