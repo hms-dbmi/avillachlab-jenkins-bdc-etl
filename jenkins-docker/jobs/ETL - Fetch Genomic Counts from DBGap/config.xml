@@ -99,11 +99,16 @@ aws s3 cp &quot;$MANAGED_INPUTS_URI&quot; data/Managed_Inputs.csv --no-progress
 # Build updated studies list
 # -----------------------------
 log &quot;Computing updated studies list (ready=yes, processed=no)&quot;
-csvgrep -c &quot;Data Processed&quot; -m &quot;No&quot; data/Managed_Inputs.csv \
-| csvgrep -c &quot;Data is ready to process&quot; -m &quot;Yes&quot; \
+#csvgrep -c &quot;Data Processed&quot; -m &quot;No&quot; data/Managed_Inputs.csv \
+#| csvgrep -c &quot;Data is ready to process&quot; -m &quot;Yes&quot; \
+#| csvcut -c &quot;Study Identifier&quot; \
+#| csvformat -E \
+#&gt; updated_studies.csv
+csvgrep -c &quot;Data is ready to process&quot; -m &quot;Yes&quot;  data/Managed_Inputs.csv \
 | csvcut -c &quot;Study Identifier&quot; \
 | csvformat -E \
 &gt; updated_studies.csv
+
 
 # -----------------------------
 # Build study list from metadata
@@ -150,12 +155,8 @@ tail -n +2 study_list.csv | while IFS=&apos;,&apos; read -r stdy_id version cons
       &gt; &quot;$resp_file&quot;
 
     # Extract sample count (number, not null)
-    count=&quot;$(jq -r --arg code &quot;c${consent}&quot; &apos;
-      .study.consent_groups[]
-      | select(.code == $code)
-      | .sample_count
-    &apos; &quot;$resp_file&quot; | head -n 1)&quot;
-
+    count=&quot;$(jq -r --argjson c ${consent} &apos;.study.consent_groups[] | select(.code == $c) | .sample_count&apos; $resp_file | head -n 1)&quot;
+	echo count is $count
     if [[ -z &quot;${count:-}&quot; || &quot;$count&quot; == &quot;null&quot; ]]; then
       warn &quot;No sample_count found for ${stdy_id}.${version} consent=c${consent}; skipping API update&quot;
       continue

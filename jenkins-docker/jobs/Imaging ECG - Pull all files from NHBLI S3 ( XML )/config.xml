@@ -85,10 +85,28 @@ export AWS_SESSION_TOKEN=$(    jq -r .Credentials.SessionToken    &lt;&lt;&lt;&q
 
 #aws s3 cp s3://nih-nhlbi-bdc-connects-activ4a-phs002694-v4-r3-c1 ./activ4a_r3 --recursive
 
-aws s3 cp s3://nih-nhlbi-bdc-neurocovid-phs004278-v1-r1-c1 ./neurocovid --recursive
+#aws s3 cp s3://nih-nhlbi-bdc-neurocovid-phs004278-v1-r1-c1 ./neurocovid --recursive
 
 #aws s3 cp s3://nih-nhlbi-bdc-rose-ards-phs003929-v1-r1-c1 ./bdc-rose-ards --recursive --exclude &quot;*.fastq.gz&quot;
 
+#aws s3 cp s3://nih-nhlbi-bdc-c4r-copdgene-phs002910-v2-r1-c1 ./copdgene/c1/ --recursive
+#aws s3 cp s3://nih-nhlbi-bdc-c4r-copdgene-phs002910-v2-r1-c2 ./copdgene/c2/ --recursive
+
+#aws s3 cp s3://nih-nhlbi-bdc-c4r-fhs-phs002911-v2-r1-c1 ./fhs/c1/ --recursive
+#aws s3 cp s3://nih-nhlbi-bdc-c4r-fhs-phs002911-v2-r1-c2 ./fhs/c2/ --recursive
+
+#aws s3 cp s3://nih-nhlbi-bdc-c4r-hchs-sol-phs002908-v2-r1-c1 ./hchssol/c1/ --recursive
+#aws s3 cp s3://nih-nhlbi-bdc-c4r-hchs-sol-phs002908-v2-r1-c2 ./hchssol/c2/ --recursive
+
+#aws s3 cp s3://nih-nhlbi-bdc-c4r-mesa-phs003017-v2-r1-c1 ./mesa/c1/ --recursive
+#aws s3 cp s3://nih-nhlbi-bdc-c4r-mesa-phs003017-v2-r1-c2 ./mesa/c2/ --recursive
+
+#aws s3 cp s3://nih-nhlbi-bdc-c4r-sarp-phs002913-v2-r1-c1 ./sarp/c1/ --recursive
+#aws s3 cp s3://nih-nhlbi-bdc-c4r-sarp-phs002913-v2-r1-c2 ./sarp/c2/ --recursive
+#aws s3 cp s3://nih-nhlbi-bdc-c4r-sarp-phs002913-v2-r1-c3 ./sarp/c3/ --recursive
+#aws s3 cp s3://nih-nhlbi-bdc-c4r-sarp-phs002913-v2-r1-c4 ./sarp/c4/ --recursive
+
+aws s3 cp s3://nih-nhlbi-bdc-eimpact-trial-phs003283-v1-r1-c1 ./eimpact-trial/ --recursive
 
 unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN</command>
       <configuredLocalRules/>
