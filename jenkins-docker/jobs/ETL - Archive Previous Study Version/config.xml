@@ -26,6 +26,7 @@
         <hudson.model.StringParameterDefinition>
           <name>version</name>
           <description>version number being archived</description>
+          <defaultValue>tryagain</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
