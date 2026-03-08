@@ -22,8 +22,9 @@
         <hudson.model.StringParameterDefinition>
           <name>git_hash</name>
           <description>old = genomicIngestion
-need to change = main</description>
-          <defaultValue>genomicIngestion</defaultValue>
+need to change = main
+timeseries = fix-time-series</description>
+          <defaultValue>fix-time-series</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
