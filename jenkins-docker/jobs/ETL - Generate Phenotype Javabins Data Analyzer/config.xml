@@ -24,7 +24,7 @@
           <description>old = genomicIngestion
 need to change = main
 timeseries = fix-time-series</description>
-          <defaultValue>fix-time-series</defaultValue>
+          <defaultValue>genomicIngestion</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
