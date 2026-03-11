@@ -1,0 +1,134 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description>Rolls back an S3 object to a specified prior version by downloading the requested object version and re-uploading it to the same key as the new latest version.&#xd;
+&#xd;
+Intended for large versioned objects where direct S3 copy rollback is not suitable.&#xd;
+Uses an assumed IAM role to access the target S3 object.</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
+      <doNotScan>false</doNotScan>
+    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>BUCKET</name>
+          <description>Name of the S3 bucket containing the versioned object to roll back.
+Example: avillach-73-bdcatalyst-etl</description>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>KEY</name>
+          <description>Full S3 object key to roll back.
+Example: recover_adult/completed/phs003463/phs003463_allConcepts_new_search_with_data_analyzer.csv
+</description>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>VERSION_ID</name>
+          <description>Exact S3 version ID to restore from object version history.
+Example: B5wYdMeKcBOvGFIoVF_0Eb6KXqfEpr_i</description>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/usr/bin/env bash
+set -euo pipefail
+
+: &quot;${BUCKET:?Must provide BUCKET}&quot;
+: &quot;${KEY:?Must provide KEY}&quot;
+: &quot;${VERSION_ID:?Must provide VERSION_ID}&quot;
+
+ROLE_ARN=&quot;${ROLE_ARN:-arn:aws:iam::736265540791:role/dbgap-etl}&quot;
+ROLE_SESSION_NAME=&quot;${ROLE_SESSION_NAME:-s3-rollback}&quot;
+WORKDIR=&quot;${WORKDIR:-${WORKSPACE:-$PWD}/rollback-work}&quot;
+
+mkdir -p &quot;$WORKDIR&quot;
+
+assume_role() {
+  local role_arn=&quot;$1&quot;
+  local session_name=&quot;$2&quot;
+  local duration=&quot;${3:-3600}&quot;
+
+  local creds_json
+  creds_json=&quot;$(aws sts assume-role \
+    --duration-seconds &quot;$duration&quot; \
+    --role-arn &quot;$role_arn&quot; \
+    --role-session-name &quot;$session_name&quot;)&quot;
+
+  export AWS_ACCESS_KEY_ID
+  AWS_ACCESS_KEY_ID=&quot;$(echo &quot;$creds_json&quot; | jq -r &apos;.Credentials.AccessKeyId&apos;)&quot;
+
+  export AWS_SECRET_ACCESS_KEY
+  AWS_SECRET_ACCESS_KEY=&quot;$(echo &quot;$creds_json&quot; | jq -r &apos;.Credentials.SecretAccessKey&apos;)&quot;
+
+  export AWS_SESSION_TOKEN
+  AWS_SESSION_TOKEN=&quot;$(echo &quot;$creds_json&quot; | jq -r &apos;.Credentials.SessionToken&apos;)&quot;
+}
+
+FILE_NAME=&quot;$(basename &quot;$KEY&quot;)&quot;
+LOCAL_FILE=&quot;${WORKDIR}/${FILE_NAME}&quot;
+
+echo &quot;Rolling back s3://${BUCKET}/${KEY} to version: ${VERSION_ID}&quot;
+echo &quot;Assuming role: ${ROLE_ARN}&quot;
+
+assume_role &quot;$ROLE_ARN&quot; &quot;$ROLE_SESSION_NAME&quot; 3600
+
+echo &quot;Checking that requested version exists...&quot;
+if ! aws s3api head-object \
+  --bucket &quot;$BUCKET&quot; \
+  --key &quot;$KEY&quot; \
+  --version-id &quot;$VERSION_ID&quot; &gt;/dev/null 2&gt;&amp;1; then
+  echo &quot;ERROR: Version does not exist or is not accessible.&quot;
+  echo &quot;Bucket:     $BUCKET&quot;
+  echo &quot;Key:        $KEY&quot;
+  echo &quot;Version ID: $VERSION_ID&quot;
+  exit 1
+fi
+
+echo &quot;Downloading requested version to: $LOCAL_FILE&quot;
+aws s3api get-object \
+  --bucket &quot;$BUCKET&quot; \
+  --key &quot;$KEY&quot; \
+  --version-id &quot;$VERSION_ID&quot; \
+  &quot;$LOCAL_FILE&quot; &gt;/dev/null
+
+if [ ! -s &quot;$LOCAL_FILE&quot; ]; then
+  echo &quot;ERROR: Downloaded file is missing or empty: $LOCAL_FILE&quot;
+  exit 1
+fi
+
+echo &quot;Uploading rollback object as new latest version...&quot;
+aws s3 cp &quot;$LOCAL_FILE&quot; &quot;s3://${BUCKET}/${KEY}&quot;
+
+echo &quot;Rollback complete.&quot;</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.49">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>
