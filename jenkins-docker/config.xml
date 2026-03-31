@@ -251,6 +251,7 @@
         <string>ETL - Ingest Pipeline (With Subject Multi)</string>
         <string>ETL - Update Facet Configuration</string>
         <string>ETL - Update Managed Inputs</string>
+        <string>pg_version</string>
         <string>Update Git With Latest Jobs and Config - pipeline</string>
       </jobNames>
       <jobFilters/>

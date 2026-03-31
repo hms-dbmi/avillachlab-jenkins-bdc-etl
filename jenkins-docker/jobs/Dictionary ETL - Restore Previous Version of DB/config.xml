@@ -4,6 +4,10 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
+      <doNotScan>false</doNotScan>
+    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
     <hudson.plugins.copyartifact.CopyArtifactPermissionProperty plugin="copyartifact@770.va_6c69e063442">
       <projectNameList>
         <string>*</string>
@@ -22,7 +26,6 @@
         </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
-    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
   </properties>
   <scm class="hudson.scm.NullSCM"/>
   <canRoam>true</canRoam>
@@ -71,7 +74,7 @@ find temp_extract -type f -exec mv {} dump_files/ \;
 
 # Run pg_restore using the dump files provided in the dump_files workspace directory
 PGPASSWORD=&quot;${conn_pass}&quot; \
-pg_restore \
+/usr/lib/postgresql/16/bin/pg_restore \
    --host=&quot;${database_psql_host_address}&quot; \
    --port=&quot;5432&quot; \
    --username=&quot;${conn_user}&quot; \
