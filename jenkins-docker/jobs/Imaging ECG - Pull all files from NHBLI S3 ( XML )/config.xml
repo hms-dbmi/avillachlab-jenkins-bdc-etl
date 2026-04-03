@@ -81,8 +81,18 @@ export AWS_SESSION_TOKEN=$(    jq -r .Credentials.SessionToken    &lt;&lt;&lt;&q
 
 #aws s3 cp s3://nih-nhlbi-bdc-eimpact-trial-phs003283-v1-r1-c1 ./eimpact-trial/ --recursive
 
-aws s3 cp s3://nih-nhlbi-bdc-mds-histopathology-phs004357-v1-r1-c1 ./histopathology/ --recursive
-aws s3 cp s3://nih-nhlbi-bdc-regards-ecg-phs004265-v1-r1-c1 ./regards-ecg/ --recursive
+aws s3 cp s3://nih-nhlbi-bdc-mds-histopathology-phs004357-v1-r1-c1 ./histopathology/ --recursive \
+--exclude &quot;*&quot; --include &quot;*.csv&quot; --include &quot;*.tsv&quot; --include &quot;*.txt&quot; --include &quot;*.sas7bdat&quot; --include &quot;*.json&quot;
+aws s3 cp s3://nih-nhlbi-bdc-regards-ecg-phs004265-v1-r1-c1 ./regards-ecg/ --recursive \
+--exclude &quot;*&quot; --include &quot;*.csv&quot; --include &quot;*.tsv&quot; --include &quot;*.txt&quot; --include &quot;*.sas7bdat&quot; --include &quot;*.json&quot;
+
+aws s3 cp s3://nih-nhlbi-bdc-c4r-aric-phs002988-v3-r1-c1 ./aric/c1/ --recursive
+aws s3 cp s3://nih-nhlbi-bdc-c4r-aric-phs002988-v3-r1-c2 ./aric/c2/ --recursive
+aws s3 cp s3://nih-nhlbi-bdc-c4r-masala-phs002980-v2-r1-c1 ./masala/ --recursive
+aws s3 cp s3://nih-nhlbi-bdc-c4r-prepf-phs002975-v2-r1-c1 ./prepf/ --recursive
+aws s3 cp s3://nih-nhlbi-bdc-c4r-regards-phs002919-v2-r1-c1 ./regards/ --recursive
+aws s3 cp s3://nih-nhlbi-bdc-scd-nhdr-phs003529-v3-r1-c1 ./scd_nhdir/ --recursive
+
 
 unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN</command>
       <configuredLocalRules/>

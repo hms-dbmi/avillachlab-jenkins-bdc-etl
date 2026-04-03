@@ -54,12 +54,6 @@ MANAGED_INPUTS_URI=&quot;${MANAGED_INPUTS_URI:-s3://${S3_BUCKET}/general/resourc
 API_BASE=&quot;${API_BASE:-http://dictionaryetl:8086/api}&quot;
 SSTR_BASE=&quot;${SSTR_BASE:-https://www.ncbi.nlm.nih.gov/gap/sstr/api/v1}&quot;
 
-CURL_CONNECT_TIMEOUT=&quot;${CURL_CONNECT_TIMEOUT:-15}&quot;
-CURL_MAX_TIME=&quot;${CURL_MAX_TIME:-90}&quot;
-CURL_RETRY_COUNT=&quot;${CURL_RETRY_COUNT:-8}&quot;
-CURL_RETRY_DELAY=&quot;${CURL_RETRY_DELAY:-2}&quot;
-CURL_RETRY_MAX_TIME=&quot;${CURL_RETRY_MAX_TIME:-180}&quot;
-
 cleanup() {
   rm -f &quot;${assume_json:-}&quot; 2&gt;/dev/null || true
   unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
@@ -83,56 +77,11 @@ assume_role() {
   unset assume_json
 }
 
-fetch_summary() {
-  local stdy_id=&quot;$1&quot;
-  local version=&quot;$2&quot;
-  local resp_file=&quot;$3&quot;
-
-  curl --fail --show-error --silent \
-    --connect-timeout &quot;$CURL_CONNECT_TIMEOUT&quot; \
-    --max-time &quot;$CURL_MAX_TIME&quot; \
-    --retry &quot;$CURL_RETRY_COUNT&quot; \
-    --retry-delay &quot;$CURL_RETRY_DELAY&quot; \
-    --retry-max-time &quot;$CURL_RETRY_MAX_TIME&quot; \
-    --retry-all-errors \
-    -H &apos;accept: application/json&apos; \
-    &quot;${SSTR_BASE}/study/${stdy_id}.${version}/summary&quot; \
-    &gt; &quot;$resp_file&quot;
-}
-
-update_count_api() {
-  local stdy_id=&quot;$1&quot;
-  local consent=&quot;$2&quot;
-  local count=&quot;$3&quot;
-
-  curl --fail --show-error --silent \
-    --connect-timeout &quot;$CURL_CONNECT_TIMEOUT&quot; \
-    --max-time &quot;$CURL_MAX_TIME&quot; \
-    --retry &quot;$CURL_RETRY_COUNT&quot; \
-    --retry-delay &quot;$CURL_RETRY_DELAY&quot; \
-    --retry-max-time &quot;$CURL_RETRY_MAX_TIME&quot; \
-    --retry-all-errors \
-    --request PUT \
-    --data-urlencode &quot;datasetRef=${stdy_id}&quot; \
-    --data-urlencode &quot;consentCode=c${consent}&quot; \
-    --data-urlencode &quot;sampleCount=${count}&quot; \
-    &quot;${API_BASE}/consent/counts&quot; \
-    &gt; /dev/null
-}
-
 # -----------------------------
 # Prep workspace
 # -----------------------------
 mkdir -p data
-rm -f \
-  metadata.json \
-  Managed_Inputs.csv \
-  data/Managed_Inputs.csv \
-  updated_studies.csv \
-  study_list.csv \
-  genomic_counts.csv \
-  failed_genomic_counts.csv \
-  .study_hits.tmp
+rm -f metadata.json Managed_Inputs.csv data/Managed_Inputs.csv updated_studies.csv study_list.csv genomic_counts.csv
 
 # -----------------------------
 # Download inputs from S3
@@ -149,27 +98,32 @@ aws s3 cp &quot;$MANAGED_INPUTS_URI&quot; data/Managed_Inputs.csv --no-progress
 # -----------------------------
 # Build updated studies list
 # -----------------------------
-log &quot;Computing updated studies list (ready=yes)&quot;
-csvgrep -c &quot;Data is ready to process&quot; -m &quot;Yes&quot; data/Managed_Inputs.csv \
+log &quot;Computing updated studies list (ready=yes, processed=no)&quot;
+#csvgrep -c &quot;Data Processed&quot; -m &quot;No&quot; data/Managed_Inputs.csv \
+#| csvgrep -c &quot;Data is ready to process&quot; -m &quot;Yes&quot; \
+#| csvcut -c &quot;Study Identifier&quot; \
+#| csvformat -E \
+#&gt; updated_studies.csv
+csvgrep -c &quot;Data is ready to process&quot; -m &quot;Yes&quot;  data/Managed_Inputs.csv \
 | csvcut -c &quot;Study Identifier&quot; \
 | csvformat -E \
 &gt; updated_studies.csv
+
 
 # -----------------------------
 # Build study list from metadata
 #   - data_type contains &quot;G&quot;
 #   - study_identifier contains &quot;phs&quot;
-#   - consent_group_code: strip leading &quot;c&quot;
+#   - consent_group_code: strip leading &quot;c&quot; (assumes it starts with c)
 # -----------------------------
 log &quot;Extracting study/version/consent from metadata.json&quot;
 jq &apos;.bio_data_catalyst[]
       | select(.data_type | contains(&quot;G&quot;))
       | select(.study_identifier | contains(&quot;phs&quot;))
-      | select(.consent_group_code != null)
       | {
           study_identifier: .study_identifier,
           study_version: .study_version,
-          consent_group_code: (.consent_group_code | tostring | ltrimstr(&quot;c&quot;))
+          consent_group_code: (.consent_group_code | .[1:])
         }&apos; \
   metadata.json \
 | jq -s \
@@ -177,89 +131,51 @@ jq &apos;.bio_data_catalyst[]
 &gt; study_list.csv
 
 # -----------------------------
-# Outputs
+# Loop studies, query SSTR, update Dictionary ETL API
 # -----------------------------
-log &quot;Initializing output files&quot;
-echo &quot;study_identifier,consent_code,sample_count&quot; &gt; genomic_counts.csv
-echo &quot;study_identifier,study_version,consent_code,reason&quot; &gt; failed_genomic_counts.csv
+log &quot;Writing genomic_counts.csv&quot;
+: &gt; genomic_counts.csv
 
-total_rows=0
-eligible_rows=0
-success_count=0
-fetch_failures=0
-api_failures=0
-missing_count_failures=0
-skipped_not_ready=0
-
-tail -n +2 study_list.csv &gt; .study_hits.tmp
-
-while IFS=&apos;,&apos; read -r stdy_id version consent; do
-  total_rows=$((total_rows + 1))
-
+# Skip header safely
+tail -n +2 study_list.csv | while IFS=&apos;,&apos; read -r stdy_id version consent; do
   stdy_id=&quot;${stdy_id//\&quot;/}&quot;
   version=&quot;${version//\&quot;/}&quot;
   consent=&quot;${consent//\&quot;/}&quot;
 
   [[ -z &quot;$stdy_id&quot; || -z &quot;$version&quot; || -z &quot;$consent&quot; ]] &amp;&amp; continue
 
-  if ! grep -Fxq &quot;$stdy_id&quot; updated_studies.csv; then
-    skipped_not_ready=$((skipped_not_ready + 1))
-    continue
+  if grep -Fxq &quot;$stdy_id&quot; updated_studies.csv; then
+    log &quot;Updating counts for ${stdy_id}.${version} consent=c${consent}&quot;
+
+    # Fetch summary
+    resp_file=&quot;${stdy_id}.c${consent}.response.json&quot;
+    curl --fail --retry 5 --show-error --silent \
+      -H &apos;accept: application/json&apos; \
+      &quot;${SSTR_BASE}/study/${stdy_id}.${version}/summary&quot; \
+      &gt; &quot;$resp_file&quot;
+
+    # Extract sample count (number, not null)
+    count=&quot;$(jq -r --argjson c ${consent} &apos;.study.consent_groups[] | select(.code == $c) | .sample_count&apos; $resp_file | head -n 1)&quot;
+	echo count is $count
+    if [[ -z &quot;${count:-}&quot; || &quot;$count&quot; == &quot;null&quot; ]]; then
+      warn &quot;No sample_count found for ${stdy_id}.${version} consent=c${consent}; skipping API update&quot;
+      continue
+    fi
+
+    echo &quot;${stdy_id},c${consent},${count}&quot; &gt;&gt; genomic_counts.csv
+
+    # Update dictionary db via Dictionary ETL API
+    curl --fail --show-error --silent \
+      --request PUT \
+      --data-urlencode &quot;datasetRef=${stdy_id}&quot; \
+      --data-urlencode &quot;consentCode=c${consent}&quot; \
+      --data-urlencode &quot;sampleCount=${count}&quot; \
+      &quot;${API_BASE}/consent/counts&quot; \
+      &gt; /dev/null
   fi
+done
 
-  eligible_rows=$((eligible_rows + 1))
-  log &quot;Updating counts for ${stdy_id}.${version} consent=c${consent}&quot;
-
-  resp_file=&quot;${stdy_id}.c${consent}.response.json&quot;
-
-  if ! fetch_summary &quot;$stdy_id&quot; &quot;$version&quot; &quot;$resp_file&quot;; then
-    warn &quot;Failed to fetch summary for ${stdy_id}.${version} consent=c${consent}; skipping&quot;
-    echo &quot;${stdy_id},${version},c${consent},fetch_failed&quot; &gt;&gt; failed_genomic_counts.csv
-    fetch_failures=$((fetch_failures + 1))
-    continue
-  fi
-
-  count=&quot;$(
-    jq -r --argjson c &quot;$consent&quot; &apos;
-      .study.consent_groups[]
-      | select(.code == $c)
-      | .sample_count
-    &apos; &quot;$resp_file&quot; | head -n 1
-  )&quot;
-
-  log &quot;Resolved count for ${stdy_id}.${version} consent=c${consent}: ${count:-&lt;empty&gt;}&quot;
-
-  if [[ -z &quot;${count:-}&quot; || &quot;$count&quot; == &quot;null&quot; ]]; then
-    warn &quot;No sample_count found for ${stdy_id}.${version} consent=c${consent}; skipping API update&quot;
-    echo &quot;${stdy_id},${version},c${consent},sample_count_missing&quot; &gt;&gt; failed_genomic_counts.csv
-    missing_count_failures=$((missing_count_failures + 1))
-    continue
-  fi
-
-  echo &quot;${stdy_id},c${consent},${count}&quot; &gt;&gt; genomic_counts.csv
-
-  if ! update_count_api &quot;$stdy_id&quot; &quot;$consent&quot; &quot;$count&quot;; then
-    warn &quot;Failed API update for ${stdy_id}.${version} consent=c${consent}; continuing&quot;
-    echo &quot;${stdy_id},${version},c${consent},api_update_failed&quot; &gt;&gt; failed_genomic_counts.csv
-    api_failures=$((api_failures + 1))
-    continue
-  fi
-
-  success_count=$((success_count + 1))
-done &lt; .study_hits.tmp
-
-rm -f .study_hits.tmp
-
-log &quot;Done. Output: genomic_counts.csv&quot;
-log &quot;Summary:&quot;
-log &quot;  total_rows=${total_rows}&quot;
-log &quot;  eligible_rows=${eligible_rows}&quot;
-log &quot;  success_count=${success_count}&quot;
-log &quot;  fetch_failures=${fetch_failures}&quot;
-log &quot;  api_failures=${api_failures}&quot;
-log &quot;  missing_count_failures=${missing_count_failures}&quot;
-log &quot;  skipped_not_ready=${skipped_not_ready}&quot;
-log &quot;  failed_output=failed_genomic_counts.csv&quot;</command>
+log &quot;Done. Output: genomic_counts.csv&quot;</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>
