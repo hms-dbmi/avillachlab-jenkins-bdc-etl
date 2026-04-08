@@ -28,7 +28,7 @@
       <triggers>
         <jenkins.triggers.ReverseBuildTrigger>
           <spec></spec>
-          <upstreamProjects>FISMA_MIGRATION - Import columnMeta.csv</upstreamProjects>
+          <upstreamProjects>Step 4a - FISMA_MIGRATION - Import columnMeta.csv</upstreamProjects>
           <threshold>
             <name>SUCCESS</name>
             <ordinal>0</ordinal>

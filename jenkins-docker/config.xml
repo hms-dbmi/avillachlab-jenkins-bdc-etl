@@ -137,7 +137,6 @@
       <jobNames>
         <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
         <string>Dictionary ETL - Export DB</string>
-        <string>Dictionary ETL - Start Docker Container</string>
         <string>Dictionary ETL - Start Docker Container - (BACKUP)</string>
         <string>Dictionary ETL - Stigvar Loader</string>
         <string>Dictionary ETL - Update Meta Counts For All Consents</string>
@@ -145,6 +144,7 @@
         <string>ETL - Update Metadata.json on s3 with uploaded file</string>
         <string>ETL - Update static files in javabins</string>
         <string>ETL - Upload stigmatizing variable files from git to s3</string>
+        <string>Step 4b - Dictionary ETL - Start Docker Container</string>
       </jobNames>
       <jobFilters/>
       <columns>
@@ -168,7 +168,6 @@
         <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
         <string>Dictionary ETL - AnVIL TSV Ingest</string>
         <string>Dictionary ETL - Back Fill Study Programs</string>
-        <string>Dictionary ETL - BDC Ingest Pipeline</string>
         <string>Dictionary ETL - BDC Ingest Pipeline - Legacy</string>
         <string>Dictionary ETL - Build Ingest Files From ColumnMeta</string>
         <string>Dictionary ETL - Create Files For Stigvar Identification</string>
@@ -181,7 +180,6 @@
         <string>Dictionary ETL - Manually Upload DB Dump Files</string>
         <string>Dictionary ETL - Refresh General Facets</string>
         <string>Dictionary ETL - Restore Previous Version of DB</string>
-        <string>Dictionary ETL - Start Docker Container</string>
         <string>Dictionary ETL - Stigvar Loader</string>
         <string>Dictionary ETL - Update concepts from Ingest CSVs(Manual Upload)</string>
         <string>Dictionary ETL - Update DB from Ingest CSVs (Minimal)</string>
@@ -189,6 +187,8 @@
         <string>Dictionary ETL - Update Facets From Lists</string>
         <string>Dictionary ETL - Upload Dictionary Ingest Files to S3</string>
         <string>Old JSON Dictionary to New Dictionary Input Files</string>
+        <string>Step 4b - Dictionary ETL - Start Docker Container</string>
+        <string>Step 4c - Dictionary ETL - BDC Ingest Pipeline</string>
       </jobNames>
       <jobFilters/>
       <columns>
@@ -330,7 +330,8 @@
       <properties class="hudson.model.View$PropertyList"/>
       <jobNames>
         <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
-        <string>ETL - Update Stigmatizing Variables in Existing Dataset</string>
+        <string>ETL - Update Stigmatizing Variables in Existing Dataset - bk</string>
+        <string>Step 7 - ETL - Update Stigmatizing Variables in Existing Dataset</string>
       </jobNames>
       <jobFilters/>
       <columns>
@@ -535,13 +536,16 @@
     </listView>
     <listView>
       <owner class="hudson" reference="../../.."/>
-      <name>Migration Jobs</name>
+      <name>_Migration Jobs</name>
       <filterExecutors>false</filterExecutors>
       <filterQueue>false</filterQueue>
       <properties class="hudson.model.View$PropertyList"/>
       <jobNames>
         <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
-        <string>FISMA_MIGRATION - Import columnMeta.csv</string>
+        <string>Step 4a - FISMA_MIGRATION - Import columnMeta.csv</string>
+        <string>Step 4b - Dictionary ETL - Start Docker Container</string>
+        <string>Step 4c - Dictionary ETL - BDC Ingest Pipeline</string>
+        <string>Step 7 - ETL - Update Stigmatizing Variables in Existing Dataset</string>
       </jobNames>
       <jobFilters/>
       <columns>
