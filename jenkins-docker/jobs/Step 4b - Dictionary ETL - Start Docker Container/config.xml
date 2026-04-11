@@ -67,48 +67,21 @@ OUTFILE=&quot;container_ip_address.txt&quot;
 
 fail() { echo &quot;ERROR: $*&quot; &gt;&amp;2; exit 1; }
 
-# -- (Note from George): I did not modify this bash function, but it isn&apos;t currently working as intended.
-# -- It would be better to recreate the container each time. This ensures the desired branch is the one 
-# -- that is actually deployed. 
-# -- I am adding this stop &amp; rm. It can be removed/modified at a later date.
-docker compose down || true
-
 # --- Validate external shared network exists (do NOT recreate it in Jenkins) ---
 docker network inspect &quot;$NETWORK&quot; &gt;/dev/null 2&gt;&amp;1 \
   || fail &quot;Required external Docker network &apos;$NETWORK&apos; does not exist. Create it outside Jenkins.&quot;
 
-# --- If container exists and is healthy/up, exit success fast ---
-if docker ps --format &apos;{{.Names}}&apos; | grep -qx &quot;$CONTAINER_NAME&quot;; then
-  # If the image has a HEALTHCHECK, prefer that signal
-  hc=&quot;$(docker inspect &quot;$CONTAINER_NAME&quot; \
-    | jq -r &apos;.[0].State.Health.Status // empty&apos; || true)&quot;
-
-  if [[ &quot;$hc&quot; == &quot;healthy&quot; ]]; then
-    ip=&quot;$(docker inspect &quot;$CONTAINER_NAME&quot; | jq -r &apos;.[0].NetworkSettings.Networks[&quot;&apos;&quot;$NETWORK&quot;&apos;&quot;].IPAddress // empty&apos;)&quot;
-    [[ -n &quot;$ip&quot; ]] &amp;&amp; printf &apos;%s\n&apos; &quot;$ip&quot; &gt; &quot;$OUTFILE&quot; || true
-    echo &quot;$CONTAINER_NAME is already running and healthy.&quot;
-    exit 0
-  fi
-
-  # No healthcheck or not healthy: verify DNS+HTTP from within the shared network
-  if docker run --rm --network &quot;$NETWORK&quot; curlimages/curl:8.6.0 \
-      sh -lc &apos;getent hosts &quot;&apos;&quot;$CONTAINER_NAME&quot;&apos;&quot; &gt;/dev/null &amp;&amp; curl -fsS --max-time 3 &quot;&apos;&quot;$HEALTH_URL&quot;&apos;&quot; &gt;/dev/null&apos;
-  then
-    ip=&quot;$(docker inspect &quot;$CONTAINER_NAME&quot; | jq -r &apos;.[0].NetworkSettings.Networks[&quot;&apos;&quot;$NETWORK&quot;&apos;&quot;].IPAddress // empty&apos;)&quot;
-    [[ -n &quot;$ip&quot; ]] &amp;&amp; printf &apos;%s\n&apos; &quot;$ip&quot; &gt; &quot;$OUTFILE&quot; || true
-    echo &quot;$CONTAINER_NAME is already running and reachable.&quot;
-    exit 0
-  fi
-
-  echo &quot;$CONTAINER_NAME is running but not healthy/reachable; will attempt to (re)start via compose.&quot;
+# --- Always remove existing container by name ---
+if docker container inspect &quot;$CONTAINER_NAME&quot; &gt;/dev/null 2&gt;&amp;1; then
+  echo &quot;Removing existing container: $CONTAINER_NAME&quot;
+  docker rm -f &quot;$CONTAINER_NAME&quot;
 fi
 
-# --- Not running (or unhealthy): bring it up ---
-docker compose up -d --build
+# --- Rebuild and recreate container ---
+docker compose up -d --build --force-recreate
 
-# --- Validate it came up and is reachable via DNS ---
-# Wait briefly for DNS/health to settle (bounded retries, not an infinite wait)
-for _ in {1..20}; do
+# --- Wait for DNS + HTTP health ---
+for _ in {1..30}; do
   if docker run --rm --network &quot;$NETWORK&quot; curlimages/curl:8.6.0 \
       sh -lc &apos;getent hosts &quot;&apos;&quot;$CONTAINER_NAME&quot;&apos;&quot; &gt;/dev/null &amp;&amp; curl -fsS --max-time 3 &quot;&apos;&quot;$HEALTH_URL&quot;&apos;&quot; &gt;/dev/null&apos;
   then
@@ -117,8 +90,11 @@ for _ in {1..20}; do
     echo &quot;$CONTAINER_NAME started and is reachable.&quot;
     exit 0
   fi
-  sleep 1
+  sleep 2
 done
+
+echo &quot;Container logs:&quot;
+docker logs &quot;$CONTAINER_NAME&quot; || true
 
 fail &quot;$CONTAINER_NAME did not become reachable at $HEALTH_URL on network $NETWORK&quot;</command>
       <configuredLocalRules/>
