@@ -45,8 +45,7 @@
     post{
         success {
             copyArtifacts(projectName: &apos;Dictionary ETL - Export DB&apos;);
-            copyArtifacts(projectName: &apos;ETL - Update static files in javabins&apos;);
-            archiveArtifacts artifacts: &apos;db_dump_name.txt&apos;, followSymlinks: false;
+            archiveArtifacts artifacts: &apos;db_dump_name.txt&apos;;
         }
     }
 }
