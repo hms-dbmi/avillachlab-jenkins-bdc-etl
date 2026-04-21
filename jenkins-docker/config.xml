@@ -181,6 +181,7 @@
         <string>Dictionary ETL - Refresh General Facets</string>
         <string>Dictionary ETL - Restore Previous Version of DB</string>
         <string>Dictionary ETL - Stigvar Loader</string>
+        <string>Dictionary ETL - Subject Type Meta and Facets</string>
         <string>Dictionary ETL - Update concepts from Ingest CSVs(Manual Upload)</string>
         <string>Dictionary ETL - Update DB from Ingest CSVs (Minimal)</string>
         <string>Dictionary ETL - Update DB from Old Dictionary Ingest CSVs</string>

@@ -1,0 +1,102 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
+      <doNotScan>false</doNotScan>
+    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>managed_inputs</name>
+          <defaultValue>s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.csv</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>api</name>
+          <defaultValue>http://172.20.0.2:8086/api</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/usr/bin/env bash
+set -euo pipefail
+
+aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+
+aws s3 cp &quot;${managed_inputs}&quot; .
+
+csvcut -c &quot;Study Identifier&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot;,&quot;Subject Type(s)&quot; Managed_Inputs.csv &gt; inputs.csv
+
+#cat Managed_Inputs.csv
+
+IFS=&apos;,&apos;
+if [[ ! -f inputs.csv ]]; then
+  echo &quot;inputs.csv not found!&quot; &gt;&amp;2
+  exit 1
+fi
+
+while read stdy_id is_ready is_processed subject_type; do
+	if [[ ${is_ready,,} == &apos;yes&apos; ]] &amp;&amp; [[ ${is_processed,,} == &apos;no&apos; ]]; then
+		if [[ ${subject_type,,} == &apos;human&apos; ]]; then
+        	#execute the update dataset update subject type api call, with the make_meta flag set to false
+            #which sets a facet for all concepts for the study to the Human facet
+        		curl --fail --no-progress-meter --request PUT --header &apos;Content-Type: text/plain&apos; \
+      			--data-urlencode &quot;datasetRef=${datasetRef}&quot; \
+                --data-urlencode &quot;make_meta=false&quot; \
+                --data-urlencode &quot;subject_type=${subject_type}&quot; \
+                &quot;${api}/dataset/subject_type&quot; || exit 255
+        
+        else if [[  ${subject_type,,} == &apos;multi&apos; ]]; then
+        	#execute the dataset subject type api call, with the make_meta flag set to false and the multi_subject flag set to true
+            #which will iterate through the study and add each concept to the corresponding facet for its subject_type metadata flag
+        	#TODO - NOT IMPLEMENTED YET, PENDING RMIP SAMPLE
+        else 
+        	#execute the update dataset level update subject type api call, 
+            #which sets a facet and metadata element for all concepts for the study
+        	    curl --fail --no-progress-meter --request PUT --header &apos;Content-Type: text/plain&apos; \
+      			--data-urlencode &quot;datasetRef=${datasetRef}&quot; \
+                --data-urlencode &quot;make_meta=true&quot; \
+                --data-urlencode &quot;subject_type=${subject_type}&quot; \
+                &quot;${api}/dataset/subject_type&quot; || exit 255
+        
+        fi
+        
+	fi
+done &lt; inputs.csv
+
+
+log &quot;Uploading list of studies and subject types to API&quot;
+curl --request PUT --fail \
+ --header &apos;Content-Type: text/plain&apos; \
+  --data-binary @&quot;inputs.csv&quot; \
+  &quot;${api}/dataset/csv&quot;</command>
+      <configuredLocalRules/>
+      <unstableReturn>255</unstableReturn>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers/>
+</project>
