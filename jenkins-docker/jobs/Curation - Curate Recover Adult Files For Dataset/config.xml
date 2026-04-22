@@ -96,7 +96,7 @@
     <hudson.tasks.Shell>
       <command>#!/bin/bash
 set -o pipefail
-cd &quot;_scripts/recover/job_scripts_sample_to_input&quot;
+cd &quot;_scripts/recover/job_scripts_adult&quot;
 
 conn_user=&apos;postgres&apos;
 conn_pass=`aws secretsmanager get-secret-value --secret-id &apos;rds!db-2b115560-c8c4-4cec-8418-537a35f9c192&apos; --region &apos;us-east-1&apos; --query SecretString --output text | jq -r .password`
