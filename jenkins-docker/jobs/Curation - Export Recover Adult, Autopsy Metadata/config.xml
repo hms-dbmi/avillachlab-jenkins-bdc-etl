@@ -53,34 +53,42 @@ conn_user=&apos;postgres&apos;
 conn_pass=`aws secretsmanager get-secret-value --secret-id &apos;rds!db-2b115560-c8c4-4cec-8418-537a35f9c192&apos; --region &apos;us-east-1&apos; --query SecretString --output text | jq -r .password`
 database_psql_host_address=&apos;recoverdb.cljahwnkfisu.us-east-1.rds.amazonaws.com&apos;
 
-  dbname=&quot;${STUDY_ABV,,}_${VERSION,,}&quot;
-  #dbname=&quot;${STUDY_ABV,,}&quot;
-  PGPASSWORD=&quot;$conn_pass&quot; psql --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --username=&quot;$conn_user&quot; --dbname=&quot;${dbname}&quot; --csv -Atc \
-  &quot;select json_agg(meta) from metadata_output.metadata meta&quot; -o ${STUDY_ID}_${STUDY_ABV,,}_metadata.json
-  
-  aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt     
-  export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-  export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-  export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-  rm -f assume-role-output.txt
-  aws s3 cp ${STUDY_ID}_${STUDY_ABV,,}_metadata.json s3://avillach-73-bdcatalyst-etl/${STUDY_ABV,,}/decoded_data/
-  aws s3 cp ${STUDY_ID}_${STUDY_ABV,,}_metadata.json s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${STUDY_ID}/metadata/
-  unset AWS_ACCESS_KEY_ID
-  unset AWS_SECRET_ACCESS_KEY
-  unset AWS_SESSION_TOKEN
+dbname=&quot;${STUDY_ABV,,}_${VERSION,,}&quot;
+#dbname=&quot;${STUDY_ABV,,}&quot;
+PGPASSWORD=&quot;$conn_pass&quot; psql --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --username=&quot;$conn_user&quot; --dbname=&quot;${dbname}&quot; --csv -Atc \
+&quot;select json_agg(meta) from metadata_output.metadata meta&quot; -o ${STUDY_ID}_${STUDY_ABV,,}_metadata.json
+
+aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt     
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+rm -f assume-role-output.txt
+aws s3 cp ${STUDY_ID}_${STUDY_ABV,,}_metadata.json s3://avillach-73-bdcatalyst-etl/${STUDY_ABV,,}/decoded_data/
+aws s3 cp ${STUDY_ID}_${STUDY_ABV,,}_metadata.json s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${STUDY_ID}/metadata/
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
 
 
-  aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
-  export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-  export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-  export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-  rm -f assume-role-output.txt
-  aws s3 cp merged/${STUDY_ABV,,}_metadata.json s3://avillach-73-bdcatalyst-etl/${STUDY_ABV,,}/decoded_data/
-  aws s3 cp merged/${STUDY_ABV,,}_metadata.json s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${STUDY_ID}/metadata/${STUDY_ABV,,}_metadata.json
-  unset AWS_ACCESS_KEY_ID
-  unset AWS_SECRET_ACCESS_KEY
-  unset AWS_SESSION_TOKEN
-fi</command>
+aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+rm -f assume-role-output.txt
+aws s3 cp merged/${STUDY_ABV,,}_metadata.json s3://avillach-73-bdcatalyst-etl/${STUDY_ABV,,}/decoded_data/
+# Sub-type the clinical data
+
+if [[ &quot;${STUDY_ABV,,}&quot; == &quot;recover_adult&quot; ]]; then
+  aws s3 cp &quot;merged/${STUDY_ABV,,}_metadata.json&quot; \
+    &quot;s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${STUDY_ID}/metadata/${STUDY_ABV,,}_metadata.clinical.json&quot;
+else
+  aws s3 cp &quot;merged/${STUDY_ABV,,}_metadata.json&quot; \
+    &quot;s3://avillach-73-bdcatalyst-etl/general/hpds/javabin/${STUDY_ID}/metadata/${STUDY_ABV,,}_metadata.json&quot;
+fi
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>
