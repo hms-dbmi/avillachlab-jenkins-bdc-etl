@@ -152,7 +152,8 @@ do
         export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
         export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
         export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-       
+        
+        aws s3 cp ./logs/${stdy_id}_analyzer_logs.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/logs/${stdy_id}_analyzer_logs.csv --no-progress
         aws s3 cp ./logs/removed_mappings.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/logs/${stdy_id}_removed_mappings.csv --no-progress
         
         ### All done with the role before data processing. 
@@ -179,6 +180,7 @@ do
               echo &quot;Errors in ${stdy_id} merge&quot;
               exit 255
         	fi
+        aws s3 cp ./logs/${stdy_id}_merge_logs.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/logs/${stdy_id}_merge_logs.csv --no-progress
         if ! [ -s completed/${abv_name^^}_allConcepts.csv ]; then
         	echo &quot;ALLCONCEPTS for ${abv_name} is empty!&quot; &gt;&gt; review_log.txt
         	# exit 255

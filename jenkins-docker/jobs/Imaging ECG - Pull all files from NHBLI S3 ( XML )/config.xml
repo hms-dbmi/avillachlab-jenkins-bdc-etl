@@ -93,8 +93,10 @@ export AWS_SESSION_TOKEN=$(    jq -r .Credentials.SessionToken    &lt;&lt;&lt;&q
 #aws s3 cp s3://nih-nhlbi-bdc-c4r-regards-phs002919-v2-r1-c1 ./regards/ --recursive
 #aws s3 cp s3://nih-nhlbi-bdc-scd-nhdr-phs003529-v3-r1-c1 ./scd_nhdir/ --recursive
 
-aws s3 cp s3://nih-nhlbi-bdc-ninds-shine-trial-phs004544-v1-r1-c1 ./shine_trial/c1/ --recursive
-aws s3 cp s3://nih-nhlbi-bdc-mint-phs004546-v1-r1-c1 ./mint/c1/ --recursive
+#aws s3 cp s3://nih-nhlbi-bdc-ninds-shine-trial-phs004544-v1-r1-c1 ./shine_trial/c1/ --recursive
+#aws s3 cp s3://nih-nhlbi-bdc-mint-phs004546-v1-r1-c1 ./mint/c1/ --recursive
+
+aws s3 cp s3://nih-nhlbi-bdc-eimpact-trial-phs003283-v1-r1-c1 ./eimpact_trial/ --recursive
 
 unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN</command>
       <configuredLocalRules/>
