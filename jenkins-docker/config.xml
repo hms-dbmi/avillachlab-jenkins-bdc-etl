@@ -561,6 +561,32 @@
       </columns>
       <recurse>false</recurse>
     </listView>
+    <listView>
+      <owner class="hudson" reference="../../.."/>
+      <name>Recover Adult Autopsy</name>
+      <filterExecutors>false</filterExecutors>
+      <filterQueue>false</filterQueue>
+      <properties class="hudson.model.View$PropertyList"/>
+      <jobNames>
+        <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
+        <string>Curation - Curate Recover Adult Files For Dataset</string>
+        <string>Curation - Export Recover Adult, Autopsy Dataset</string>
+        <string>Curation - Export Recover Adult, Autopsy Metadata</string>
+        <string>Curation - RECOVER Adult, Autopsy Import raw data</string>
+        <string>Curation - RECOVER Adult, Autopsy Pipeline</string>
+      </jobNames>
+      <jobFilters/>
+      <columns>
+        <hudson.views.StatusColumn/>
+        <hudson.views.WeatherColumn/>
+        <hudson.views.JobColumn/>
+        <hudson.views.LastSuccessColumn/>
+        <hudson.views.LastFailureColumn/>
+        <hudson.views.LastDurationColumn/>
+        <hudson.views.BuildButtonColumn/>
+      </columns>
+      <recurse>false</recurse>
+    </listView>
   </views>
   <primaryView>Pipeline - Phenotype Ingestion With Subject Multi</primaryView>
   <slaveAgentPort>50000</slaveAgentPort>
