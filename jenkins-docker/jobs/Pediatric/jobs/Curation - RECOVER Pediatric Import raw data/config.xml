@@ -4,6 +4,10 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
+      <doNotScan>false</doNotScan>
+    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
     <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
@@ -39,10 +43,6 @@
         </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
-    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
-    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
-      <doNotScan>false</doNotScan>
-    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
   </properties>
   <scm class="hudson.scm.NullSCM"/>
   <canRoam>true</canRoam>
@@ -68,15 +68,15 @@ do
   if [[ ${DATASET_NAME} == *&apos;Caregiver&apos;* ]]; then
   export DATASET_SUFFIX=&apos;_ca&apos;;
   export file_substring=&apos;pediatriccaregiver&apos;;
-  export subfolder=&apos;PediatricCaregiver/&apos;;
+  export subfolder=&apos;data/PediatricCaregiver/clinical/&apos;;
   export 
   elif [[ ${DATASET_NAME} == *&apos;Congenital&apos;* ]]; then
   export DATASET_SUFFIX=&apos;_co&apos;;
   export file_substring=&apos;pediatriccongenital&apos;;
-  export subfolder=&apos;PediatricCongenital/&apos;;
+  export subfolder=&apos;data/PediatricCongenital/clinical/&apos;;
   else
   export file_substring=&apos;pediatric&apos;;
-  export subfolder=&apos;Pediatric/&apos;;
+  export subfolder=&apos;data/Pediatric/clinical/&apos;;
   fi
   
   aws sts assume-role --role-arn arn:aws:iam::714862078411:role/nih-nhlbi-TopMed-EC2Access-S3 --role-session-name &quot;get-files&quot; &gt; assume-role-output.txt
