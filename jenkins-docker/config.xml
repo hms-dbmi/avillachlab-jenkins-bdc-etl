@@ -574,6 +574,7 @@
         <string>Curation - Export Recover Adult, Autopsy Metadata</string>
         <string>Curation - RECOVER Adult, Autopsy Import raw data</string>
         <string>Curation - RECOVER Adult, Autopsy Pipeline</string>
+        <string>WIP - Curation - Curate Recover Adult Files For Dataset</string>
       </jobNames>
       <jobFilters/>
       <columns>
