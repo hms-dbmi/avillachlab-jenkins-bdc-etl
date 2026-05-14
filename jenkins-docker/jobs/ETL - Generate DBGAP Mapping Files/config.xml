@@ -96,7 +96,7 @@ while read abv_name stdy_id stdy_type data_ready data_processed has_multi
 do
   if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]] &amp;&amp; [[ ${data_processed,,} == &quot;no&quot; ]]; then
 
-	   if [[ ${stdy_type,,} == &quot;biolincc&quot; ]] || [[ ${stdy_type,,} == &quot;parent&quot; ]] || [[ ${stdy_type,,} == &quot;topmed&quot; ]] || [[ ${stdy_type,,} == &quot;substudy&quot; ]] || [[ ${stdy_type,,} == &quot;compliant&quot; ]]; then
+	   if [[ ${stdy_type,,} == &quot;parent&quot; ]] || [[ ${stdy_type,,} == &quot;topmed&quot; ]] || [[ ${stdy_type,,} == &quot;substudy&quot; ]] || [[ ${stdy_type,,} == &quot;compliant&quot; ]]; then
 
         ### assume etl role
         aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt

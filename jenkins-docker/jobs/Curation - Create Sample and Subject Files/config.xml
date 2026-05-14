@@ -35,6 +35,10 @@
           <description>Used as a fall back in the cases we can&apos;t pull the study summary</description>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>dmc_buckets</name>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>
@@ -48,7 +52,7 @@
     </userRemoteConfigs>
     <branches>
       <hudson.plugins.git.BranchSpec>
-        <name>*/main</name>
+        <name>*/mulit-mapping-remove-api-fallback</name>
       </hudson.plugins.git.BranchSpec>
     </branches>
     <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
@@ -67,6 +71,7 @@
       <command>#!/bin/bash
 set -euo pipefail
 
+export DMC_BUCKETS=&quot;${dmc_buckets}&quot;
 export STUDY_ABBREVIATION=&quot;${study_abbreviation,,}&quot;
 export STUDY_PHS=&quot;${study_phs}&quot;
 export VERSION=&quot;${version}&quot;

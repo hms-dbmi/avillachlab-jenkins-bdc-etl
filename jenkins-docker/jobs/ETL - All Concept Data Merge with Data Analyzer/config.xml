@@ -107,6 +107,8 @@ aws s3 cp --no-progress s3://avillach-73-bdcatalyst-etl/hrmn/completed/HRMN_allC
 
 aws s3 cp --no-progress s3://avillach-73-bdcatalyst-etl/general/completed/GLOBAL_allConcepts_merged.csv beforeRemoval/GLOBAL_allConcepts.csv &amp;
 
+aws s3 cp s3://avillach-73-bdcatalyst-etl/recover_adult/completed/phs003463/phs003463_allConcepts_new_search_with_data_analyzer.ehr.csv beforeRemoval/ --no-progress
+
 wait
 
 CORES=&quot;$(nproc)&quot;          # 16 on r5.4xlarge

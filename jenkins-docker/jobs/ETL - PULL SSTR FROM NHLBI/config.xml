@@ -1,0 +1,132 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description>Pull the bdc-ingest-only bucket and stage it in raw data</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
+      <doNotScan>false</doNotScan>
+    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>buckets</name>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>study_abv_name</name>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>true</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/usr/bin/env bash
+set -euo pipefail
+
+fail() {
+    echo &quot;ERROR: $*&quot; &gt;&amp;2
+    exit 1
+}
+
+BDC_INGESTION_ONLY_PREFIX=&quot;BDC-ingestion-only&quot;
+nhlbi_account_number=&quot;714862078411&quot;
+
+[[ -n &quot;${buckets:-}&quot; ]] || fail &quot;buckets parameter is required&quot;
+[[ -n &quot;${study_abv_name:-}&quot; ]] || fail &quot;study_abv_name parameter is required&quot;
+
+study_abv_name_lower=&quot;${study_abv_name,,}&quot;
+target_s3_uri=&quot;s3://avillach-73-bdcatalyst-etl/${study_abv_name_lower}/rawData/&quot;
+
+mapfile -t bucket_array &lt;&lt;&lt; &quot;${buckets}&quot;
+
+for bucket in &quot;${bucket_array[@]}&quot;; do
+    bucket=&quot;$(echo &quot;${bucket}&quot; | xargs)&quot;
+
+    if [[ -z &quot;${bucket}&quot; ]]; then
+        continue
+    fi
+
+    if [[ ! &quot;${bucket}&quot; =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]]; then
+        fail &quot;Invalid S3 bucket name: ${bucket}&quot;
+    fi
+
+    echo &quot;Processing bucket: ${bucket}&quot;
+
+    rm -rf ./stage
+    mkdir -p ./stage
+
+    aws sts assume-role \
+        --role-arn &quot;arn:aws:iam::${nhlbi_account_number}:role/nih-nhlbi-TopMed-EC2Access-S3&quot; \
+        --role-session-name &quot;get-phenotypic-data&quot; \
+        &gt; assume-role-output.json \
+        || fail &quot;Failed to assume NHLBI source role&quot;
+
+    export AWS_ACCESS_KEY_ID
+    export AWS_SECRET_ACCESS_KEY
+    export AWS_SESSION_TOKEN
+
+    AWS_ACCESS_KEY_ID=&quot;$(jq -r &apos;.Credentials.AccessKeyId&apos; assume-role-output.json)&quot;
+    AWS_SECRET_ACCESS_KEY=&quot;$(jq -r &apos;.Credentials.SecretAccessKey&apos; assume-role-output.json)&quot;
+    AWS_SESSION_TOKEN=&quot;$(jq -r &apos;.Credentials.SessionToken&apos; assume-role-output.json)&quot;
+
+    [[ -n &quot;${AWS_ACCESS_KEY_ID}&quot; &amp;&amp; &quot;${AWS_ACCESS_KEY_ID}&quot; != &quot;null&quot; ]] || fail &quot;Missing source AWS_ACCESS_KEY_ID&quot;
+    [[ -n &quot;${AWS_SECRET_ACCESS_KEY}&quot; &amp;&amp; &quot;${AWS_SECRET_ACCESS_KEY}&quot; != &quot;null&quot; ]] || fail &quot;Missing source AWS_SECRET_ACCESS_KEY&quot;
+    [[ -n &quot;${AWS_SESSION_TOKEN}&quot; &amp;&amp; &quot;${AWS_SESSION_TOKEN}&quot; != &quot;null&quot; ]] || fail &quot;Missing source AWS_SESSION_TOKEN&quot;
+
+    aws s3 cp &quot;s3://${bucket}/${BDC_INGESTION_ONLY_PREFIX}/&quot; ./stage/ \
+        --recursive \
+        --no-progress \
+        || fail &quot;Failed to copy from s3://${bucket}/${BDC_INGESTION_ONLY_PREFIX}/&quot;
+
+    unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
+    aws sts assume-role \
+        --duration-seconds 900 \
+        --role-arn &quot;arn:aws:iam::736265540791:role/dbgap-etl&quot; \
+        --role-session-name &quot;s3-test&quot; \
+        &gt; assume-role-output.json \
+        || fail &quot;Failed to assume target dbgap-etl role&quot;
+
+    AWS_ACCESS_KEY_ID=&quot;$(jq -r &apos;.Credentials.AccessKeyId&apos; assume-role-output.json)&quot;
+    AWS_SECRET_ACCESS_KEY=&quot;$(jq -r &apos;.Credentials.SecretAccessKey&apos; assume-role-output.json)&quot;
+    AWS_SESSION_TOKEN=&quot;$(jq -r &apos;.Credentials.SessionToken&apos; assume-role-output.json)&quot;
+
+    export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
+    [[ -n &quot;${AWS_ACCESS_KEY_ID}&quot; &amp;&amp; &quot;${AWS_ACCESS_KEY_ID}&quot; != &quot;null&quot; ]] || fail &quot;Missing target AWS_ACCESS_KEY_ID&quot;
+    [[ -n &quot;${AWS_SECRET_ACCESS_KEY}&quot; &amp;&amp; &quot;${AWS_SECRET_ACCESS_KEY}&quot; != &quot;null&quot; ]] || fail &quot;Missing target AWS_SECRET_ACCESS_KEY&quot;
+    [[ -n &quot;${AWS_SESSION_TOKEN}&quot; &amp;&amp; &quot;${AWS_SESSION_TOKEN}&quot; != &quot;null&quot; ]] || fail &quot;Missing target AWS_SESSION_TOKEN&quot;
+
+    aws s3 cp ./stage/ &quot;${target_s3_uri}&quot; \
+        --exclude &quot;*&quot; \
+        --include &quot;sstr*&quot; \
+        --include &quot;*summary.json&quot; \
+        --recursive \
+        --no-progress \
+        || fail &quot;Failed to copy staged files to ${target_s3_uri}&quot;
+
+    unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
+    rm -rf ./stage
+done</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers/>
+</project>

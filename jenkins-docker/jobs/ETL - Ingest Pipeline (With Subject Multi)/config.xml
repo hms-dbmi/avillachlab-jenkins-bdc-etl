@@ -132,18 +132,54 @@ pipeline {
 
                 script {
                     def inputs = readCSV file: &apos;Managed_Inputs.csv&apos;, format: CSVFormat.DEFAULT.withHeader()
-                    def inputCount = 0
+                    def batchSize = 4
+                    def jobs = []
+
                     inputs.each() {
-                        if (it[&apos;Data is ready to process&apos;] == &apos;Yes&apos; &amp; it[&quot;Data Processed&quot;] == &apos;No&apos;) {
-                            def stdy_id = it[&quot;Study Identifier&quot;]
-                            build job: &apos;Curation - Create Sample and Subject Files&apos;, parameters: [
-                                        string(name: &apos;study_abbreviation&apos;, value: it[&apos;Study Abbreviated Name&apos;]),
-                                        string(name: &apos;study_phs&apos;, value: it[&apos;Study Identifier&apos;]),
-                                        string(name: &apos;version&apos;, value: it[&apos;Version&apos;]),
-                                        string(name: &apos;phase&apos;, value: it[&apos;Phase&apos;]),
-                                        string(name: &apos;study_full_name&apos;, value: it[&apos;Study Full Name&apos;])
-                                ]
+                        if (it[&apos;Data is ready to process&apos;] == &apos;Yes&apos; &amp;&amp; it[&quot;Data Processed&quot;] == &apos;No&apos;) {
+                            jobs &lt;&lt; [
+                                    stdy_id           : it[&quot;Study Identifier&quot;],
+                                    study_abbreviation: it[&apos;Study Abbreviated Name&apos;],
+                                    version           : it[&apos;Version&apos;],
+                                    phase             : it[&apos;Phase&apos;],
+                                    dmc_buckets       : it[&apos;Pheno Ingest buckets&apos;],
+                                    study_full_name   : it[&apos;Study Full Name&apos;]
+                            ]
                         }
+                    }
+
+                    if (jobs) {
+                        echo &quot;Queued ${jobs.size()} study job(s) in batches of ${batchSize}&quot;
+
+                        jobs.collate(batchSize).eachWithIndex { batch, batchIndex -&gt;
+                            echo &quot;Running batch ${batchIndex + 1} with ${batch.size()} job(s)&quot;
+
+                            def parallelJobs = [:]
+
+                            batch.each { jobDef -&gt;
+                                def stdy_id = jobDef.stdy_id
+                                def study_abbreviation = jobDef.study_abbreviation
+                                def version = jobDef.version
+                                def phase = jobDef.phase
+                                def dmc_buckets = jobDef.dmc_buckets
+                                def study_full_name = jobDef.study_full_name
+
+                                parallelJobs[&quot;Create Sample and Subject Files - ${stdy_id}&quot;] = {
+                                    build job: &apos;Curation - Create Sample and Subject Files&apos;, parameters: [
+                                            string(name: &apos;study_abbreviation&apos;, value: study_abbreviation),
+                                            string(name: &apos;study_phs&apos;, value: stdy_id),
+                                            string(name: &apos;version&apos;, value: version),
+                                            string(name: &apos;phase&apos;, value: phase),
+                                            string(name: &apos;dmc_buckets&apos;, value: dmc_buckets),
+                                            string(name: &apos;study_full_name&apos;, value: study_full_name)
+                                    ]
+                                }
+                            }
+
+                            parallel parallelJobs + [failFast: true]
+                        }
+                    } else {
+                        echo &apos;No studies ready to process.&apos;
                     }
                 }
             }

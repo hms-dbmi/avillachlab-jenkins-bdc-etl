@@ -251,6 +251,7 @@
         <string>ETL - Archive Previous Study Version</string>
         <string>ETL - HPDS Javabin generation pipeline</string>
         <string>ETL - Ingest Pipeline (With Subject Multi)</string>
+        <string>ETL - PULL SSTR FROM NHLBI</string>
         <string>ETL - Update Facet Configuration</string>
         <string>ETL - Update Managed Inputs</string>
         <string>pg_version</string>
