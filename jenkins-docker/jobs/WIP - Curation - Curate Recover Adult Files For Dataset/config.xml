@@ -96,7 +96,12 @@
     <hudson.tasks.Shell>
       <command>#!/bin/bash
 set -o pipefail
-cd &quot;_scripts/recover/job_scripts_adult&quot;
+if [[ &quot;${DATASET_NAME,,}&quot; == *&quot;autopsy&quot;* ]]; then
+    SCRIPT_DIR=&quot;_scripts/recover/job_scripts_autopsy&quot;
+else
+    SCRIPT_DIR=&quot;_scripts/recover/job_scripts_adult&quot;
+fi
+cd &quot;$SCRIPT_DIR&quot;
 
 conn_user=&apos;postgres&apos;
 conn_pass=`aws secretsmanager get-secret-value --secret-id &apos;rds!db-2b115560-c8c4-4cec-8418-537a35f9c192&apos; --region &apos;us-east-1&apos; --query SecretString --output text | jq -r .password`
@@ -135,12 +140,17 @@ if ${answerdata}; then
 fi
 
 if ${biospecimens}; then
-	  PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
-    -f biospecimens/get_biospecimen_rollup.sql &amp;&amp;  \
-  PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
-    -f biospecimens/get_biospecimens_subtables.sql &amp;&amp;  \
-    PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
-    -f biospecimens/biospecimens_metadata_builder.sql &amp;
+    if [[ &quot;${DATASET_NAME,,}&quot; == *&quot;autopsy&quot;* ]]; then
+        PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+          -f biospecimens/process_autopsy_biospecimens.sql &amp;
+    else
+        PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+          -f biospecimens/get_biospecimen_rollup.sql &amp;&amp;  \
+        PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+          -f biospecimens/get_biospecimens_subtables.sql &amp;&amp;  \
+        PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
+          -f biospecimens/biospecimens_metadata_builder.sql &amp;
+    fi
 fi
 
 if ${demographics}; then
@@ -185,6 +195,7 @@ wait;
 echo &quot;completed curation, moving to merge meta stage&quot;;
 PGPASSWORD=&quot;$conn_pass&quot; psql --quiet --host=&quot;$database_psql_host_address&quot; --port=&quot;5432&quot; --dbname=&quot;$DB&quot; -U $conn_user \
       -f metadata_curation/dataset_metadata_merge.sql
+
 </command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
