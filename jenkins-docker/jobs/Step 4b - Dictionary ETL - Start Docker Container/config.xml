@@ -17,7 +17,7 @@
         <hudson.model.StringParameterDefinition>
           <name>git_hash</name>
           <description>main</description>
-          <defaultValue>ALS-10272-timestamp</defaultValue>
+          <defaultValue>main</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
       </parameterDefinitions>

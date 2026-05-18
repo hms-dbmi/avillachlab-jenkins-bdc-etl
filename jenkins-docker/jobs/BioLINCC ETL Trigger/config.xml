@@ -1,8 +1,7 @@
-<?xml version='1.1' encoding='UTF-8'?>
-<project>
+<?xml version="1.1" encoding="UTF-8"?><project>
   <actions/>
   <description>Polls bdc-etl-curation for changes to biolincc/configs/target_s3_buckets.txt.
-Triggers &quot;BioLINCC ETL Pipeline&quot; when the bucket list changes.
+Triggers "BioLINCC ETL Pipeline" when the bucket list changes.
 
 This job does no build work — it only detects changes and triggers the pipeline.</description>
   <keepDependencies>false</keepDependencies>
@@ -21,10 +20,6 @@ This job does no build work — it only detects changes and triggers the pipelin
         </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
-    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
-      <doNotScan>false</doNotScan>
-    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
-    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
   </properties>
   <scm class="hudson.plugins.git.GitSCM" plugin="git@5.8.1">
     <configVersion>2</configVersion>
@@ -44,7 +39,7 @@ This job does no build work — it only detects changes and triggers the pipelin
     <extensions>
       <hudson.plugins.git.extensions.impl.PathRestriction>
         <includedRegions>biolincc/configs/target_s3_buckets.txt</includedRegions>
-        <excludedRegions></excludedRegions>
+        <excludedRegions/>
       </hudson.plugins.git.extensions.impl.PathRestriction>
     </extensions>
   </scm>
@@ -60,7 +55,43 @@ This job does no build work — it only detects changes and triggers the pipelin
     </hudson.triggers.SCMTrigger>
   </triggers>
   <concurrentBuild>false</concurrentBuild>
-  <builders/>
+  <builders>
+    <hudson.plugins.parameterizedtrigger.TriggerBuilder plugin="parameterized-trigger@2.47">
+      <configs>
+        <hudson.plugins.parameterizedtrigger.BlockableBuildTriggerConfig>
+          <configs>
+            <hudson.plugins.parameterizedtrigger.PredefinedBuildParameters>
+              <properties>BRANCH=${BRANCH}</properties>
+            </hudson.plugins.parameterizedtrigger.PredefinedBuildParameters>
+          </configs>
+          <projects>BioLINCC ETL Pipeline</projects>
+          <condition>ALWAYS</condition>
+          <triggerWithNoParameters>false</triggerWithNoParameters>
+          <triggerFromChildProjects>false</triggerFromChildProjects>
+          <block>
+            <buildStepFailureThreshold>
+              <name>FAILURE</name>
+              <ordinal>2</ordinal>
+              <color>RED</color>
+              <completeBuild>true</completeBuild>
+            </buildStepFailureThreshold>
+            <unstableThreshold>
+              <name>UNSTABLE</name>
+              <ordinal>1</ordinal>
+              <color>YELLOW</color>
+              <completeBuild>true</completeBuild>
+            </unstableThreshold>
+            <failureThreshold>
+              <name>FAILURE</name>
+              <ordinal>2</ordinal>
+              <color>RED</color>
+              <completeBuild>true</completeBuild>
+            </failureThreshold>
+          </block>
+        </hudson.plugins.parameterizedtrigger.BlockableBuildTriggerConfig>
+      </configs>
+    </hudson.plugins.parameterizedtrigger.TriggerBuilder>
+  </builders>
   <publishers/>
   <buildWrappers/>
 </project>

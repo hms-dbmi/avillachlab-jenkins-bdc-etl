@@ -1,28 +1,16 @@
 <?xml version='1.1' encoding='UTF-8'?>
 <project>
   <actions/>
-  <description>BioLINCC ETL Pipeline — end-to-end curation run.&#xd;
-&#xd;
-Runs: make all (clean → build → deploy → status)&#xd;
-Blocks until the pipeline completes or fails on the EC2 Spot instance.&#xd;
-&#xd;
-Auto-triggers on any push to the deploy/biolincc branch (SCM polling).&#xd;
+  <description>BioLINCC ETL Pipeline — end-to-end curation run.
+
+Runs: make all (clean → build → deploy → status)
+Blocks until the pipeline completes or fails on the EC2 Spot instance.
+
+Auto-triggers when biolincc/configs/target_s3_buckets.txt changes on deploy/biolincc (SCM polling).
+Code-only pushes to deploy/biolincc (e.g. hot patches) do NOT auto-trigger — use Build with Parameters.
 Also runnable manually via Build with Parameters for sandbox testing.</description>
   <keepDependencies>false</keepDependencies>
   <properties>
-    <jenkins.model.BuildDiscarderProperty>
-      <strategy class="hudson.tasks.LogRotator">
-        <daysToKeep>30</daysToKeep>
-        <numToKeep>30</numToKeep>
-        <artifactDaysToKeep>1</artifactDaysToKeep>
-        <artifactNumToKeep>1</artifactNumToKeep>
-        <removeLastBuild>false</removeLastBuild>
-      </strategy>
-    </jenkins.model.BuildDiscarderProperty>
-    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
-    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
-      <doNotScan>false</doNotScan>
-    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
     <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
@@ -42,6 +30,7 @@ Set to a feature branch for manual sandbox runs.</description>
 
 Example:
 nih-nhlbi-bdc-biolincc-disc-phs004495-v1-r1-c1</description>
+          <defaultValue></defaultValue>
           <trim>false</trim>
         </hudson.model.TextParameterDefinition>
         <hudson.model.BooleanParameterDefinition>
@@ -51,6 +40,10 @@ nih-nhlbi-bdc-biolincc-disc-phs004495-v1-r1-c1</description>
         </hudson.model.BooleanParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
+      <doNotScan>false</doNotScan>
+    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
   </properties>
   <scm class="hudson.plugins.git.GitSCM" plugin="git@5.8.1">
     <configVersion>2</configVersion>
@@ -68,6 +61,10 @@ nih-nhlbi-bdc-biolincc-disc-phs004495-v1-r1-c1</description>
     <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
     <submoduleCfg class="empty-list"/>
     <extensions>
+      <hudson.plugins.git.extensions.impl.PathRestriction>
+        <includedRegions>biolincc/configs/target_s3_buckets.txt</includedRegions>
+        <excludedRegions></excludedRegions>
+      </hudson.plugins.git.extensions.impl.PathRestriction>
       <hudson.plugins.git.extensions.impl.CleanBeforeCheckout>
         <deleteUntrackedNestedRepositories>false</deleteUntrackedNestedRepositories>
       </hudson.plugins.git.extensions.impl.CleanBeforeCheckout>
@@ -80,7 +77,7 @@ nih-nhlbi-bdc-biolincc-disc-phs004495-v1-r1-c1</description>
   <jdk>(System)</jdk>
   <triggers>
     <hudson.triggers.SCMTrigger>
-      <spec>H/15 * * * *</spec>
+      <spec>* * * * *</spec>
       <ignorePostCommitHooks>false</ignorePostCommitHooks>
     </hudson.triggers.SCMTrigger>
   </triggers>
@@ -91,6 +88,14 @@ nih-nhlbi-bdc-biolincc-disc-phs004495-v1-r1-c1</description>
 set -euo pipefail
 [ -f ~/.bashrc ] &amp;&amp; source ~/.bashrc || true
 cd biolincc
+
+# === Build Context ===
+echo &quot;=================================================&quot;
+echo &quot;  Triggered by: $(git log -1 --format=&apos;%an &lt;%ae&gt;&apos;)&quot;
+echo &quot;  Commit:       $(git log -1 --format=&apos;%h&apos;) — $(git log -1 --format=&apos;%s&apos;)&quot;
+echo &quot;  Branch:       ${BRANCH:-deploy/biolincc}&quot;
+echo &quot;  Build:        ${BUILD_URL:-local}&quot;
+echo &quot;=================================================&quot;
 
 if [ -n &quot;${BUCKETS:-}&quot; ]; then
   echo &quot;$BUCKETS&quot; &gt; configs/target_s3_buckets.txt
@@ -105,6 +110,42 @@ if [ &quot;${Destroy:-false}&quot; = &quot;true&quot; ]; then
   make init &amp;&amp; make destroy-force
 else
   make all
+  PIPELINE_STATUS=$?
+
+  # === SES Email Notification ===
+  # SES_SENDER defaults to noreply@hms.harvard.edu; override via Jenkins job env var.
+  SES_SENDER=&quot;${SES_SENDER:-thomas_desain@hms.harvard.edu}&quot;
+  GIT_COMMITTER_EMAIL=$(git log -1 --format=&apos;%ae&apos;)
+  ALL_RECIPIENTS=&quot;$GIT_COMMITTER_EMAIL&quot;
+  if [ -n &quot;${SES_RECIPIENTS:-}&quot; ]; then
+    ALL_RECIPIENTS=&quot;${GIT_COMMITTER_EMAIL},${SES_RECIPIENTS}&quot;
+  fi
+
+  rm -rf /tmp/etl-reports &amp;&amp; mkdir -p /tmp/etl-reports
+  # Assume the 73-account role to read curation reports written by the pipeline
+  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  _CREDS=$(aws sts assume-role \
+    --role-arn arn:aws:iam::736265540791:role/dbgap-etl \
+    --role-session-name s3-sync-reports \
+    --duration-seconds 900 --output json)
+  export AWS_ACCESS_KEY_ID=$(echo &quot;$_CREDS&quot;     | jq -r &apos;.Credentials.AccessKeyId&apos;)
+  export AWS_SECRET_ACCESS_KEY=$(echo &quot;$_CREDS&quot; | jq -r &apos;.Credentials.SecretAccessKey&apos;)
+  export AWS_SESSION_TOKEN=$(echo &quot;$_CREDS&quot;     | jq -r &apos;.Credentials.SessionToken&apos;)
+  unset _CREDS
+  aws s3 sync &quot;s3://avillach-73-bdcatalyst-etl/__pipeline_runs__/mvp_work/curation_reports/current/&quot; \
+    /tmp/etl-reports/ --no-progress
+  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
+  export PIPELINE_STATUS ALL_RECIPIENTS SES_SENDER
+  if python3 scripts/notify.py; then
+    : # notification outcome already logged by notify.py
+  else
+    echo &quot;[notify] WARNING: notification script exited non-zero (Python crash or import error)&quot;
+    echo &quot;[notify] Pipeline result is unaffected.&quot;
+    echo &quot;[notify] Re-run manually: cd biolincc &amp;&amp; python3 scripts/notify.py&quot;
+  fi
+
+  exit $PIPELINE_STATUS
 fi</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
