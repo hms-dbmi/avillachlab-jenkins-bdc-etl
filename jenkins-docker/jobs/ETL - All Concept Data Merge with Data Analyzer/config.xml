@@ -83,6 +83,17 @@ aws s3 cp --quiet s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_sear
 
 csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Study Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot; Managed_Inputs.csv &gt; inputs.csv
 
+#### Bad stop gap to merge ehr with clinical for recover. - TD #####
+### the ehr was not being merged. 
+aws s3 cp \
+  s3://avillach-73-bdcatalyst-etl/recover_adult/completed/phs003463/phs003463_allConcepts_new_search_with_data_analyzer.ehr.csv \
+  beforeRemoval/ \
+  --no-progress
+
+cat beforeRemoval/phs003463_allConcepts_new_search_with_data_analyzer.ehr.csv \
+  &gt;&gt; beforeRemoval/phs003463_allConcepts_new_search_with_data_analyzer.csv000 \
+  &amp;&amp; rm beforeRemoval/phs003463_allConcepts_new_search_with_data_analyzer.ehr.csv
+#### End of bad stop gap
 
 IFS=&apos;,&apos;
 [ ! -f inputs.csv ]
@@ -107,7 +118,7 @@ aws s3 cp --no-progress s3://avillach-73-bdcatalyst-etl/hrmn/completed/HRMN_allC
 
 aws s3 cp --no-progress s3://avillach-73-bdcatalyst-etl/general/completed/GLOBAL_allConcepts_merged.csv beforeRemoval/GLOBAL_allConcepts.csv &amp;
 
-aws s3 cp s3://avillach-73-bdcatalyst-etl/recover_adult/completed/phs003463/phs003463_allConcepts_new_search_with_data_analyzer.ehr.csv beforeRemoval/ --no-progress
+
 
 wait
 
