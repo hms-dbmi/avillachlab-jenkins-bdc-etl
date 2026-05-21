@@ -597,9 +597,14 @@
       <properties class="hudson.model.View$PropertyList"/>
       <jobNames>
         <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
+        <string>Dictionary ETL - Curated metadata.json to dictionary db</string>
         <string>Dictionary ETL - Export DB</string>
+        <string>Dictionary ETL - Facet Loader</string>
+        <string>Dictionary ETL - Facet Loader Clear Facets</string>
+        <string>Dictionary ETL - Facet Pipeline</string>
         <string>Dictionary ETL - Subject Type Facets</string>
         <string>ETL - Add Subject Type to Study Metadata</string>
+        <string>ETL - Update Facet Configuration</string>
         <string>Step 4b - Dictionary ETL - Start Docker Container</string>
       </jobNames>
       <jobFilters/>

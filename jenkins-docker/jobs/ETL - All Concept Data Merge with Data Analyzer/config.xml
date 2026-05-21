@@ -51,7 +51,7 @@
   <triggers>
     <jenkins.triggers.ReverseBuildTrigger>
       <spec></spec>
-      <upstreamProjects>ETL - Merge Global Concepts</upstreamProjects>
+      <upstreamProjects>UTILITY - ROLLBACK_STUDY_ALL_CONCEPT, ETL - Ingest Pipeline (With Subject Multi)</upstreamProjects>
       <threshold>
         <name>SUCCESS</name>
         <ordinal>0</ordinal>
