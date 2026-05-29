@@ -57,8 +57,13 @@
   <builders>
     <hudson.tasks.Shell>
       <command>#!/bin/bash
-#set -euo pipefail
 
+# Most of this legacy script does not currently run under strict Bash mode.
+# Strict mode is enabled only around the Java process because pipefail/errexit
+# behavior is only validated there for now.
+set +e
+set +u
+set +o pipefail
 
 ### assume etl role
 aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
@@ -113,6 +118,8 @@ iconv -f 8859_1 -t UTF-8//TRANSLIT &quot;$file&quot; -o data/decoded/$(basename 
 done
 
 cp data/* data/decoded/
+
+set -euo pipefail
 
 java -jar jars/HPDSPatientNumTracker.jar
 
