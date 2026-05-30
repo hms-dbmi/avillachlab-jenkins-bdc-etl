@@ -570,10 +570,8 @@
       <jobNames>
         <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
         <string>Curation - Curate Recover Adult Files For Dataset</string>
-        <string>Curation - Export Recover Adult,Autopsy Dataset</string>
-        <string>Curation - Export Recover Adult,Autopsy Metadata</string>
-        <string>Curation - RECOVER Adult,Autopsy Import raw data</string>
-        <string>Curation - RECOVER Adult,Autopsy Pipeline</string>
+        <string>Curation - Export Recover Adult, Autopsy Dataset</string>
+        <string>Curation - Export Recover Adult, Autopsy Metadata</string>
         <string>WIP - Curation - Curate Recover Adult Files For Dataset</string>
       </jobNames>
       <jobFilters/>

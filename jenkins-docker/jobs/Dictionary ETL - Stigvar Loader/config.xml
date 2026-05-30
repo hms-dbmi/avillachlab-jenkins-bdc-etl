@@ -61,7 +61,8 @@ api=&apos;http://172.20.0.2:8086/api&apos;
 csvcut -c 1 conceptsToRemove.txt &gt; stigvars.txt
 #sed -i &apos;s/\\/\\\\/g&apos; conceptsWLineEndings.txt
 curl  --fail --retry 5 --retry-connrefused  --retry-delay 0  --request  PUT --header &apos;Content-Type: text/plain&apos; \
-          --data-binary @stigvars.txt &quot;${api}/concept/metadata/stigvars?value=true&quot; &gt; /dev/null; exit $?</command>
+          --data-binary @stigvars.txt &quot;${api}/concept/metadata/stigvars?value=true&quot;
+          #&gt; /dev/null; exit $?</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
     <hudson.tasks.Shell>
