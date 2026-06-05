@@ -121,6 +121,32 @@ pipeline {
                 script {
                     build job: &apos;ETL - Import Metadata From git&apos;
                 }
+                withAWS(role: &apos;dbgap-etl&apos;, roleAccount: &apos;736265540791&apos;, duration: 3600, roleSessionName: &apos;subject-multi-pipeline&apos;) {
+                    s3Download(file: &apos;Managed_Inputs.csv&apos;, bucket: &apos;avillach-73-bdcatalyst-etl&apos;, path: &apos;general/resources/Managed_Inputs.csv&apos;, force: true)
+                }
+                script {
+                  
+                    def inputs = readCSV file: &apos;Managed_Inputs.csv&apos;, format: CSVFormat.DEFAULT.withHeader()
+                    def subjectRuns = [:]
+                    def inputCount = 0
+                    inputs.each() {
+                       if (
+                                it[&apos;Data is ready to process&apos;] == &apos;Yes&apos; &amp; it[&quot;Data Processed&quot;] == &apos;No&apos; &amp; it[&quot;Has Multi&quot;] == &apos;Yes&apos;
+                                        &amp; !(it[&apos;Subject Type(s)&apos;].equalsIgnoreCase(&apos;multiple&apos;))
+                        ) {
+                            def stdy_id = it[&quot;Study Identifier&quot;]		   
+                            subjectRuns[&quot;subjectRuns${stdy_id}&quot;] = {
+                                build job: &apos;ETL - Add Subject Type to Study Metadata&apos;,
+                                        parameters: [
+                                                string(name: &apos;study_abv&apos;, value: it[&apos;Study Abbreviated Name&apos;]),
+                                                string(name: &apos;study_id&apos;, value: it[&apos;Study Identifier&apos;]),
+                                                string(name: &apos;subject_type&apos;, value: it[&quot;Subject Type(s)&quot;])
+                                        ]
+                            }
+                        }
+                    }
+                    parallel subjectRuns
+                }
             }
         }
 

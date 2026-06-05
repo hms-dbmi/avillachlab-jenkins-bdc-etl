@@ -81,7 +81,8 @@ for bucket_s3_name in ${bucket_s3_names}; do
 
   # Download files
   aws s3 cp --recursive &quot;s3://${bucket_s3_name}/&quot; downloads/ \
-    --exclude &quot;*&quot; --include &quot;*.txt*&quot; --exclude &quot;*.gtc.*&quot; --exclude &quot;*phg00*&quot; --exclude &quot;*genotype-BAF*&quot; --exclude &quot;SOL_Metabochip*&quot; --include &quot;*.xml*&quot; --no-progress
+    --exclude &quot;*&quot; --include &quot;*.txt*&quot; --exclude &quot;*.gtc.*&quot; --exclude &quot;*phg00*&quot; --exclude &quot;*genotype-BAF*&quot; \
+    --exclude &quot;SOL_Metabochip*&quot; --include &quot;*.xml*&quot; --no-progress
 
   echo &quot;Flattening and decompressing files from ${bucket_s3_name}...&quot;
   
@@ -89,8 +90,8 @@ for bucket_s3_name in ${bucket_s3_names}; do
   # This replaces the nested while loop with a more robust version
   find downloads/ -type f \( -iname &quot;*.txt*&quot; -o -iname &quot;*.xml*&quot; \) -print0 | while IFS= read -r -d &apos;&apos; f; do
     rel=&quot;${f#downloads/}&quot;
-    safe_rel=&quot;${rel//\//__}&quot; # Replace slashes with double underscores
-    
+    #safe_rel=&quot;${rel//\//__}&quot; # Replace slashes with double underscores
+    safe_rel=&quot;${rel##*/}&quot; #flatten the rel
     if [[ &quot;$safe_rel&quot; == *.gz ]]; then
         # Remove .gz extension for the flat destination
         out=&quot;${FLAT_DIR}/${safe_rel%.gz}&quot;
