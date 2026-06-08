@@ -417,6 +417,7 @@
         <string>Curation - Export Recover Adult,Autopsy Metadata</string>
         <string>Curation - RECOVER Adult,Autopsy Import raw data</string>
         <string>Curation - RECOVER Adult,Autopsy Pipeline</string>
+        <string>Curation - RECOVER EHR Cohorts</string>
         <string>Curation - Update RECOVER Adult Derived Dictionaries</string>
         <string>EHR RUNNER</string>
         <string>Pediatric</string>
