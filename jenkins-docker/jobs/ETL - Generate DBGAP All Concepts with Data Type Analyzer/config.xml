@@ -55,6 +55,10 @@
       <command>#!/usr/bin/env bash
 set -euo pipefail
 
+# Count of studies that failed to process. Survives the loop because the while
+# loop reads from a process substitution (not a pipe), so it runs in this shell.
+FAILED_STUDIES=0
+
 # Simple AWS S3 optimizations (keeps aws s3 cp)
 # - Prefer many small concurrent S3 requests (helps on high-latency links)
 # - Use adaptive retry mode for transient throttling
@@ -91,6 +95,9 @@ cleanup() {
 
   if [[ $rc -eq 0 ]]; then
     log &quot;EXIT rc=0 (success). Cleaning AWS env vars.&quot;
+  elif [[ $rc -eq 3 ]]; then
+    # Sentinel: the run completed but one or more studies failed (Jenkins UNSTABLE).
+    warn &quot;EXIT rc=3 (completed with ${FAILED_STUDIES:-?} failed study(ies)). Cleaning AWS env vars.&quot;
   else
     error &quot;EXIT rc=${rc} at line=${line} cmd=${cmd}. Cleaning AWS env vars.&quot;
   fi
@@ -347,10 +354,36 @@ while IFS=&apos;,&apos; read -r abv_name stdy_id stdy_type data_ready data_proce
   data_processed=&quot;${data_processed%\&quot;}&quot;; data_processed=&quot;${data_processed#\&quot;}&quot;
   has_multi=&quot;${has_multi%\&quot;}&quot;; has_multi=&quot;${has_multi#\&quot;}&quot;
 
-  process_study &quot;$abv_name&quot; &quot;$stdy_id&quot; &quot;$stdy_type&quot; &quot;$data_ready&quot; &quot;$data_processed&quot; &quot;$has_multi&quot;
+  # Run each study isolated in a subshell so one study&apos;s failure can&apos;t abort the
+  # whole run. The subshell re-arms `set -euo pipefail`, so process_study still
+  # aborts at its first failing step (this MUST stay inline -- wrapping it in a
+  # helper called from `if`/`||` would silently disable errexit inside the
+  # function and let a failed step be reported as success).
+  set +e
+  ( set -euo pipefail; process_study &quot;$abv_name&quot; &quot;$stdy_id&quot; &quot;$stdy_type&quot; &quot;$data_ready&quot; &quot;$data_processed&quot; &quot;$has_multi&quot; )
+  rc=$?
+  set -e
+
+  if [[ &quot;$rc&quot; -ne 0 ]]; then
+    error &quot;Study ${abv_name} ${stdy_id} failed to process (rc=${rc}); continuing to next study&quot;
+    echo &quot;Study ${abv_name} (${stdy_id}) failed to process (rc=${rc})&quot; &gt;&gt; review_log.txt
+    FAILED_STUDIES=$((FAILED_STUDIES + 1))
+  fi
 done &lt; &lt;(tail -n +2 inputs.csv | csvformat -U 1)
 
-log &quot;All studies processed&quot;</command>
+log &quot;All studies processed&quot;
+
+# Exit-code contract for the Jenkins pipeline:
+#   0  -&gt; every study processed cleanly        (build SUCCESS)
+#   3  -&gt; finished, but &gt;=1 study failed        (mark build UNSTABLE)
+#   other non-zero -&gt; the script itself died    (build FAILURE)
+if [[ &quot;$FAILED_STUDIES&quot; -ne 0 ]]; then
+  warn &quot;${FAILED_STUDIES} study(ies) failed to process. See review_log.txt for details.&quot;
+  exit 3
+fi
+
+log &quot;All studies succeeded.&quot;
+exit 0</command>
       <configuredLocalRules/>
       <unstableReturn>255</unstableReturn>
     </hudson.tasks.Shell>

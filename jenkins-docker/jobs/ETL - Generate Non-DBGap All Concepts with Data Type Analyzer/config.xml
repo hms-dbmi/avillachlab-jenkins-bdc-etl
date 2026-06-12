@@ -101,7 +101,7 @@ do
 	    if [[ ${stdy_type,,} != &quot;compliant&quot; ]] &amp;&amp; [[ ${stdy_type,,} != &quot;parent&quot; ]] &amp;&amp; [[ ${stdy_type,,} != &quot;topmed&quot; ]] &amp;&amp; [[ ${stdy_type,,} != &quot;substudy&quot; ]]; then
 
       	echo &quot;Processing ${stdy_id} ${abv_name}&quot;
-      
+
 		find data/ -type f -exec rm -rf {} \;
         find data/ -type d -exec rm -rf {} \;
         find processing/ -type f -exec rm -rf {} \;
@@ -113,19 +113,19 @@ do
 
         ### assume etl role
         aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
-        
+
         export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
         export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
         export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-        
+
         aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/decoded_data/ beforeConversion/ --recursive --no-progress
         aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/mappings/${stdy_id}/mapping2.csv data/mapping2.csv --no-progress
 		aws s3 cp s3://avillach-73-bdcatalyst-etl/${abv_name,,}/data/${abv_name^^}_PatientMapping.v2.csv data/ --no-progress
- 
-        
-        ### All done with the role before processing. 
+
+
+        ### All done with the role before processing.
         unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
-        
+
         ### need to handle iso-8859 encodings
         for  file  in  beforeConversion/*; do
             echo &quot;$file&quot;
@@ -133,37 +133,52 @@ do
         	iconv -f 8859_1 -t UTF-8//TRANSLIT &quot;$file&quot; -o data/$(basename $file)
         done
         rm -rf resources/job.config
-  
+
   		echo &quot;trialid=${abv_name^^}&quot; &gt; resources/job.config
         echo &quot;mappingfile=data/mapping2.csv&quot; &gt;&gt; resources/job.config
   		echo &quot;patientmappingfile=data/${abv_name^^}_PatientMapping.v2.csv&quot; &gt;&gt; resources/job.config
         echo &quot;usepatientmapping=Y&quot; &gt;&gt; resources/job.config
         echo &quot;skipdataheader=Y&quot; &gt;&gt; resources/job.config
   		echo &quot;skipheaders=Y&quot; &gt;&gt; resources/job.config
-  
+
         echo &quot;Numeric mappings before Analyzer $(grep &quot;NUMERIC&quot; data/mapping2.csv | wc -l)&quot;
         echo &quot;Text mappings before Analyzer $(grep &quot;TEXT&quot; data/mapping2.csv | wc -l)&quot;
         java -jar jars/DataAnalyzer.jar -propertiesfile resources/job.config -mappingskipheaders N -trialid ${abv_name^^} 2&gt;logs/${stdy_id}_analyzer_logs.txt
-        
+        # Capture the analyzer exit code IMMEDIATELY, before any other command overwrites $?
+        ANALYZER_EXIT=$?
+
         # Upload logs
         aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
-        
-        #TODO remove aws credientals.  We have matured past this in multiple places. 
+
+        #TODO remove aws credientals.  We have matured past this in multiple places.
         export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
         export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
         export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-        
+
         aws s3 cp ./logs/${stdy_id}_analyzer_logs.txt s3://avillach-73-bdcatalyst-etl/${abv_name,,}/logs/${stdy_id}_analyzer_logs.csv --no-progress
-        aws s3 cp ./logs/removed_mappings.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/logs/${stdy_id}_removed_mappings.csv --no-progress
-        
-        ### All done with the role before data processing. 
+        # removed_mappings.csv is only written after the analyzer finishes successfully,
+        # so guard the upload to avoid a spurious &quot;file not found&quot; on the failure path.
+        if [ -f ./logs/removed_mappings.csv ]; then
+            aws s3 cp ./logs/removed_mappings.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/logs/${stdy_id}_removed_mappings.csv --no-progress
+        fi
+
+        ### All done with the role before data processing.
         unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
-        
+
+        # If the analyzer failed, skip this study and move on to the next one.
+        # (The analyzer exits non-zero when allRuns.join() rethrows a task exception,
+        #  e.g. the &quot;Array out of bounds ... must be fixed and reprocessed&quot; RuntimeException.)
+        if [ ${ANALYZER_EXIT} -ne 0 ]; then
+            echo &quot;DataAnalyzer FAILED for ${stdy_id} ${abv_name} (exit ${ANALYZER_EXIT}). Skipping to next study.&quot;
+            echo &quot;DataAnalyzer failed for ${stdy_id} ${abv_name} (exit ${ANALYZER_EXIT})&quot; &gt;&gt; review_log.txt
+            continue
+        fi
+
         cp completed/mapping.csv data/mapping2.csv
 
         echo &quot;Numeric mappings after Analyzer $(grep &quot;NUMERIC&quot; data/mapping2.csv | wc -l)&quot;
         echo &quot;Text mappings after Analyzer $(grep &quot;TEXT&quot; data/mapping2.csv | wc -l)&quot;
-        
+
         java -jar jars/Partitioner.jar -partitiononsize 50 -propertiesfile resources/job.config -mappingskipheaders N -trialid ${abv_name^^} 2&gt;logs/${stdy_id}_partition_logs.txt
         if [ -s logs/${stdy_id}_partition_logs.txt ];
         then
@@ -172,7 +187,7 @@ do
             exit 255
         fi
         bash runpartition.sh -j 15 -c &apos;config.part*.config&apos; -r resources/
-        
+
         java -jar jars/MergePartitions.jar -propertiesfile resources/job.config 2&gt;logs/${stdy_id}_merge_logs.txt
            if [ -s logs/${stdy_id}_merge_logs.txt ];
         	then
@@ -185,23 +200,23 @@ do
         	echo &quot;ALLCONCEPTS for ${abv_name} is empty!&quot; &gt;&gt; review_log.txt
         	# exit 255
         fi
-        # assume role to handle larger data sets 
+        # assume role to handle larger data sets
         unset AWS_ACCESS_KEY_ID
         unset AWS_SECRET_ACCESS_KEY
         unset AWS_SESSION_TOKEN
 
         aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
-        
+
         export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
         export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
         export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-        
+
         aws s3 cp data/mapping2.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/mappings/${stdy_id}/mapping2_post_analyzer.csv --no-progress
 
         aws s3 cp completed/${abv_name^^}_allConcepts.csv s3://avillach-73-bdcatalyst-etl/${abv_name,,}/completed/${stdy_id}/${stdy_id,,}_allConcepts_new_search_with_data_analyzer.csv --no-progress
-         
+
         #find data/ -type f -exec rm -rf {} \;
-        
+
         ### remove role for next iteration
         unset AWS_ACCESS_KEY_ID
         unset AWS_SECRET_ACCESS_KEY
