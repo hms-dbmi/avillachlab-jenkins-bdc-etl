@@ -218,13 +218,13 @@ download_study_assets() {
   log &quot;pulling data for ${abv_name} ${stdy_id}&quot;
 
   aws s3 cp &quot;s3://${S3_BUCKET}/${abv_lc}/rawData/&quot; &quot;data/&quot; \
-    --recursive --exclude &quot;*&quot; --no-progress --only-show-errors \
+    --recursive --exclude &quot;*&quot; --no-progress \
     --include &quot;${stdy_id}*${version}*subject.multi*&quot; --include &quot;${stdy_id}*${version}*Subject.Multi*&quot; --include &quot;${stdy_id}*${version}*Subject.MULTI*&quot; \
     --include &quot;${stdy_id}*${version}*sample.multi*&quot;  --include &quot;${stdy_id}*${version}*Sample.Multi*&quot;  --include &quot;${stdy_id}*${version}*Sample.MULTI*&quot; \
     || { error &quot;rawData multi copy failed for ${abv_name} ${stdy_id}&quot;; return 1; }
 
   aws s3 cp &quot;s3://${S3_BUCKET}/${abv_lc}/decoded_data/&quot; &quot;data/decoded/&quot; \
-    --recursive --exclude &quot;*&quot; --no-progress --only-show-errors \
+    --recursive --exclude &quot;*&quot; --no-progress \
     --include &quot;${stdy_id}*${version}*subject.multi*&quot; --include &quot;${stdy_id}*${version}*Subject.Multi*&quot; --include &quot;${stdy_id}*${version}*Subject.MULTI*&quot; \
     --include &quot;${stdy_id}*${version}*sample.multi*&quot;  --include &quot;${stdy_id}*${version}*Sample.Multi*&quot;  --include &quot;${stdy_id}*${version}*Sample.MULTI*&quot; \
     || { error &quot;decoded_data multi copy failed for ${abv_name} ${stdy_id}&quot;; return 1; }
