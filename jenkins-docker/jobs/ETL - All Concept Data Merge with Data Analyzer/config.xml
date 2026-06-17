@@ -36,7 +36,7 @@
     </userRemoteConfigs>
     <branches>
       <hudson.plugins.git.BranchSpec>
-        <name>5e5092ea7b427aa6dbeac3f6612843c3079620b9</name>
+        <name>*/master</name>
       </hudson.plugins.git.BranchSpec>
     </branches>
     <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
@@ -157,7 +157,7 @@ java -Xms32g -Xmx${HEAP_GB}g \
   -Xlog:gc*,safepoint:file=gc.log:time,level,tags \
   -jar jars/RemoveConsentZeroPatients.jar || exit 255
 
-java -Xmx64g -jar jars/DbGapDataMerge.jar || exit 255
+java -Xmx64g -jar jars/DbGapDataMerge.jar
 
 
 unset AWS_ACCESS_KEY_ID

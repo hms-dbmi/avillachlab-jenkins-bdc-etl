@@ -180,6 +180,7 @@
         <string>Dictionary ETL - Fix Values</string>
         <string>Dictionary ETL - Manually Upload DB Dump Files</string>
         <string>Dictionary ETL - Refresh General Facets</string>
+        <string>Dictionary ETL - Refresh Searchable Concepts And Facets</string>
         <string>Dictionary ETL - Restore Previous Version of DB</string>
         <string>Dictionary ETL - Stigvar Loader</string>
         <string>Dictionary ETL - Update concepts from Ingest CSVs(Manual Upload)</string>
