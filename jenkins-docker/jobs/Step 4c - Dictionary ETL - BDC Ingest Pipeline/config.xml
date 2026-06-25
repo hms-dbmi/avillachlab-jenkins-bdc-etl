@@ -231,6 +231,13 @@
 
             }
         }
+        stage(&apos;DictionaryETL - Reset Weights&apos;){
+            steps {
+                script {
+                    build job: &apos;DictionaryETL - Reset Weights&apos;
+                }
+            }
+        }
         stage(&apos;Build PGDump Tar File&apos;){
             steps {
                 script {

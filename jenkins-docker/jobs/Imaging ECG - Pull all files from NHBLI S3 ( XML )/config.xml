@@ -101,7 +101,27 @@ export AWS_SESSION_TOKEN=$(    jq -r .Credentials.SessionToken    &lt;&lt;&lt;&q
 #aws s3 cp s3://nih-nhlbi-bdc-aps-phs004492-v1-r1-c1 ./aps/ --recursive
 #aws s3 cp s3://nih-nhlbi-bdc-rehab-ph-phs004597-v1-r1-c1 ./rehab-ph/ --recursive
 
-aws s3 cp s3://nih-nhlbi-bdc-ninds-shine-trial-phs004544-v1-r1-c1 ./ninds-shine-trial/ --recursive
+#aws s3 cp s3://nih-nhlbi-bdc-ninds-shine-trial-phs004544-v1-r1-c1 ./ninds-shine-trial/ --recursive
+
+aws s3 cp s3://nih-nhlbi-bdc-single-cell-multiome-phs004650-v1-r1-c1/BDC-ingestion-only/ ./single_cell_multiome/BDC-ingestion-only/ --recursive
+#aws s3 cp s3://nih-nhlbi-bdc-single-cell-multiome-phs004650-v1-r1-c1/documentation/ ./single_cell_multiome/documentation/ --recursive
+#aws s3 cp s3://nih-nhlbi-bdc-single-cell-multiome-phs004650-v1-r1-c1/nih-nhlbi-bdc-single-cell-multiome-phs004650-v1-r1-c1.manifest.20260606212939.tsv ./single_cell_multiome/
+
+#aws s3 cp s3://nih-nhlbi-bdc-c4r-jhs-phs002907-v2-r1-c1 ./c4r_jhs/c1/ --recursive
+#aws s3 cp s3://nih-nhlbi-bdc-c4r-jhs-phs002907-v2-r1-c2 ./c4r_jhs/c2/ --recursive
+#aws s3 cp s3://nih-nhlbi-bdc-c4r-jhs-phs002907-v2-r1-c3 ./c4r_jhs/c3/ --recursive
+#aws s3 cp s3://nih-nhlbi-bdc-c4r-jhs-phs002907-v2-r1-c4 ./c4r_jhs/c4/ --recursive
+
+#aws s3 cp s3://nih-nhlbi-bdc-c4r-spiromics-phs002909-v2-r1-c1 ./c4r_spiromics/c1/ --recursive
+#aws s3 cp s3://nih-nhlbi-bdc-c4r-spiromics-phs002909-v2-r1-c2 ./c4r_spiromics/c2/ --recursive
+#aws s3 cp s3://nih-nhlbi-bdc-c4r-spiromics-phs002909-v2-r1-c3 ./c4r_spiromics/c3/ --recursive
+#aws s3 cp s3://nih-nhlbi-bdc-c4r-spiromics-phs002909-v2-r1-c4 ./c4r_spiromics/c4/ --recursive
+#aws s3 cp s3://nih-nhlbi-bdc-c4r-spiromics-phs002909-v2-r1-c5 ./c4r_spiromics/c5/ --recursive
+#aws s3 cp s3://nih-nhlbi-bdc-c4r-spiromics-phs002909-v2-r1-c6 ./c4r_spiromics/c6/ --recursive
+#aws s3 cp s3://nih-nhlbi-bdc-c4r-spiromics-phs002909-v2-r1-c7 ./c4r_spiromics/c7/ --recursive
+#aws s3 cp s3://nih-nhlbi-bdc-c4r-spiromics-phs002909-v2-r1-c8 ./c4r_spiromics/c8/ --recursive
+
+#aws s3 cp s3://nih-nhlbi-bdc-ninds-arcadia-phs004653-v1-r1-c1 ./ninds_arcadia/ --recursive
 
 unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN</command>
       <configuredLocalRules/>

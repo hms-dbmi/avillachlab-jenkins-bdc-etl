@@ -188,6 +188,7 @@
         <string>Dictionary ETL - Update DB from Old Dictionary Ingest CSVs</string>
         <string>Dictionary ETL - Update Facets From Lists</string>
         <string>Dictionary ETL - Upload Dictionary Ingest Files to S3</string>
+        <string>DictionaryETL - Reset Weights</string>
         <string>Old JSON Dictionary to New Dictionary Input Files</string>
         <string>Step 4b - Dictionary ETL - Start Docker Container</string>
         <string>Step 4c - Dictionary ETL - BDC Ingest Pipeline</string>

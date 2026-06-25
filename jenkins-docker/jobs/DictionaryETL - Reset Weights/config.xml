@@ -1,0 +1,83 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
+      <doNotScan>false</doNotScan>
+    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.8.1">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>https://github.com/hms-dbmi/picsure-dictionary</url>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>*/main</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="empty-list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/usr/bin/env bash
+
+set -euo pipefail
+
+SQL_FILE=&quot;${WORKSPACE}/db/dml/rebuild_searchable_fields.sql&quot;
+if [ ! -f &quot;$SQL_FILE&quot; ]; then
+    echo &quot;ERROR: $SQL_FILE not found. Check SCM checkout.&quot; &gt;&amp;2
+    exit 1
+fi
+
+SECRET_ID=&apos;rds!db-8086eb77-cd6d-48bc-9298-4380892798ca&apos;
+
+SECRET_JSON=$(aws secretsmanager get-secret-value \
+    --secret-id &quot;$SECRET_ID&quot; \
+    --query &apos;SecretString&apos; \
+    --output text)
+
+database_psql_host_address=&apos;dictionarydb.cljahwnkfisu.us-east-1.rds.amazonaws.com&apos;
+
+DB_USER=$(echo &quot;$SECRET_JSON&quot; | jq -r &apos;.username&apos;)
+DB_PASS=$(echo &quot;$SECRET_JSON&quot; | jq -r &apos;.password&apos;)
+DB_HOST=&quot;${database_psql_host_address}&quot;
+DB_PORT=5432
+DB_NAME=&quot;dictionary_db&quot;
+
+echo &quot;Running rebuild_searchable_fields.sql against ${DB_HOST}:${DB_PORT}/${DB_NAME} ...&quot;
+
+docker run --rm -i \
+    -e PGPASSWORD=&quot;$DB_PASS&quot; \
+    postgres:16-bookworm \
+    psql -h &quot;$DB_HOST&quot; -p &quot;$DB_PORT&quot; -U &quot;$DB_USER&quot; -d &quot;$DB_NAME&quot; \
+         -v ON_ERROR_STOP=1 \
+         -c &quot;SET search_path TO dict;&quot; \
+         -f - &lt; &quot;$SQL_FILE&quot;
+
+echo &quot;Searchable fields rebuild complete.&quot;
+</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers/>
+</project>
