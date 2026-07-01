@@ -122,7 +122,12 @@ assume_role() {
 
   log &quot;Role assumed&quot;
 }
-
+reset_role() {
+  unset AWS_ACCESS_KEY_ID
+  unset AWS_SECRET_ACCESS_KEY
+  unset AWS_SESSION_TOKEN
+  unset AWS_SECURITY_TOKEN
+}
 reset_dir() {
   local d=&quot;$1&quot;
   rm -rf &quot;$d&quot;
@@ -334,6 +339,8 @@ fi
 # -----------------------------
 # Upload outputs + update mapping
 # -----------------------------
+reset_role
+assume_role
 log &quot;Uploading completed/ -&gt; s3://${S3_BUCKET}/general/data/&quot;
 aws s3 cp &quot;completed/&quot; &quot;s3://${S3_BUCKET}/general/data/&quot; --recursive --no-progress --only-show-errors
 
