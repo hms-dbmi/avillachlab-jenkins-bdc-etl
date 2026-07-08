@@ -1,0 +1,386 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description>This job will generate all files needed to build the global allconcepts for all studies with a subject multi</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
+      <doNotScan>false</doNotScan>
+    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>managed_inputs</name>
+          <defaultValue>s3://avillach-73-bdcatalyst-etl/general/resources/Managed_Inputs.csv</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@5.8.1">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>https://github.com/hms-dbmi/ETL-MissionControl-dbgap-submodule</url>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>*/global-variable-investigation</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="empty-list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/usr/bin/env bash
+set -euo pipefail
+
+# Simple AWS S3 optimizations (keeps aws s3 cp)
+# - Prefer many small concurrent S3 requests (helps on high-latency links)
+# - Use adaptive retry mode for transient throttling
+# - Bump timeouts so long transfers don’t fail mid-stream
+# - (Optional) limit bandwidth if you’re saturating the host/network
+export AWS_MAX_ATTEMPTS=&quot;${AWS_MAX_ATTEMPTS:-10}&quot;
+export AWS_RETRY_MODE=&quot;${AWS_RETRY_MODE:-adaptive}&quot;
+export AWS_S3_MAX_CONCURRENT_REQUESTS=&quot;${AWS_S3_MAX_CONCURRENT_REQUESTS:-64}&quot;
+export AWS_S3_MAX_QUEUE_SIZE=&quot;${AWS_S3_MAX_QUEUE_SIZE:-10000}&quot;
+export AWS_S3_MULTIPART_THRESHOLD=&quot;${AWS_S3_MULTIPART_THRESHOLD:-64MB}&quot;
+export AWS_S3_MULTIPART_CHUNKSIZE=&quot;${AWS_S3_MULTIPART_CHUNKSIZE:-64MB}&quot;
+export AWS_CLI_CONNECT_TIMEOUT=&quot;${AWS_CLI_CONNECT_TIMEOUT:-10}&quot;
+export AWS_CLI_READ_TIMEOUT=&quot;${AWS_CLI_READ_TIMEOUT:-0}&quot;   # 0 = no read timeout
+
+LOG_TS() { date +&quot;%Y-%m-%dT%H:%M:%S%z&quot;; }
+log()    { echo &quot;[$(LOG_TS)] INFO  $*&quot; &gt;&amp;2; }
+warn()   { echo &quot;[$(LOG_TS)] WARN  $*&quot; &gt;&amp;2; }
+error()  { echo &quot;[$(LOG_TS)] ERROR $*&quot; &gt;&amp;2; }
+
+need() { command -v &quot;$1&quot; &gt;/dev/null 2&gt;&amp;1 || { error &quot;Missing required command: $1&quot;; exit 2; }; }
+
+cleanup() {
+  local rc=$?
+  local cmd=&quot;${BASH_COMMAND:-}&quot;
+  local line=&quot;${BASH_LINENO[0]:-}&quot;
+
+  if [[ $rc -eq 0 ]]; then
+    log &quot;EXIT rc=0 (success). Cleaning AWS env vars.&quot;
+  else
+    error &quot;EXIT rc=${rc} at line=${line} cmd=${cmd}. Cleaning AWS env vars.&quot;
+  fi
+
+  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
+  if [[ -s logs/error_logging.txt ]]; then
+    warn &quot;logs/error_logging.txt present (last 50 lines):&quot;
+    tail -n 50 logs/error_logging.txt &gt;&amp;2 || true
+  fi
+}
+on_err() {
+  local rc=$?
+  local line=&quot;${BASH_LINENO[0]:-}&quot;
+  local cmd=&quot;${BASH_COMMAND:-}&quot;
+  error &quot;ERR rc=${rc} at line=${line} cmd=${cmd}&quot;
+  return $rc
+}
+trap on_err ERR
+trap cleanup EXIT
+
+assume_role() {
+  local role_arn=&quot;${ROLE_ARN:-arn:aws:iam::736265540791:role/dbgap-etl}&quot;
+  local session_name=&quot;${ROLE_SESSION_NAME:-s3-test}&quot;
+  local duration=&quot;${ASSUME_DURATION_SECONDS:-3600}&quot;
+
+  log &quot;Assuming role ${role_arn} (duration=${duration}s)&quot;
+  local assume_json
+  assume_json=&quot;$(mktemp)&quot;
+
+  aws sts assume-role \
+    --duration-seconds &quot;$duration&quot; \
+    --role-arn &quot;$role_arn&quot; \
+    --role-session-name &quot;$session_name&quot; \
+    &gt; &quot;$assume_json&quot;
+
+  export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  AWS_ACCESS_KEY_ID=&quot;$(jq -r &apos;.Credentials.AccessKeyId&apos; &quot;$assume_json&quot;)&quot;
+  AWS_SECRET_ACCESS_KEY=&quot;$(jq -r &apos;.Credentials.SecretAccessKey&apos; &quot;$assume_json&quot;)&quot;
+  AWS_SESSION_TOKEN=&quot;$(jq -r &apos;.Credentials.SessionToken&apos; &quot;$assume_json&quot;)&quot;
+  rm -f &quot;$assume_json&quot;
+
+  log &quot;Role assumed&quot;
+}
+reset_role() {
+  unset AWS_ACCESS_KEY_ID
+  unset AWS_SECRET_ACCESS_KEY
+  unset AWS_SESSION_TOKEN
+  unset AWS_SECURITY_TOKEN
+}
+reset_dir() {
+  local d=&quot;$1&quot;
+  rm -rf &quot;$d&quot;
+  mkdir -p &quot;$d&quot;
+}
+
+s3_cp() {
+  local src=&quot;$1&quot; dst=&quot;$2&quot; required=&quot;${3:-true}&quot;
+  if aws s3 cp &quot;$src&quot; &quot;$dst&quot; --no-progress --only-show-errors; then
+    return 0
+  fi
+  if [[ &quot;$required&quot; == &quot;true&quot; ]]; then
+    error &quot;S3 copy failed (required): $src -&gt; $dst&quot;
+    return 1
+  fi
+  warn &quot;S3 copy failed (optional): $src -&gt; $dst&quot;
+  return 0
+}
+
+# -----------------------------
+# Prereqs + required inputs
+# -----------------------------
+need aws
+need jq
+need csvcut
+need csvformat
+need tail
+need java
+
+: &quot;${managed_inputs:?managed_inputs must be set (s3://.../Managed_Inputs.csv)}&quot;
+
+S3_BUCKET=&quot;${S3_BUCKET:-avillach-73-bdcatalyst-etl}&quot;
+ASSUME_DURATION_SECONDS=&quot;${ASSUME_DURATION_SECONDS:-3600}&quot;
+
+# -----------------------------
+# Workspace dirs (cleanly)
+# -----------------------------
+reset_dir data
+reset_dir completed
+reset_dir completed_study_consents
+reset_dir hierarchies
+reset_dir processing
+reset_dir logs
+mkdir -p data/decoded mappings
+
+# -----------------------------
+# Assume role once for all S3 ops
+# -----------------------------
+assume_role
+
+# -----------------------------
+# Pull core inputs
+# -----------------------------
+log &quot;Downloading managed inputs -&gt; data/Managed_Inputs.csv&quot;
+s3_cp &quot;$managed_inputs&quot; &quot;data/Managed_Inputs.csv&quot; true
+
+log &quot;Downloading Genomic_Managed_Inputs.csv&quot;
+s3_cp &quot;s3://${S3_BUCKET}/general/resources/Genomic_Managed_Inputs.csv&quot; &quot;data/Genomic_Managed_Inputs.csv&quot; true
+
+log &quot;Downloading metadata.json&quot;
+s3_cp &quot;s3://${S3_BUCKET}/general/data/metadata.json&quot; &quot;data/metadata.json&quot; true
+
+log &quot;Building inputs.csv&quot;
+csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Version&quot;,&quot;Study Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot;,&quot;Has Multi&quot; \
+  &quot;data/Managed_Inputs.csv&quot; &gt; inputs.csv
+
+log &quot;inputs.csv preview:&quot;
+head -n 10 inputs.csv &gt;&amp;2 || true
+
+# -----------------------------
+# Per-study pulls
+#   IMPORTANT FIX:
+#   - Do NOT use a pipeline into `while read`; it runs in a subshell.
+#   - If you background jobs inside that subshell, `wait` in the parent
+#     will NOT wait for them.
+#
+#   This version:
+#   - Runs the loop in the current shell using process substitution (&lt; &lt;(...))
+#   - Tracks PIDs explicitly
+#   - Waits for *all* PIDs and fails if any download failed
+# -----------------------------
+DOWNLOAD_PARALLEL=&quot;${DOWNLOAD_PARALLEL:-12}&quot;
+# Set DOWNLOAD_PARALLEL=1 to remove parallelism entirely.
+log &quot;Downloading per-study multi assets with parallelism=${DOWNLOAD_PARALLEL}&quot;
+
+download_study_assets() {
+  local abv_name=&quot;$1&quot; stdy_id=&quot;$2&quot; version=&quot;$3&quot;
+  local abv_lc stdy_lc abv_uc
+  abv_lc=&quot;$(printf &apos;%s&apos; &quot;$abv_name&quot; | tr &apos;[:upper:]&apos; &apos;[:lower:]&apos;)&quot;
+  stdy_lc=&quot;$(printf &apos;%s&apos; &quot;$stdy_id&quot;  | tr &apos;[:upper:]&apos; &apos;[:lower:]&apos;)&quot;
+  abv_uc=&quot;$(printf &apos;%s&apos; &quot;$abv_name&quot; | tr &apos;[:lower:]&apos; &apos;[:upper:]&apos;)&quot;
+
+  log &quot;pulling data for ${abv_name} ${stdy_id}&quot;
+
+  aws s3 cp &quot;s3://${S3_BUCKET}/${abv_lc}/rawData/&quot; &quot;data/&quot; \
+    --recursive --exclude &quot;*&quot; --no-progress \
+    --include &quot;${stdy_id}*${version}*subject.multi*&quot; --include &quot;${stdy_id}*${version}*Subject.Multi*&quot; --include &quot;${stdy_id}*${version}*Subject.MULTI*&quot; \
+    --include &quot;${stdy_id}*${version}*sample.multi*&quot;  --include &quot;${stdy_id}*${version}*Sample.Multi*&quot;  --include &quot;${stdy_id}*${version}*Sample.MULTI*&quot; \
+    || { error &quot;rawData multi copy failed for ${abv_name} ${stdy_id}&quot;; return 1; }
+
+  aws s3 cp &quot;s3://${S3_BUCKET}/${abv_lc}/decoded_data/&quot; &quot;data/decoded/&quot; \
+    --recursive --exclude &quot;*&quot; --no-progress \
+    --include &quot;${stdy_id}*${version}*subject.multi*&quot; --include &quot;${stdy_id}*${version}*Subject.Multi*&quot; --include &quot;${stdy_id}*${version}*Subject.MULTI*&quot; \
+    --include &quot;${stdy_id}*${version}*sample.multi*&quot;  --include &quot;${stdy_id}*${version}*Sample.Multi*&quot;  --include &quot;${stdy_id}*${version}*Sample.MULTI*&quot; \
+    || { error &quot;decoded_data multi copy failed for ${abv_name} ${stdy_id}&quot;; return 1; }
+
+  s3_cp &quot;s3://${S3_BUCKET}/${abv_lc}/data/${abv_uc}_PatientMapping.v2.csv&quot; &quot;data/${abv_uc}_PatientMapping.v2.csv&quot; true
+
+  aws s3 rm &quot;s3://${S3_BUCKET}/general/globalvars/study_consents/&quot; \
+    --recursive --exclude &quot;*&quot; --include &quot;${abv_name}_${stdy_id}*&quot; \
+    --only-show-errors \
+    || warn &quot;Could not remove prior study_consents for ${abv_name} ${stdy_id} (may be none / permissions)&quot;
+
+  # marker so we can verify completion count if we want
+  : &gt; &quot;logs/download_ok_${stdy_lc}.marker&quot;
+
+  log &quot;done pulling ${abv_name} ${stdy_id}&quot;
+}
+
+# helper: block until active job count &lt; DOWNLOAD_PARALLEL (uses wait -n if available)
+throttle() {
+  while [[ &quot;$(jobs -pr | wc -l)&quot; -ge &quot;$DOWNLOAD_PARALLEL&quot; ]]; do
+    if wait -n 2&gt;/dev/null; then
+      :
+    else
+      sleep 0.2
+    fi
+  done
+}
+
+declare -a DL_PIDS=()
+declare -i SCHEDULED=0
+
+while IFS=&apos;,&apos; read -r abv_name stdy_id version stdy_type data_ready data_processed has_multi; do
+  # Trim possible quotes
+  abv_name=&quot;${abv_name%\&quot;}&quot;; abv_name=&quot;${abv_name#\&quot;}&quot;
+  stdy_id=&quot;${stdy_id%\&quot;}&quot;;   stdy_id=&quot;${stdy_id#\&quot;}&quot;
+  version=&quot;${version%\&quot;}&quot;;   version=&quot;${version#\&quot;}&quot;
+  data_ready=&quot;${data_ready%\&quot;}&quot;; data_ready=&quot;${data_ready#\&quot;}&quot;
+  has_multi=&quot;${has_multi%\&quot;}&quot;; has_multi=&quot;${has_multi#\&quot;}&quot;
+
+  if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]] &amp;&amp; [[ &quot;${has_multi,,}&quot; == &quot;yes&quot; ]]; then
+    if [[ &quot;$DOWNLOAD_PARALLEL&quot; -le 1 ]]; then
+      # fully serial mode
+      download_study_assets &quot;$abv_name&quot; &quot;$stdy_id&quot;
+      SCHEDULED+=1
+    else
+      throttle
+      download_study_assets &quot;$abv_name&quot; &quot;$stdy_id&quot; &quot;$version&quot; &amp;
+      DL_PIDS+=(&quot;$!&quot;)
+      SCHEDULED+=1
+      log &quot;scheduled ${abv_name} ${stdy_id} (pid=$!)&quot;
+    fi
+  else
+    log &quot;${abv_name} ${stdy_id} not ready and/or has_multi!=yes; skipping&quot;
+  fi
+done &lt; &lt;(tail -n +2 inputs.csv | csvformat -U 1)
+
+log &quot;pulling harmonized data set&quot;
+s3_cp &quot;s3://${S3_BUCKET}/hrmn/completed/HRMN_allConcepts.csv&quot; &quot;data/HRMN_allConcepts.csv&quot; true
+
+# Wait for downloads and *fail if any failed*
+if [[ &quot;${#DL_PIDS[@]}&quot; -gt 0 ]]; then
+  log &quot;Waiting for ${#DL_PIDS[@]} per-study downloads to finish...&quot;
+  failed=0
+  for pid in &quot;${DL_PIDS[@]}&quot;; do
+    if ! wait &quot;$pid&quot;; then
+      failed=1
+      error &quot;Download worker failed (pid=$pid)&quot;
+    fi
+  done
+  if [[ &quot;$failed&quot; -ne 0 ]]; then
+    error &quot;One or more per-study downloads failed&quot;
+    exit 1
+  fi
+fi
+
+# Optional sanity check: markers count equals scheduled count
+markers=&quot;$(ls -1 logs/download_ok_*.marker 2&gt;/dev/null | wc -l | tr -d &apos; &apos;)&quot;
+if [[ &quot;$markers&quot; -ne &quot;$SCHEDULED&quot; ]]; then
+  error &quot;Download completion mismatch: scheduled=$SCHEDULED markers=$markers&quot;
+  exit 1
+fi
+
+log &quot;All downloads complete&quot;
+
+# -----------------------------
+# Run generators
+# -----------------------------
+export JAVA_HOME=/usr/lib/jvm/temurin-24-jdk-amd64
+export PATH=&quot;$JAVA_HOME/bin:$PATH&quot;
+
+log &quot;generating consent group data&quot;
+java -jar jars/entity-generator-1.0.0-SNAPSHOT-ConsentGroupGenerator.jar 2&gt;&gt; logs/error_logging.txt
+
+log &quot;generating phs id data&quot;
+java -jar jars/entity-generator-1.0.0-SNAPSHOT-PHSIdGenerator.jar 2&gt;&gt; logs/error_logging.txt
+
+log &quot;generating rootnode data&quot;
+java -jar jars/entity-generator-1.0.0-SNAPSHOT-RootNodeGenerator.jar 2&gt;&gt; logs/error_logging.txt
+
+log &quot;generating genomic sample id global var data&quot;
+java -jar jars/entity-generator-1.0.0-SNAPSHOT-GenomicSampIdGlobalVarGenerator.jar 2&gt;&gt; logs/error_logging.txt
+
+log &quot;generating studies consents&quot;
+java -jar jars/entity-generator-1.0.0-SNAPSHOT-StudiesConsentsGenerator.jar -writedir ./completed_study_consents/ 2&gt;&gt; logs/error_logging.txt
+
+if [[ -s logs/error_logging.txt ]]; then
+  warn &quot;Errors were logged during generation (see logs/error_logging.txt). Proceeding to upload outputs.&quot;
+fi
+
+# -----------------------------
+# Upload outputs + update mapping
+# -----------------------------
+reset_role
+assume_role
+log &quot;Uploading completed/ -&gt; s3://${S3_BUCKET}/general/data/&quot;
+aws s3 cp &quot;completed/&quot; &quot;s3://${S3_BUCKET}/general/data/&quot; --recursive --no-progress --only-show-errors
+
+log &quot;Downloading baseline mapping.prerootnodes.csv -&gt; mappings/mapping.csv&quot;
+s3_cp &quot;s3://${S3_BUCKET}/general/mappings/mapping.prerootnodes.csv&quot; &quot;mappings/mapping.csv&quot; true
+
+if [[ -s &quot;completed/SampleId_mapping.csv&quot; ]]; then
+  log &quot;Appending SampleId_mapping.csv -&gt; mappings/mapping.csv&quot;
+  cat &quot;completed/SampleId_mapping.csv&quot; &gt;&gt; &quot;mappings/mapping.csv&quot;
+else
+  warn &quot;completed/SampleId_mapping.csv missing/empty; skipping append&quot;
+fi
+
+if [[ -s &quot;completed/rootnode_mapping.csv&quot; ]]; then
+  log &quot;Appending rootnode_mapping.csv -&gt; mappings/mapping.csv&quot;
+  cat &quot;completed/rootnode_mapping.csv&quot; &gt;&gt; &quot;mappings/mapping.csv&quot;
+else
+  warn &quot;completed/rootnode_mapping.csv missing/empty; skipping append&quot;
+fi
+
+log &quot;Uploading mapping.postrootnodes.csv&quot;
+aws s3 cp &quot;mappings/mapping.csv&quot; &quot;s3://${S3_BUCKET}/general/mappings/mapping.postrootnodes.csv&quot; --no-progress --only-show-errors
+
+log &quot;Uploading completed_study_consents/ -&gt; s3://${S3_BUCKET}/general/globalvars/study_consents/&quot;
+aws s3 cp &quot;completed_study_consents/&quot; &quot;s3://${S3_BUCKET}/general/globalvars/study_consents/&quot; --recursive --no-progress --only-show-errors
+
+log &quot;Done&quot;</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.49">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+      <disableDeferredWipeout>false</disableDeferredWipeout>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>
