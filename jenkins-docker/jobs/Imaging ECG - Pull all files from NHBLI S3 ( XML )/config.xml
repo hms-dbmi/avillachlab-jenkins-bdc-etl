@@ -103,9 +103,9 @@ export AWS_SESSION_TOKEN=$(    jq -r .Credentials.SessionToken    &lt;&lt;&lt;&q
 
 #aws s3 cp s3://nih-nhlbi-bdc-ninds-shine-trial-phs004544-v1-r1-c1 ./ninds-shine-trial/ --recursive
 
-aws s3 cp s3://nih-nhlbi-bdc-single-cell-multiome-phs004650-v1-r1-c1/BDC-ingestion-only/ ./single_cell_multiome/BDC-ingestion-only/ --recursive
+#aws s3 cp s3://nih-nhlbi-bdc-single-cell-multiome-phs004650-v1-r1-c1/BDC-ingestion-only/ ./single_cell_multiome/BDC-ingestion-only/ --recursive
 #aws s3 cp s3://nih-nhlbi-bdc-single-cell-multiome-phs004650-v1-r1-c1/documentation/ ./single_cell_multiome/documentation/ --recursive
-#aws s3 cp s3://nih-nhlbi-bdc-single-cell-multiome-phs004650-v1-r1-c1/nih-nhlbi-bdc-single-cell-multiome-phs004650-v1-r1-c1.manifest.20260606212939.tsv ./single_cell_multiome/
+aws s3 cp s3://nih-nhlbi-bdc-single-cell-multiome-phs004650-v1-r1-c1/ ./single_cell_multiome/ --exclude &quot;*&quot; --include &quot;*manifest*&quot; --recursive
 
 #aws s3 cp s3://nih-nhlbi-bdc-c4r-jhs-phs002907-v2-r1-c1 ./c4r_jhs/c1/ --recursive
 #aws s3 cp s3://nih-nhlbi-bdc-c4r-jhs-phs002907-v2-r1-c2 ./c4r_jhs/c2/ --recursive
