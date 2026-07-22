@@ -257,7 +257,11 @@ process_study() {
   log &quot;Processing ${stdy_id} ${abv_name} (type=${stdy_type}, multi=${has_multi})&quot;
 
   # clean per-study dirs but keep the top-level directories
-  rm -rf data/* completed/* hierarchies/* processing/* mappings/* resources/* reports/* logs/* || true
+  # (reset_dir per directory -- a `rm -rf data/*` glob blows past ARG_MAX
+  #  once a study drops thousands of files into data/)
+  for d in data completed hierarchies processing mappings resources reports logs; do
+    reset_dir &quot;$d&quot;
+  done
 
   # Do NOT re-assume role here (avoids self-assume AccessDenied)
 
