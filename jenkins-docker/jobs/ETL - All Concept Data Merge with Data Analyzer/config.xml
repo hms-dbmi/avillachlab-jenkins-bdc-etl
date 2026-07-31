@@ -63,121 +63,438 @@
   <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Shell>
-      <command>#!/bin/bash
+      <command>#!/usr/bin/env bash
+set -Eeuo pipefail
+shopt -s extglob
+umask 077
 
-mkdir beforeRemoval || find beforeRemoval -type f -exec rm -rf {} \;
-mkdir data || find data/ -type f -exec rm -rf {} \;
-mkdir completed || find processing/ -type f -exec rm -rf {} \;
-mkdir processing || find completed -type f -exec rm -rf {} \;
+log() {
+  printf &apos;[%s] %s\n&apos; &quot;$(date &apos;+%Y-%m-%dT%H:%M:%S%z&apos;)&quot; &quot;$*&quot;
+}
 
+fail() {
+  log &quot;ERROR: $*&quot; &gt;&amp;2
+  exit 255
+}
 
-aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
-        
-        export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-        export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-        export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+require_command() {
+  command -v &quot;$1&quot; &gt;/dev/null 2&gt;&amp;1 || fail &quot;Required command not found: $1&quot;
+}
 
-aws s3 cp ${managed_inputs} .
+for command_name in aws csvcut csvformat split flock java stat; do
+  require_command &quot;$command_name&quot;
+done
 
-aws s3 cp --quiet s3://avillach-73-bdcatalyst-etl/general/data/metadata_new_search.json .
+# Required Jenkins parameter/environment variable.
+: &quot;${managed_inputs:?managed_inputs must contain the S3 URI for Managed_Inputs.csv}&quot;
 
-csvcut -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Study Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot; Managed_Inputs.csv &gt; inputs.csv
+ROLE_ARN=&quot;${ROLE_ARN:-arn:aws:iam::736265540791:role/dbgap-etl}&quot;
+ROLE_DURATION_SECONDS=&quot;${ROLE_DURATION_SECONDS:-3600}&quot;
+AWS_REGION=&quot;${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-1}}&quot;
+export AWS_REGION AWS_DEFAULT_REGION=&quot;$AWS_REGION&quot;
 
-#### Stop gap to merge ehr with clinical for recover. - TD #####
-### the ehr was not being merged upstream.  Will abstract more.  Merging is a big waste of time in general.
-# Adult
+S3_BUCKET=&quot;${S3_BUCKET:-avillach-73-bdcatalyst-etl}&quot;
+
+# Aggressive but bounded defaults for r5.4xlarge (16 vCPU / 128 GiB).
+# Six AWS CLI processes x 24 transfer workers = up to 144 S3 requests in flight.
+DOWNLOAD_WORKERS=&quot;${DOWNLOAD_WORKERS:-6}&quot;
+S3_REQUESTS_PER_PROCESS=&quot;${S3_REQUESTS_PER_PROCESS:-24}&quot;
+S3_MULTIPART_CHUNK_SIZE=&quot;${S3_MULTIPART_CHUNK_SIZE:-32MB}&quot;
+S3_IO_CHUNK_SIZE=&quot;${S3_IO_CHUNK_SIZE:-1MB}&quot;
+SPLIT_SIZE=&quot;${SPLIT_SIZE:-250MB}&quot;
+SPLIT_SUFFIX_LENGTH=&quot;${SPLIT_SUFFIX_LENGTH:-4}&quot;
+
+HEAP_GB=&quot;${HEAP_GB:-88}&quot;
+INITIAL_HEAP_GB=&quot;${INITIAL_HEAP_GB:-44}&quot;
+JAVA_PARALLELISM=&quot;${JAVA_PARALLELISM:-14}&quot;
+
+# Put this on the persistent Jenkins XFS volume, not ephemeral workspace storage.
+CACHE_ROOT=&quot;${S3_CACHE_ROOT:-${JENKINS_HOME:-$PWD}/caches/dbgap-allconcepts}&quot;
+LOCK_ROOT=&quot;$CACHE_ROOT/.locks&quot;
+STATE_DIR=&quot;$(mktemp -d &quot;${TMPDIR:-/tmp}/dbgap-etl.XXXXXX&quot;)&quot;
+FAILURE_MARKER=&quot;$STATE_DIR/background-job-failed&quot;
+ETL_AWS_CONFIG=&quot;&quot;
+
+cleanup() {
+  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN || true
+  [[ -z &quot;$ETL_AWS_CONFIG&quot; ]] || rm -f &quot;$ETL_AWS_CONFIG&quot;
+  rm -rf &quot;$STATE_DIR&quot;
+}
+trap cleanup EXIT
+trap &apos;rc=$?; log &quot;Command failed at line $LINENO with exit code $rc&quot; &gt;&amp;2&apos; ERR
+
+mkdir -p &quot;$CACHE_ROOT&quot; &quot;$LOCK_ROOT&quot;
+
+# Clean all working directories correctly. The original script crossed
+# completed/processing and only removed regular files.
+for directory in beforeRemoval data completed processing; do
+  mkdir -p &quot;$directory&quot;
+  find &quot;$directory&quot; -mindepth 1 -delete
+done
+
+configure_s3_cli() {
+  local original_config=&quot;${AWS_CONFIG_FILE:-$HOME/.aws/config}&quot;
+  ETL_AWS_CONFIG=&quot;$(mktemp &quot;${TMPDIR:-/tmp}/aws-etl-config.XXXXXX&quot;)&quot;
+
+  if [[ -f &quot;$original_config&quot; ]]; then
+    cp &quot;$original_config&quot; &quot;$ETL_AWS_CONFIG&quot;
+  fi
+
+  export AWS_CONFIG_FILE=&quot;$ETL_AWS_CONFIG&quot;
+  export AWS_RETRY_MODE=&quot;standard&quot;
+  export AWS_MAX_ATTEMPTS=&quot;10&quot;
+
+  aws configure set default.region &quot;$AWS_REGION&quot;
+  aws configure set default.s3.max_concurrent_requests &quot;$S3_REQUESTS_PER_PROCESS&quot;
+  aws configure set default.s3.max_queue_size 10000
+  aws configure set default.s3.multipart_threshold &quot;$S3_MULTIPART_CHUNK_SIZE&quot;
+  aws configure set default.s3.multipart_chunksize &quot;$S3_MULTIPART_CHUNK_SIZE&quot;
+  aws configure set default.s3.io_chunksize &quot;$S3_IO_CHUNK_SIZE&quot;
+}
+
+assume_role() {
+  local session_name credentials
+  session_name=&quot;${ROLE_SESSION_NAME:-dbgap-etl-${BUILD_NUMBER:-manual}-$$}&quot;
+  session_name=&quot;${session_name//[^[:alnum:]+=,.@_-]/-}&quot;
+  session_name=&quot;${session_name:0:64}&quot;
+
+  credentials=&quot;$({
+    aws sts assume-role \
+      --duration-seconds &quot;$ROLE_DURATION_SECONDS&quot; \
+      --role-arn &quot;$ROLE_ARN&quot; \
+      --role-session-name &quot;$session_name&quot; \
+      --query &apos;Credentials.[AccessKeyId,SecretAccessKey,SessionToken]&apos; \
+      --output text
+  })&quot; || fail &quot;Unable to assume $ROLE_ARN&quot;
+
+  read -r AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN &lt;&lt;&lt;&quot;$credentials&quot;
+  [[ -n &quot;$AWS_ACCESS_KEY_ID&quot; &amp;&amp; -n &quot;$AWS_SECRET_ACCESS_KEY&quot; &amp;&amp; -n &quot;$AWS_SESSION_TOKEN&quot; ]] \
+    || fail &quot;AssumeRole returned incomplete credentials&quot;
+
+  export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+}
+
+release_assumed_role() {
+  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+}
+
+normalize_flag() {
+  local value=&quot;$1&quot;
+  value=&quot;${value##+([[:space:]])}&quot;
+  value=&quot;${value%%+([[:space:]])}&quot;
+  printf &apos;%s&apos; &quot;${value,,}&quot;
+}
+
+safe_lock_name() {
+  local value=&quot;$1&quot;
+  printf &apos;%s&apos; &quot;${value//[^[:alnum:]_.-]/_}&quot;
+}
+
+parse_s3_uri() {
+  local uri=&quot;$1&quot; remainder
+  [[ &quot;$uri&quot; == s3://*/* ]] || fail &quot;Invalid S3 URI: $uri&quot;
+  remainder=&quot;${uri#s3://}&quot;
+  S3_URI_BUCKET=&quot;${remainder%%/*}&quot;
+  S3_URI_KEY=&quot;${remainder#*/}&quot;
+}
+
+# Caller must hold the object&apos;s lock. Cache replacement is atomic and the
+# cached object is reused only when URI, size, ETag, LastModified, and VersionId match.
+cache_fetch_unlocked() {
+  local uri=&quot;$1&quot; cache_file=&quot;$2&quot;
+  local metadata_file=&quot;${cache_file}.metadata&quot;
+  local remote_metadata remote_size remote_etag remote_modified remote_version
+  local fingerprint cached_fingerprint=&quot;&quot; actual_size temp_file temp_metadata
+
+  mkdir -p &quot;$(dirname &quot;$cache_file&quot;)&quot;
+  parse_s3_uri &quot;$uri&quot;
+
+  remote_metadata=&quot;$(aws s3api head-object \
+    --bucket &quot;$S3_URI_BUCKET&quot; \
+    --key &quot;$S3_URI_KEY&quot; \
+    --query &apos;[ContentLength,ETag,LastModified,VersionId]&apos; \
+    --output text)&quot; || fail &quot;Unable to inspect $uri&quot;
+
+  read -r remote_size remote_etag remote_modified remote_version &lt;&lt;&lt;&quot;$remote_metadata&quot;
+  [[ &quot;$remote_size&quot; =~ ^[0-9]+$ ]] || fail &quot;Invalid ContentLength returned for $uri&quot;
+
+  fingerprint=&quot;$uri|$remote_size|$remote_etag|$remote_modified|$remote_version&quot;
+  [[ ! -f &quot;$metadata_file&quot; ]] || cached_fingerprint=&quot;$(&lt;&quot;$metadata_file&quot;)&quot;
+
+  if [[ -f &quot;$cache_file&quot; &amp;&amp; &quot;$cached_fingerprint&quot; == &quot;$fingerprint&quot; ]]; then
+    actual_size=&quot;$(stat -c &apos;%s&apos; &quot;$cache_file&quot;)&quot;
+    if [[ &quot;$actual_size&quot; == &quot;$remote_size&quot; ]]; then
+      log &quot;S3 cache hit: $uri&quot;
+      return 0
+    fi
+    log &quot;Cache size mismatch; refreshing: $uri&quot;
+  else
+    log &quot;S3 cache miss/changed object: $uri&quot;
+  fi
+
+  temp_file=&quot;${cache_file}.partial.${BUILD_NUMBER:-manual}.$$&quot;
+  temp_metadata=&quot;${metadata_file}.partial.${BUILD_NUMBER:-manual}.$$&quot;
+  rm -f &quot;$temp_file&quot; &quot;$temp_metadata&quot;
+
+  if ! aws s3 cp &quot;$uri&quot; &quot;$temp_file&quot; --no-progress --only-show-errors; then
+    rm -f &quot;$temp_file&quot; &quot;$temp_metadata&quot;
+    fail &quot;Download failed: $uri&quot;
+  fi
+
+  actual_size=&quot;$(stat -c &apos;%s&apos; &quot;$temp_file&quot;)&quot;
+  if [[ &quot;$actual_size&quot; != &quot;$remote_size&quot; ]]; then
+    rm -f &quot;$temp_file&quot; &quot;$temp_metadata&quot;
+    fail &quot;Downloaded size mismatch for $uri: expected=$remote_size actual=$actual_size&quot;
+  fi
+
+  printf &apos;%s\n&apos; &quot;$fingerprint&quot; &gt;&quot;$temp_metadata&quot;
+  mv -f &quot;$temp_file&quot; &quot;$cache_file&quot;
+  mv -f &quot;$temp_metadata&quot; &quot;$metadata_file&quot;
+}
+
+clear_local_study_files() {
+  local study_id_lower=&quot;$1&quot;
+  find beforeRemoval -maxdepth 1 -type f \
+    -name &quot;${study_id_lower}_allConcepts_new_search_with_data_analyzer.csv*&quot; \
+    -delete
+  find data -maxdepth 1 -type f \
+    -name &quot;${study_id_lower}.*.csv&quot; \
+    -delete
+}
+
+clear_study_cache_and_stage() {
+  local study_id_lower=&quot;$1&quot; lock_name
+  lock_name=&quot;$(safe_lock_name &quot;study-$study_id_lower&quot;)&quot;
+
+  clear_local_study_files &quot;$study_id_lower&quot;
+
+  (
+    flock -x 9
+    rm -rf &quot;$CACHE_ROOT/studies/$study_id_lower&quot;
+    log &quot;Cleared cache because study is not ready: $study_id_lower&quot;
+  ) 9&gt;&quot;$LOCK_ROOT/$lock_name.lock&quot;
+}
+
+study_ehr_uri() {
+  case &quot;$1&quot; in
+    phs003463)
+      printf &apos;s3://%s/recover_adult/completed/phs003463/phs003463_allConcepts_new_search_with_data_analyzer.ehr.csv&apos; &quot;$S3_BUCKET&quot;
+      ;;
+    phs003461)
+      printf &apos;s3://%s/recover_pediatrics/completed/phs003461/phs003461_allConcepts_new_search_with_data_analyzer.ehr.csv&apos; &quot;$S3_BUCKET&quot;
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+process_ready_study() {
+  local abbreviated_name=&quot;$1&quot; study_id=&quot;$2&quot;
+  local abbreviated_lower=&quot;${abbreviated_name,,}&quot;
+  local study_id_lower=&quot;${study_id,,}&quot;
+  local cache_dir=&quot;$CACHE_ROOT/studies/$study_id_lower&quot;
+  local clinical_cache=&quot;$cache_dir/clinical.csv&quot;
+  local ehr_cache=&quot;$cache_dir/ehr.csv&quot;
+  local clinical_uri ehr_uri=&quot;&quot;
+  local output_prefix lock_name
+
+  clinical_uri=&quot;s3://$S3_BUCKET/$abbreviated_lower/completed/$study_id/${study_id_lower}_allConcepts_new_search_with_data_analyzer.csv&quot;
+  output_prefix=&quot;beforeRemoval/${study_id_lower}_allConcepts_new_search_with_data_analyzer.csv&quot;
+  lock_name=&quot;$(safe_lock_name &quot;study-$study_id_lower&quot;)&quot;
+
+  clear_local_study_files &quot;$study_id_lower&quot;
+
+  # Hold the study lock through cache validation and split. This prevents a
+  # concurrent build with flag=N from deleting the cache while it is being read.
+  (
+    flock -x 9
+
+    cache_fetch_unlocked &quot;$clinical_uri&quot; &quot;$clinical_cache&quot;
+
+    if ehr_uri=&quot;$(study_ehr_uri &quot;$study_id_lower&quot;)&quot;; then
+      cache_fetch_unlocked &quot;$ehr_uri&quot; &quot;$ehr_cache&quot;
+    fi
+
+    split \
+      --numeric-suffixes=0 \
+      --suffix-length=&quot;$SPLIT_SUFFIX_LENGTH&quot; \
+      --line-bytes=&quot;$SPLIT_SIZE&quot; \
+      &quot;$clinical_cache&quot; \
+      &quot;$output_prefix&quot;
+
+    # Preserve the existing stop-gap semantics without risking a collision
+    # with clinical split parts. The merge JAR sees this as another input chunk.
+    if [[ -n &quot;$ehr_uri&quot; ]]; then
+      cp --reflink=auto &quot;$ehr_cache&quot; &quot;${output_prefix}9999&quot;
+    fi
+  ) 9&gt;&quot;$LOCK_ROOT/$lock_name.lock&quot;
+
+  compgen -G &quot;${output_prefix}*&quot; &gt;/dev/null \
+    || fail &quot;No split output produced for ready study $abbreviated_name $study_id&quot;
+
+  log &quot;Ready study staged from cache/S3 and split: $study_id&quot;
+}
+
+process_fixed_input() {
+  local name=&quot;$1&quot; uri=&quot;$2&quot; destination=&quot;$3&quot;
+  local lock_name cache_file
+  lock_name=&quot;$(safe_lock_name &quot;fixed-$name&quot;)&quot;
+  cache_file=&quot;$CACHE_ROOT/fixed/$name&quot;
+
+  (
+    flock -x 9
+    cache_fetch_unlocked &quot;$uri&quot; &quot;$cache_file&quot;
+    rm -f &quot;$destination&quot;
+    cp --reflink=auto &quot;$cache_file&quot; &quot;$destination&quot;
+  ) 9&gt;&quot;$LOCK_ROOT/$lock_name.lock&quot;
+
+  [[ -s &quot;$destination&quot; ]] || fail &quot;Fixed input is missing or empty: $destination&quot;
+  log &quot;Fixed input staged: $name&quot;
+}
+
+active_job_count() {
+  jobs -rp | wc -l
+}
+
+wait_for_job_slot() {
+  while (( $(active_job_count) &gt;= DOWNLOAD_WORKERS )); do
+    if ! wait -n; then
+      : # The child records failure in FAILURE_MARKER.
+    fi
+  done
+}
+
+launch_job() {
+  local label=&quot;$1&quot;
+  shift
+  wait_for_job_slot
+
+  (
+    trap &apos;rc=$?; if (( rc != 0 )); then printf &quot;%s\n&quot; &quot;$label&quot; &gt;&gt;&quot;$FAILURE_MARKER&quot;; fi&apos; EXIT
+    &quot;$@&quot;
+  ) &amp;
+}
+
+wait_for_all_jobs() {
+  while (( $(active_job_count) &gt; 0 )); do
+    if ! wait -n; then
+      : # Failure is reported after all active transfers are reaped.
+    fi
+  done
+
+  if [[ -f &quot;$FAILURE_MARKER&quot; ]]; then
+    log &quot;Failed background jobs:&quot; &gt;&amp;2
+    sort -u &quot;$FAILURE_MARKER&quot; &gt;&amp;2
+    exit 255
+  fi
+}
+
+configure_s3_cli
+assume_role
+
+log &quot;Downloading control files&quot;
+aws s3 cp &quot;$managed_inputs&quot; Managed_Inputs.csv --no-progress --only-show-errors
 aws s3 cp \
-  s3://avillach-73-bdcatalyst-etl/recover_adult/completed/phs003463/phs003463_allConcepts_new_search_with_data_analyzer.ehr.csv \
-  beforeRemoval/ \
-  --no-progress
+  &quot;s3://$S3_BUCKET/general/data/metadata_new_search.json&quot; \
+  metadata_new_search.json \
+  --no-progress \
+  --only-show-errors
 
-cat beforeRemoval/phs003463_allConcepts_new_search_with_data_analyzer.ehr.csv \
-  &gt;&gt; beforeRemoval/phs003463_allConcepts_new_search_with_data_analyzer.csv000 \
-  &amp;&amp; rm beforeRemoval/phs003463_allConcepts_new_search_with_data_analyzer.ehr.csv
+[[ -s Managed_Inputs.csv ]] || fail &quot;Managed_Inputs.csv is missing or empty&quot;
+[[ -s metadata_new_search.json ]] || fail &quot;metadata_new_search.json is missing or empty&quot;
 
-# Pediatrics
-aws s3 cp \
-  s3://avillach-73-bdcatalyst-etl/recover_pediatrics/completed/phs003461/phs003461_allConcepts_new_search_with_data_analyzer.ehr.csv \
-  beforeRemoval/ \
-  --no-progress
+# csvkit handles quoted commas correctly; plain IFS=&apos;,&apos; does not.
+csvcut \
+  -c &quot;Study Abbreviated Name&quot;,&quot;Study Identifier&quot;,&quot;Study Type&quot;,&quot;Data is ready to process&quot;,&quot;Data Processed&quot; \
+  Managed_Inputs.csv \
+  | csvformat -T \
+  &gt;inputs.tsv
 
-cat beforeRemoval/phs003461_allConcepts_new_search_with_data_analyzer.ehr.csv \
-  &gt;&gt; beforeRemoval/phs003461_allConcepts_new_search_with_data_analyzer.csv000 \
-  &amp;&amp; rm beforeRemoval/phs003461_allConcepts_new_search_with_data_analyzer.ehr.csv
+# Fail on duplicate study IDs so Yes/No rows cannot race or produce nondeterministic cache state.
+declare -A seen_studies=()
 
-#### End of stop gap
+while IFS=$&apos;\t&apos; read -r abbreviated_name study_id study_type data_ready data_processed; do
+  [[ -n &quot;$study_id&quot; ]] || continue
 
-IFS=&apos;,&apos;
-[ ! -f inputs.csv ]
-while read abv_name stdy_id stdy_type data_ready data_processed
-do
-  if [[ &quot;${data_ready,,}&quot; == &quot;yes&quot; ]]; then
-   aws s3 cp --no-progress s3://avillach-73-bdcatalyst-etl/${abv_name,,}/completed/${stdy_id}/${stdy_id,,}_allConcepts_new_search_with_data_analyzer.csv beforeRemoval/${stdy_id,,}_allConcepts_new_search_with_data_analyzer.csv --quiet 
-        if [[ -z beforeRemoval/${stdy_id,,}_allConcepts_new_search_with_data_analyzer.csv ]]; then
-        	echo &quot;No data found for &apos;ready&apos; study ${abv_name} ${stdy_id}&quot;
-            exit 255
-        fi
-   		split -d --line-bytes=250MB beforeRemoval/${stdy_id,,}_allConcepts_new_search_with_data_analyzer.csv beforeRemoval/${stdy_id,,}_allConcepts_new_search_with_data_analyzer.csv &amp;&amp; \
-        rm -f beforeRemoval/${stdy_id,,}_allConcepts_new_search_with_data_analyzer.csv &amp;&amp; \
-   		echo &quot;Downloaded and split ${stdy_id}&quot; &amp;       
+  study_id=&quot;${study_id##+([[:space:]])}&quot;
+  study_id=&quot;${study_id%%+([[:space:]])}&quot;
+  abbreviated_name=&quot;${abbreviated_name##+([[:space:]])}&quot;
+  abbreviated_name=&quot;${abbreviated_name%%+([[:space:]])}&quot;
 
-   else 
-      echo &quot;$abv_name marked not ready for processing in managed inputs&quot;
-   fi
-done &lt; inputs.csv
+  study_id_lower=&quot;${study_id,,}&quot;
+  [[ -z &quot;${seen_studies[$study_id_lower]:-}&quot; ]] \
+    || fail &quot;Duplicate Study Identifier in Managed_Inputs.csv: $study_id&quot;
+  seen_studies[$study_id_lower]=1
 
-aws s3 cp --no-progress s3://avillach-73-bdcatalyst-etl/hrmn/completed/HRMN_allConcepts.csv beforeRemoval/HRMN_allConcepts.csv &amp;
+  ready_flag=&quot;$(normalize_flag &quot;$data_ready&quot;)&quot;
+  case &quot;$ready_flag&quot; in
+    yes|y)
+      launch_job &quot;$study_id&quot; process_ready_study &quot;$abbreviated_name&quot; &quot;$study_id&quot;
+      ;;
+    *)
+      # This includes N/No, blank, and unexpected values. Only an explicit Yes can
+      # populate or reuse cache and enter beforeRemoval.
+      clear_study_cache_and_stage &quot;$study_id_lower&quot;
+      log &quot;$abbreviated_name ($study_id) marked not ready: flag=&apos;$data_ready&apos;&quot;
+      ;;
+  esac
+done &lt; &lt;(tail -n +2 inputs.tsv)
 
-aws s3 cp --no-progress s3://avillach-73-bdcatalyst-etl/general/completed/GLOBAL_allConcepts_merged.csv beforeRemoval/GLOBAL_allConcepts.csv &amp;
+launch_job &quot;HRMN&quot; process_fixed_input \
+  &quot;HRMN_allConcepts.csv&quot; \
+  &quot;s3://$S3_BUCKET/hrmn/completed/HRMN_allConcepts.csv&quot; \
+  &quot;beforeRemoval/HRMN_allConcepts.csv&quot;
 
+launch_job &quot;GLOBAL&quot; process_fixed_input \
+  &quot;GLOBAL_allConcepts_merged.csv&quot; \
+  &quot;s3://$S3_BUCKET/general/completed/GLOBAL_allConcepts_merged.csv&quot; \
+  &quot;beforeRemoval/GLOBAL_allConcepts.csv&quot;
 
+wait_for_all_jobs
 
-wait
+release_assumed_role
 
-CORES=&quot;$(nproc)&quot;          # 16 on r5.4xlarge
-HEAP_GB=64
+CORES=&quot;$(nproc)&quot;
+(( JAVA_PARALLELISM &lt;= CORES )) || JAVA_PARALLELISM=&quot;$CORES&quot;
+(( JAVA_PARALLELISM &gt;= 4 )) || JAVA_PARALLELISM=4
 
-# Safe caps for this ETL on r5.4xlarge:
-CPU_CAP=12                # don&apos;t default to 16
-MEM_CAP=$((HEAP_GB / 6))  # ~10 (heuristic: ~6GB heap per worker)
-
-PARALLEL=&quot;$CORES&quot;
-[ &quot;$PARALLEL&quot; -gt &quot;$CPU_CAP&quot; ] &amp;&amp; PARALLEL=&quot;$CPU_CAP&quot;
-[ &quot;$PARALLEL&quot; -gt &quot;$MEM_CAP&quot; ] &amp;&amp; PARALLEL=&quot;$MEM_CAP&quot;
-[ &quot;$PARALLEL&quot; -lt 4 ] &amp;&amp; PARALLEL=4
-
-echo &quot;Using parallelism=$PARALLEL (cores=$CORES, heap=${HEAP_GB}g)&quot;
-
-java -Xms32g -Xmx${HEAP_GB}g \
-  -DmaximumPoolSize=&quot;$PARALLEL&quot; \
-  -Djava.util.concurrent.ForkJoinPool.common.parallelism=&quot;$PARALLEL&quot; \
+log &quot;Running RemoveConsentZeroPatients: parallelism=$JAVA_PARALLELISM cores=$CORES heap=${HEAP_GB}g&quot;
+java \
+  &quot;-Xms${INITIAL_HEAP_GB}g&quot; \
+  &quot;-Xmx${HEAP_GB}g&quot; \
+  -DmaximumPoolSize=&quot;$JAVA_PARALLELISM&quot; \
+  -Djava.util.concurrent.ForkJoinPool.common.parallelism=&quot;$JAVA_PARALLELISM&quot; \
   -XX:+ExitOnOutOfMemoryError \
   -XX:+HeapDumpOnOutOfMemoryError \
-  -XX:HeapDumpPath=./oom-heapdump.hprof \
-  -Xlog:gc*,safepoint:file=gc.log:time,level,tags \
-  -jar jars/RemoveConsentZeroPatients.jar || exit 255
+  -XX:HeapDumpPath=./remove-consent-oom-heapdump.hprof \
+  -Xlog:gc*,safepoint:file=remove-consent-gc.log:time,level,tags \
+  -jar jars/RemoveConsentZeroPatients.jar
 
-java -Xmx64g -jar jars/DbGapDataMerge.jar
+log &quot;Running DbGapDataMerge: heap=${HEAP_GB}g&quot;
+java \
+  &quot;-Xms${INITIAL_HEAP_GB}g&quot; \
+  &quot;-Xmx${HEAP_GB}g&quot; \
+  -XX:+ExitOnOutOfMemoryError \
+  -XX:+HeapDumpOnOutOfMemoryError \
+  -XX:HeapDumpPath=./merge-oom-heapdump.hprof \
+  -Xlog:gc*,safepoint:file=merge-gc.log:time,level,tags \
+  -jar jars/DbGapDataMerge.jar
 
+[[ -s completed/allConcepts.csv ]] || fail &quot;DbGapDataMerge did not produce completed/allConcepts.csv&quot;
 
-unset AWS_ACCESS_KEY_ID
-unset AWS_SECRET_ACCESS_KEY
-unset AWS_SESSION_TOKEN
+# The Java work can exceed the role session, so obtain fresh credentials only for upload.
+assume_role
 
-aws sts assume-role --duration-seconds 3600 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+log &quot;Uploading completed/allConcepts.csv&quot;
+aws s3 cp \
+  completed/allConcepts.csv \
+  &quot;s3://$S3_BUCKET/general/completed/allConcepts_data_analyzer.csv&quot; \
+  --no-progress \
+  --only-show-errors
 
-export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-echo &quot;copying to s3&quot;
-aws s3 cp --no-progress completed/allConcepts.csv s3://avillach-73-bdcatalyst-etl/general/completed/allConcepts_data_analyzer.csv
-
-unset AWS_ACCESS_KEY_ID
-unset AWS_SECRET_ACCESS_KEY
-unset AWS_SESSION_TOKEN
-
-
-
+release_assumed_role
+log &quot;ETL job completed successfully&quot;
 </command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>

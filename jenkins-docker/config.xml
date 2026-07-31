@@ -245,6 +245,7 @@
       <jobNames>
         <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
         <string>_standalone_Curate Data Dictionaries_</string>
+        <string>_Testing Area</string>
         <string>_tmp_bk_ETL - All Concept Data Merge with Data Analyzer</string>
         <string>Curation - Create Sample and Subject Files</string>
         <string>Delete Subject and Sample Files</string>
@@ -256,8 +257,8 @@
         <string>ETL - Update Facet Configuration</string>
         <string>ETL - Update Managed Inputs</string>
         <string>pg_version</string>
-        <string>Testing Area</string>
         <string>Update Git With Latest Jobs and Config - pipeline</string>
+        <string>Warm Backups</string>
       </jobNames>
       <jobFilters/>
       <columns>
@@ -575,8 +576,8 @@
       <jobNames>
         <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
         <string>Curation - Curate Recover Adult Files For Dataset</string>
-        <string>Curation - Export Recover Adult, Autopsy Dataset</string>
-        <string>Curation - Export Recover Adult, Autopsy Metadata</string>
+        <string>Curation - Export Recover Adult,Autopsy Dataset</string>
+        <string>Curation - Export Recover Adult,Autopsy Metadata</string>
         <string>WIP - Curation - Curate Recover Adult Files For Dataset</string>
       </jobNames>
       <jobFilters/>
