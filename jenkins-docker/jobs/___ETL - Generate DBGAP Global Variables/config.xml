@@ -31,7 +31,7 @@
     </userRemoteConfigs>
     <branches>
       <hudson.plugins.git.BranchSpec>
-        <name>*/global-variable-investigation</name>
+        <name>d1194f1fa615593dba13aeecb596b8cd27a21e1d</name>
       </hudson.plugins.git.BranchSpec>
     </branches>
     <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
