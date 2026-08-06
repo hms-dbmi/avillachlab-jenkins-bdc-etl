@@ -108,11 +108,13 @@ fi
 if [ &quot;${Destroy:-false}&quot; = &quot;true&quot; ]; then
   make init &amp;&amp; make destroy-force
 else
-  make all
-  PIPELINE_STATUS=$?
+  # Survive a pipeline failure (set -e would abort before the notification):
+  # capture the real exit code, notify either way, exit with it at the end.
+  PIPELINE_STATUS=0
+  make all || PIPELINE_STATUS=$?
 
   # === SES Email Notification ===
-  # SES_SENDER defaults to noreply@hms.harvard.edu; override via Jenkins job env var.
+  # SES_SENDER defaults to thomas_desain@hms.harvard.edu; override via Jenkins job env var.
   SES_SENDER=&quot;${SES_SENDER:-thomas_desain@hms.harvard.edu}&quot;
   GIT_COMMITTER_EMAIL=$(git log -1 --format=&apos;%ae&apos;)
   ALL_RECIPIENTS=&quot;$GIT_COMMITTER_EMAIL&quot;
@@ -120,20 +122,26 @@ else
     ALL_RECIPIENTS=&quot;${GIT_COMMITTER_EMAIL},${SES_RECIPIENTS}&quot;
   fi
 
+  # Report fetch is best-effort: a failed run may have no/partial reports,
+  # and a fetch problem must never block the notification itself.
   rm -rf /tmp/etl-reports &amp;&amp; mkdir -p /tmp/etl-reports
   # Assume the 73-account role to read curation reports written by the pipeline
   unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
-  _CREDS=$(aws sts assume-role \
-    --role-arn arn:aws:iam::736265540791:role/dbgap-etl \
-    --role-session-name s3-sync-reports \
-    --duration-seconds 900 --output json)
-  export AWS_ACCESS_KEY_ID=$(echo &quot;$_CREDS&quot;     | jq -r &apos;.Credentials.AccessKeyId&apos;)
-  export AWS_SECRET_ACCESS_KEY=$(echo &quot;$_CREDS&quot; | jq -r &apos;.Credentials.SecretAccessKey&apos;)
-  export AWS_SESSION_TOKEN=$(echo &quot;$_CREDS&quot;     | jq -r &apos;.Credentials.SessionToken&apos;)
-  unset _CREDS
-  aws s3 sync &quot;s3://avillach-73-bdcatalyst-etl/__pipeline_runs__/mvp_work/curation_reports/current/&quot; \
-    /tmp/etl-reports/ --no-progress
-  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  if _CREDS=$(aws sts assume-role \
+      --role-arn arn:aws:iam::736265540791:role/dbgap-etl \
+      --role-session-name s3-sync-reports \
+      --duration-seconds 900 --output json); then
+    export AWS_ACCESS_KEY_ID=$(echo &quot;$_CREDS&quot;     | jq -r &apos;.Credentials.AccessKeyId&apos;)
+    export AWS_SECRET_ACCESS_KEY=$(echo &quot;$_CREDS&quot; | jq -r &apos;.Credentials.SecretAccessKey&apos;)
+    export AWS_SESSION_TOKEN=$(echo &quot;$_CREDS&quot;     | jq -r &apos;.Credentials.SessionToken&apos;)
+    unset _CREDS
+    aws s3 sync &quot;s3://avillach-73-bdcatalyst-etl/__pipeline_runs__/mvp_work/curation_reports/current/&quot; \
+      /tmp/etl-reports/ --no-progress \
+      || echo &quot;[reports] WARNING: report sync failed — notifying without fresh reports&quot;
+    unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  else
+    echo &quot;[reports] WARNING: assume-role failed — notifying without fresh reports&quot;
+  fi
 
   export PIPELINE_STATUS ALL_RECIPIENTS SES_SENDER
   if python3 scripts/notify.py; then
