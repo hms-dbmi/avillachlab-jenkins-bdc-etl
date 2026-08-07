@@ -71,12 +71,12 @@
       <properties class="hudson.model.View$PropertyList"/>
       <jobNames>
         <comparator class="java.lang.String$CaseInsensitiveComparator"/>
+        <string>_Stale_Jobs/ETL - Generate Non-compliant Metadata</string>
+        <string>_Stale_Jobs/ETL - Generate Non-DBGAP Global All Concepts</string>
+        <string>_Stale_Jobs/ETL - HPDS Javabin generation pipeline</string>
+        <string>_Stale_Jobs/ETL - Ingest Pipeline (Without Subject Multi)</string>
+        <string>_Stale_Jobs/ETL - Non Compliant Sequence Patients</string>
         <string>Dictionary ETL - Update Meta Counts For All Consents</string>
-        <string>ETL - Generate Non-compliant Metadata</string>
-        <string>ETL - Generate Non-DBGAP Global All Concepts</string>
-        <string>ETL - HPDS Javabin generation pipeline</string>
-        <string>ETL - Ingest Pipeline (Without Subject Multi)</string>
-        <string>ETL - Non Compliant Sequence Patients</string>
         <string>ETL - Update Managed Inputs</string>
         <string>ETL - Upload stigmatizing variable files from git to s3</string>
         <string>SWB FailSafe - Upload Decoded Data Set to s3</string>
@@ -137,13 +137,13 @@
       <properties class="hudson.model.View$PropertyList"/>
       <jobNames>
         <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
+        <string>_Stale_Jobs/ETL - Update Metadata.json on s3 with uploaded file</string>
+        <string>_Stale_Jobs/ETL - Update static files in javabins</string>
         <string>Dictionary ETL - Export DB</string>
         <string>Dictionary ETL - Start Docker Container - (BACKUP)</string>
         <string>Dictionary ETL - Stigvar Loader</string>
         <string>Dictionary ETL - Update Meta Counts For All Consents</string>
         <string>ETL - Generate HPDS Data Dictionary Javabin</string>
-        <string>ETL - Update Metadata.json on s3 with uploaded file</string>
-        <string>ETL - Update static files in javabins</string>
         <string>ETL - Upload stigmatizing variable files from git to s3</string>
         <string>Step 4b - Dictionary ETL - Start Docker Container</string>
       </jobNames>
@@ -244,21 +244,22 @@
       <properties class="hudson.model.View$PropertyList"/>
       <jobNames>
         <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
-        <string>_standalone_Curate Data Dictionaries_</string>
+        <string>_Stale_Jobs</string>
+        <string>_Stale_Jobs/_tmp_bk_ETL - All Concept Data Merge with Data Analyzer</string>
+        <string>_Stale_Jobs/Delete Subject and Sample Files</string>
+        <string>_Stale_Jobs/ETL - HPDS Javabin generation pipeline</string>
+        <string>_Stale_Jobs/ETL - PULL SSTR FROM NHLBI</string>
         <string>_Testing Area</string>
-        <string>_tmp_bk_ETL - All Concept Data Merge with Data Analyzer</string>
         <string>Curation - Create Sample and Subject Files</string>
-        <string>Delete Subject and Sample Files</string>
         <string>Dictionary ETL - Delete Dataset</string>
         <string>ETL - Archive Previous Study Version</string>
-        <string>ETL - HPDS Javabin generation pipeline</string>
         <string>ETL - Ingest Pipeline (With Subject Multi)</string>
-        <string>ETL - PULL SSTR FROM NHLBI</string>
         <string>ETL - Update Facet Configuration</string>
         <string>ETL - Update Managed Inputs</string>
         <string>pg_version</string>
         <string>Update Git With Latest Jobs and Config - pipeline</string>
         <string>Warm Backups</string>
+        <string>Warm Backups/_standalone_Curate Data Dictionaries_</string>
       </jobNames>
       <jobFilters/>
       <columns>
@@ -286,63 +287,17 @@
       <properties class="hudson.model.View$PropertyList"/>
       <jobNames>
         <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
+        <string>_Stale_Jobs/ETL - Generate Non-compliant Metadata</string>
+        <string>_Stale_Jobs/ETL - Generate Non-DBGAP Global All Concepts</string>
+        <string>_Stale_Jobs/ETL - HPDS Javabin generation pipeline</string>
+        <string>_Stale_Jobs/ETL - Ingest Pipeline (Without Subject Multi)</string>
+        <string>_Stale_Jobs/ETL - Non Compliant Sequence Patients</string>
         <string>ETL - Archive Previous Study Version</string>
-        <string>ETL - Generate Non-compliant Metadata</string>
-        <string>ETL - Generate Non-DBGAP Global All Concepts</string>
-        <string>ETL - HPDS Javabin generation pipeline</string>
-        <string>ETL - Ingest Pipeline (Without Subject Multi)</string>
-        <string>ETL - Non Compliant Sequence Patients</string>
         <string>ETL - Update Managed Inputs</string>
       </jobNames>
       <jobFilters/>
       <columns>
         <hudson.views.StatusColumn/>
-        <hudson.views.JobColumn/>
-        <hudson.views.LastSuccessColumn/>
-        <hudson.views.LastFailureColumn/>
-        <hudson.views.LastDurationColumn/>
-        <hudson.views.BuildButtonColumn/>
-      </columns>
-      <recurse>false</recurse>
-    </listView>
-    <listView>
-      <owner class="hudson" reference="../../.."/>
-      <name>Pipeline - Update Metadata.json</name>
-      <description>For updates to study type or authz for fence mapping. First upload new file, then run update. Values should also be updated in managed inputs</description>
-      <filterExecutors>false</filterExecutors>
-      <filterQueue>false</filterQueue>
-      <properties class="hudson.model.View$PropertyList"/>
-      <jobNames>
-        <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
-        <string>ETL - Update Metadata.json on s3 with uploaded file</string>
-        <string>ETL - Update static files in javabins</string>
-      </jobNames>
-      <jobFilters/>
-      <columns>
-        <hudson.views.StatusColumn/>
-        <hudson.views.JobColumn/>
-        <hudson.views.LastSuccessColumn/>
-        <hudson.views.LastFailureColumn/>
-        <hudson.views.LastDurationColumn/>
-        <hudson.views.BuildButtonColumn/>
-      </columns>
-      <recurse>false</recurse>
-    </listView>
-    <listView>
-      <owner class="hudson" reference="../../.."/>
-      <name>Pipeline - Update Stigmatizing Variables</name>
-      <filterExecutors>false</filterExecutors>
-      <filterQueue>false</filterQueue>
-      <properties class="hudson.model.View$PropertyList"/>
-      <jobNames>
-        <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
-        <string>ETL - Update Stigmatizing Variables in Existing Dataset - bk</string>
-        <string>Step 7 - ETL - Update Stigmatizing Variables in Existing Dataset</string>
-      </jobNames>
-      <jobFilters/>
-      <columns>
-        <hudson.views.StatusColumn/>
-        <hudson.views.WeatherColumn/>
         <hudson.views.JobColumn/>
         <hudson.views.LastSuccessColumn/>
         <hudson.views.LastFailureColumn/>
@@ -359,8 +314,8 @@
       <properties class="hudson.model.View$PropertyList"/>
       <jobNames>
         <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
-        <string>Build EntityGenerator</string>
-        <string>Create new Jenkins Server</string>
+        <string>_Stale_Jobs/Build EntityGenerator</string>
+        <string>_Stale_Jobs/Create new Jenkins Server</string>
         <string>New Server Setup</string>
         <string>PIC-SURE-API Build</string>
       </jobNames>
@@ -384,17 +339,7 @@
       <properties class="hudson.model.View$PropertyList"/>
       <jobNames>
         <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
-        <string>_sandbox</string>
-        <string>BioLINCC - Download and Upload Telemetry Reports to S3</string>
-        <string>BioLINCC - Metadata Curation</string>
-        <string>BioLINCC - Metadata Curation - ALS-9272</string>
-        <string>BioLINCC - Pull data from NHLBI S3</string>
-        <string>BioLINCC - Push Studies to Metadata Curation Repo</string>
-        <string>BioLINCC - Upload Telemetry Reports</string>
-        <string>BioLINCC Curation Orchestration</string>
         <string>BioLINCC ETL Pipeline</string>
-        <string>build_inputs</string>
-        <string>Validate NHLBI Data</string>
       </jobNames>
       <jobFilters/>
       <columns>
@@ -622,7 +567,7 @@
       <recurse>false</recurse>
     </listView>
   </views>
-  <primaryView>Pipeline - Phenotype Ingestion With Subject Multi</primaryView>
+  <primaryView>all</primaryView>
   <slaveAgentPort>50000</slaveAgentPort>
   <label>controller</label>
   <crumbIssuer class="hudson.security.csrf.DefaultCrumbIssuer">
