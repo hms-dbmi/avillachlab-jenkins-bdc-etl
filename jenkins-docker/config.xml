@@ -102,12 +102,12 @@
       <properties class="hudson.model.View$PropertyList"/>
       <jobNames>
         <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
+        <string>_Warm_Backups/ETL - Generate DBGAP Global Variables</string>
         <string>Dictionary ETL - Update Meta Counts For All Consents</string>
         <string>ETL - Add Subject Type to Study Metadata</string>
         <string>ETL - DBGap Decode Data</string>
         <string>ETL - DBGap Sequence Patients</string>
         <string>ETL - Generate DBGAP Global All Concepts</string>
-        <string>ETL - Generate DBGAP Global Variables</string>
         <string>ETL - Generate DBGAP Mapping Files</string>
         <string>ETL - Generate Genomic Index Files For Newly Ingested Studies</string>
         <string>ETL - Generate Metadata</string>
@@ -250,6 +250,8 @@
         <string>_Stale_Jobs/ETL - HPDS Javabin generation pipeline</string>
         <string>_Stale_Jobs/ETL - PULL SSTR FROM NHLBI</string>
         <string>_Testing Area</string>
+        <string>_Warm_Backups</string>
+        <string>_Warm_Backups/_standalone_Curate Data Dictionaries_</string>
         <string>Curation - Create Sample and Subject Files</string>
         <string>Dictionary ETL - Delete Dataset</string>
         <string>ETL - Archive Previous Study Version</string>
@@ -258,8 +260,6 @@
         <string>ETL - Update Managed Inputs</string>
         <string>pg_version</string>
         <string>Update Git With Latest Jobs and Config - pipeline</string>
-        <string>Warm Backups</string>
-        <string>Warm Backups/_standalone_Curate Data Dictionaries_</string>
       </jobNames>
       <jobFilters/>
       <columns>

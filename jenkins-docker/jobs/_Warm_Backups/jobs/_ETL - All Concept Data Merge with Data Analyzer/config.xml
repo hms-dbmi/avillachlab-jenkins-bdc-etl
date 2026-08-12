@@ -296,11 +296,8 @@ process_ready_study() {
   local cache_dir=&quot;$CACHE_ROOT/studies/$study_id_lower&quot;
   local clinical_cache=&quot;$cache_dir/clinical.csv&quot;
   local ehr_cache=&quot;$cache_dir/ehr.csv&quot;
-  local split_cache_dir=&quot;$cache_dir/split&quot;
-  local split_metadata_file=&quot;${split_cache_dir}.metadata&quot;
   local clinical_uri ehr_uri=&quot;&quot;
   local output_prefix lock_name
-  local clinical_fingerprint split_fingerprint cached_split_fingerprint=&quot;&quot;
 
   clinical_uri=&quot;s3://$S3_BUCKET/$abbreviated_lower/completed/$study_id/${study_id_lower}_allConcepts_new_search_with_data_analyzer.csv&quot;
   output_prefix=&quot;beforeRemoval/${study_id_lower}_allConcepts_new_search_with_data_analyzer.csv&quot;
@@ -319,38 +316,12 @@ process_ready_study() {
       cache_fetch_unlocked &quot;$ehr_uri&quot; &quot;$ehr_cache&quot;
     fi
 
-    # split output is a pure function of (source fingerprint, SPLIT_SIZE,
-    # SPLIT_SUFFIX_LENGTH). Reuse cached parts on exact match instead of
-    # re-scanning clinical.csv every run.
-    clinical_fingerprint=&quot;$(&lt;&quot;${clinical_cache}.metadata&quot;)&quot;
-    split_fingerprint=&quot;$clinical_fingerprint|$SPLIT_SIZE|$SPLIT_SUFFIX_LENGTH&quot;
-    [[ ! -f &quot;$split_metadata_file&quot; ]] || cached_split_fingerprint=&quot;$(&lt;&quot;$split_metadata_file&quot;)&quot;
-
-    if [[ -d &quot;$split_cache_dir&quot; &amp;&amp; &quot;$cached_split_fingerprint&quot; == &quot;$split_fingerprint&quot; ]] \
-       &amp;&amp; compgen -G &quot;$split_cache_dir/&quot;&apos;*&apos; &gt;/dev/null; then
-      log &quot;Split cache hit: $study_id_lower&quot;
-      for part in &quot;$split_cache_dir&quot;/*; do
-        cp --reflink=auto &quot;$part&quot; &quot;beforeRemoval/$(basename &quot;$part&quot;)&quot;
-      done
-    else
-      log &quot;Split cache miss; splitting: $study_id_lower&quot;
-      split \
-        --numeric-suffixes=0 \
-        --suffix-length=&quot;$SPLIT_SUFFIX_LENGTH&quot; \
-        --line-bytes=&quot;$SPLIT_SIZE&quot; \
-        &quot;$clinical_cache&quot; \
-        &quot;$output_prefix&quot;
-
-      # Populate cache atomically: build in a sibling temp dir, rename into
-      # place, write the fingerprint last. A kill mid-populate just leaves a
-      # stale/missing metadata file -&gt; next run re-splits, no corruption.
-      local split_temp_dir
-      split_temp_dir=&quot;$(mktemp -d &quot;${split_cache_dir}.partial.XXXXXX&quot;)&quot;
-      cp --reflink=auto &quot;${output_prefix}&quot;* &quot;$split_temp_dir&quot;/
-      rm -rf &quot;$split_cache_dir&quot;
-      mv -f &quot;$split_temp_dir&quot; &quot;$split_cache_dir&quot;
-      printf &apos;%s\n&apos; &quot;$split_fingerprint&quot; &gt;&quot;$split_metadata_file&quot;
-    fi
+    split \
+      --numeric-suffixes=0 \
+      --suffix-length=&quot;$SPLIT_SUFFIX_LENGTH&quot; \
+      --line-bytes=&quot;$SPLIT_SIZE&quot; \
+      &quot;$clinical_cache&quot; \
+      &quot;$output_prefix&quot;
 
     # Preserve the existing stop-gap semantics without risking a collision
     # with clinical split parts. The merge JAR sees this as another input chunk.
@@ -359,7 +330,7 @@ process_ready_study() {
     fi
   ) 9&gt;&quot;$LOCK_ROOT/$lock_name.lock&quot;
 
-  compgen -G &quot;${output_prefix}&quot;&apos;*&apos; &gt;/dev/null \
+  compgen -G &quot;${output_prefix}*&quot; &gt;/dev/null \
     || fail &quot;No split output produced for ready study $abbreviated_name $study_id&quot;
 
   log &quot;Ready study staged from cache/S3 and split: $study_id&quot;
@@ -523,7 +494,8 @@ aws s3 cp \
   --only-show-errors
 
 release_assumed_role
-log &quot;ETL job completed successfully&quot;</command>
+log &quot;ETL job completed successfully&quot;
+</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>

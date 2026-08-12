@@ -303,7 +303,7 @@ pipeline {
         stage(&apos;Generate Global Variables&apos;) {
             steps {
                 script {
-                    build job: &apos;___ETL - Generate DBGAP Global Variables&apos;
+                    build job: &apos;ETL - Generate DBGAP Global Variables&apos;
                 }
                 script {
                     build job: &apos;ETL - Generate DBGAP Global All Concepts&apos;

@@ -31,7 +31,7 @@
     </userRemoteConfigs>
     <branches>
       <hudson.plugins.git.BranchSpec>
-        <name>*/master</name>
+        <name>d1194f1fa615593dba13aeecb596b8cd27a21e1d</name>
       </hudson.plugins.git.BranchSpec>
     </branches>
     <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
@@ -209,7 +209,7 @@ head -n 10 inputs.csv &gt;&amp;2 || true
 #   - Tracks PIDs explicitly
 #   - Waits for *all* PIDs and fails if any download failed
 # -----------------------------
-DOWNLOAD_PARALLEL=&quot;${DOWNLOAD_PARALLEL:-6}&quot;
+DOWNLOAD_PARALLEL=&quot;${DOWNLOAD_PARALLEL:-12}&quot;
 # Set DOWNLOAD_PARALLEL=1 to remove parallelism entirely.
 log &quot;Downloading per-study multi assets with parallelism=${DOWNLOAD_PARALLEL}&quot;
 
@@ -317,20 +317,23 @@ log &quot;All downloads complete&quot;
 # -----------------------------
 # Run generators
 # -----------------------------
+export JAVA_HOME=/usr/lib/jvm/temurin-24-jdk-amd64
+export PATH=&quot;$JAVA_HOME/bin:$PATH&quot;
+
 log &quot;generating consent group data&quot;
-java -jar jars/ConsentGroupGenerator.jar 2&gt;&gt; logs/error_logging.txt
+java -jar jars/entity-generator-1.0.0-SNAPSHOT-ConsentGroupGenerator.jar 2&gt;&gt; logs/error_logging.txt
 
 log &quot;generating phs id data&quot;
-java -jar jars/PHSIdGenerator.jar 2&gt;&gt; logs/error_logging.txt
+java -jar jars/entity-generator-1.0.0-SNAPSHOT-PHSIdGenerator.jar 2&gt;&gt; logs/error_logging.txt
 
 log &quot;generating rootnode data&quot;
-java -jar jars/RootNodeGenerator.jar 2&gt;&gt; logs/error_logging.txt
+java -jar jars/entity-generator-1.0.0-SNAPSHOT-RootNodeGenerator.jar 2&gt;&gt; logs/error_logging.txt
 
 log &quot;generating genomic sample id global var data&quot;
-java -jar jars/GenomicSampIdGlobalVarGenerator.jar 2&gt;&gt; logs/error_logging.txt
+java -jar jars/entity-generator-1.0.0-SNAPSHOT-GenomicSampIdGlobalVarGenerator.jar 2&gt;&gt; logs/error_logging.txt
 
 log &quot;generating studies consents&quot;
-java -jar jars/StudiesConsentsGenerator.jar -writedir ./completed_study_consents/ 2&gt;&gt; logs/error_logging.txt
+java -jar jars/entity-generator-1.0.0-SNAPSHOT-StudiesConsentsGenerator.jar -writedir ./completed_study_consents/ 2&gt;&gt; logs/error_logging.txt
 
 if [[ -s logs/error_logging.txt ]]; then
   warn &quot;Errors were logged during generation (see logs/error_logging.txt). Proceeding to upload outputs.&quot;
