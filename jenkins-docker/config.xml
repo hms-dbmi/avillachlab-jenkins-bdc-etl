@@ -566,6 +566,28 @@
       </columns>
       <recurse>false</recurse>
     </listView>
+    <listView>
+      <owner class="hudson" reference="../../.."/>
+      <name>HPDS ETL</name>
+      <filterExecutors>false</filterExecutors>
+      <filterQueue>false</filterQueue>
+      <properties class="hudson.model.View$PropertyList"/>
+      <jobNames>
+        <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
+        <string>new-hpds-etl-participant-migration-pipeline</string>
+      </jobNames>
+      <jobFilters/>
+      <columns>
+        <hudson.views.StatusColumn/>
+        <hudson.views.WeatherColumn/>
+        <hudson.views.JobColumn/>
+        <hudson.views.LastSuccessColumn/>
+        <hudson.views.LastFailureColumn/>
+        <hudson.views.LastDurationColumn/>
+        <hudson.views.BuildButtonColumn/>
+      </columns>
+      <recurse>false</recurse>
+    </listView>
   </views>
   <primaryView>all</primaryView>
   <slaveAgentPort>50000</slaveAgentPort>

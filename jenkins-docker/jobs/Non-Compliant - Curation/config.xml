@@ -13,6 +13,10 @@
         <removeLastBuild>false</removeLastBuild>
       </strategy>
     </jenkins.model.BuildDiscarderProperty>
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
+      <doNotScan>false</doNotScan>
+    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
     <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
@@ -37,14 +41,13 @@
         </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
-    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
   </properties>
   <scm class="hudson.plugins.git.GitSCM" plugin="git@5.8.1">
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
         <url>git@github.com:hms-dbmi/bdc-etl-curation.git</url>
-        <credentialsId>bdc-etl-curation-ro-deploy-key</credentialsId>
+        <credentialsId>git</credentialsId>
       </hudson.plugins.git.UserRemoteConfig>
     </userRemoteConfigs>
     <branches>
@@ -65,7 +68,7 @@
   <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Shell>
-      <command>export DOWNLOAD_DMC_DATA=&quot;${download_dmc_data}&quot;
+      <command>export LOCAL=false 
 export STUDY_ABBREVIATION=&quot;${study_abbreviation}&quot;
 export STUDY_PHS=&quot;${study_phs}&quot;
 bash -ex ./noncompliant/pipeline.sh</command>
