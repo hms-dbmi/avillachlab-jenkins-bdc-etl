@@ -9,20 +9,16 @@
       </jobProperties>
       <triggers/>
       <parameters>
-        <string>VCF_INDEXES_JOB</string>
-        <string>DATA_FOLDER</string>
-        <string>ENV</string>
-        <string>VCF_INDEXES_OUTPUT</string>
-        <string>ALL_CONCEPTS_JOB</string>
-        <string>CONTINUE_ON_STUDY_FAILURE</string>
+        <string>SKIP_TESTS</string>
+        <string>JOB_TIMEOUT_SECONDS</string>
         <string>BATCH_SIZE</string>
+        <string>DATA_FOLDER</string>
         <string>PREFLIGHT_ONLY</string>
         <string>MANAGED_INPUTS</string>
-        <string>RUN_INTEGRATION_TESTS</string>
-        <string>SPLIT_ALLCONCEPTS_JOB</string>
-        <string>PARTICIPANTS_MIGRATION_JOB</string>
-        <string>ALL_CONCEPTS_OUTPUT</string>
-        <string>SPLIT_OUTPUT</string>
+        <string>RETRY_ON_INFRA</string>
+        <string>ENV</string>
+        <string>INSTANCE_TYPE</string>
+        <string>RUN_ID</string>
       </parameters>
       <options/>
     </org.jenkinsci.plugins.pipeline.modeldefinition.actions.DeclarativeJobPropertyTrackerAction>
@@ -30,105 +26,80 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
+    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
+      <doNotScan>false</doNotScan>
+    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
     <jenkins.model.BuildDiscarderProperty>
       <strategy class="hudson.tasks.LogRotator">
         <daysToKeep>-1</daysToKeep>
         <numToKeep>30</numToKeep>
         <artifactDaysToKeep>-1</artifactDaysToKeep>
-        <artifactNumToKeep>10</artifactNumToKeep>
+        <artifactNumToKeep>30</artifactNumToKeep>
         <removeLastBuild>false</removeLastBuild>
       </strategy>
     </jenkins.model.BuildDiscarderProperty>
-    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
-      <doNotScan>false</doNotScan>
-    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
     <org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty>
       <abortPrevious>false</abortPrevious>
     </org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty>
-    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
-      <autoRebuild>false</autoRebuild>
-      <rebuildDisabled>false</rebuildDisabled>
-    </com.sonyericsson.rebuild.RebuildSettings>
     <hudson.model.ParametersDefinitionProperty>
       <parameterDefinitions>
         <hudson.model.StringParameterDefinition>
           <name>MANAGED_INPUTS</name>
-          <description>participants-migration --managed-inputs: study list CSV with &quot;Study Abbreviated Name&quot;, &quot;Study Identifier&quot;, &quot;Data is ready to process&quot;</description>
+          <description>--managed-inputs: CSV with columns &quot;Study Abbreviated Name&quot;, &quot;Study Identifier&quot;, &quot;Data is ready to process&quot;</description>
           <defaultValue>s3://avillach-73-bdcatalyst-etl/__migration__/managed_inputs.csv</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
           <name>DATA_FOLDER</name>
-          <description>participants-migration --data-folder: folder holding {studyid}_sstr.tsv, {ABV}_PatientMapping.v2.csv, and the shared GLOBAL_allConcepts_merged.csv</description>
+          <description>--data-folder: folder holding {studyid}_sstr.tsv, {ABV}_PatientMapping.v2.csv, and the shared GLOBAL_allConcepts_merged.csv</description>
           <defaultValue>s3://avillach-73-bdcatalyst-etl/__migration__/current</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
           <name>BATCH_SIZE</name>
-          <description>Rows per batch insert, passed to every migration job</description>
+          <description>--batch-size: rows per batch insert</description>
           <defaultValue>1000</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
-          <name>PARTICIPANTS_MIGRATION_JOB</name>
-          <description>Jenkins job that runs etl-runners/participants-migration/Jenkinsfile</description>
-          <defaultValue>participants-migration</defaultValue>
+          <name>RUN_ID</name>
+          <description>Correlation id. Blank uses a sanitised BUILD_TAG. Appears in the report filename and the S3 report prefix.</description>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
-          <name>SPLIT_ALLCONCEPTS_JOB</name>
-          <description>Jenkins job that runs etl-runners/split-allconcepts/Jenkinsfile</description>
-          <defaultValue>split-allconcepts</defaultValue>
+          <name>INSTANCE_TYPE</name>
+          <description>Runner instance type. Memory-bound: a study mapping file and GLOBAL_allConcepts_merged.csv are joined in memory.</description>
+          <defaultValue>r6i.large</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
-          <name>SPLIT_OUTPUT</name>
-          <description>Output directory for split allConcepts files (local path or s3:// URI)</description>
-          <defaultValue>./output</defaultValue>
-          <trim>false</trim>
-        </hudson.model.StringParameterDefinition>
-        <hudson.model.StringParameterDefinition>
-          <name>ALL_CONCEPTS_JOB</name>
-          <description>Jenkins job that runs the generate-global-all-concepts runner</description>
-          <defaultValue>generate-global-all-concepts</defaultValue>
-          <trim>false</trim>
-        </hudson.model.StringParameterDefinition>
-        <hudson.model.StringParameterDefinition>
-          <name>ALL_CONCEPTS_OUTPUT</name>
-          <description>Output location for global_AllConcepts.csv (local path or s3:// URI)</description>
-          <defaultValue>s3://avillach-etl/output/</defaultValue>
-          <trim>false</trim>
-        </hudson.model.StringParameterDefinition>
-        <hudson.model.StringParameterDefinition>
-          <name>VCF_INDEXES_JOB</name>
-          <description>Jenkins job that runs the create-vcf-indexes runner</description>
-          <defaultValue>create-vcf-indexes</defaultValue>
-          <trim>false</trim>
-        </hudson.model.StringParameterDefinition>
-        <hudson.model.StringParameterDefinition>
-          <name>VCF_INDEXES_OUTPUT</name>
-          <description>Output location for vcfIndex.tsv and SampleIds.csv (local path or s3:// URI)</description>
-          <defaultValue>s3://avillach-etl/output/vcf-indexes/</defaultValue>
+          <name>JOB_TIMEOUT_SECONDS</name>
+          <description>How long to wait for the runner before giving up (monitor exits 124)</description>
+          <defaultValue>7200</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.BooleanParameterDefinition>
-          <name>CONTINUE_ON_STUDY_FAILURE</name>
-          <description>Keep splitting remaining studies when one fails. Each study is independent.</description>
-          <defaultValue>true</defaultValue>
+          <name>SKIP_TESTS</name>
+          <description>Skip the JAR test suites. Off by default: the image the runner executes should be the artifact the tests ran against.</description>
+          <defaultValue>false</defaultValue>
         </hudson.model.BooleanParameterDefinition>
         <hudson.model.BooleanParameterDefinition>
-          <name>RUN_INTEGRATION_TESTS</name>
-          <description>Run the Testcontainers *IT suites (needs a Docker daemon on the agent). These are the only checks that assert real DB state, so leaving them on is strongly preferred before a migration.</description>
+          <name>RETRY_ON_INFRA</name>
+          <description>Retry once on exit 4 (INFRASTRUCTURE_ERROR). Safe: loads are transactional and upserts are idempotent.</description>
           <defaultValue>true</defaultValue>
         </hudson.model.BooleanParameterDefinition>
         <hudson.model.BooleanParameterDefinition>
           <name>PREFLIGHT_ONLY</name>
-          <description>Validate every migration input layout and stop, without provisioning anything</description>
+          <description>Validate the input layout and stop, without provisioning anything</description>
           <defaultValue>false</defaultValue>
         </hudson.model.BooleanParameterDefinition>
         <hudson.model.ChoiceParameterDefinition>
           <name>ENV</name>
-          <description>Target environment. Selects etl-runners/environments/&lt;ENV&gt;.tfvars for network, RDS, and account settings.</description>
+          <description>Target environment. Selects etl-runners/environments/&lt;ENV&gt;.tfvars.</description>
           <choices>
             <string>integration</string>
           </choices>
@@ -141,7 +112,7 @@
       <configVersion>2</configVersion>
       <userRemoteConfigs>
         <hudson.plugins.git.UserRemoteConfig>
-          <url>https://github.com/hms-dbmi/pic-sure-hpds-etl</url>
+          <url>https://github.com/hms-dbmi/pic-sure-hpds-etl.git</url>
           <credentialsId>git</credentialsId>
         </hudson.plugins.git.UserRemoteConfig>
       </userRemoteConfigs>
@@ -154,8 +125,8 @@
       <submoduleCfg class="empty-list"/>
       <extensions/>
     </scm>
-    <scriptPath>Jenkinsfile.migration</scriptPath>
-    <lightweight>true</lightweight>
+    <scriptPath>etl-runners/participants-migration/Jenkinsfile</scriptPath>
+    <lightweight>false</lightweight>
   </definition>
   <triggers/>
   <disabled>false</disabled>

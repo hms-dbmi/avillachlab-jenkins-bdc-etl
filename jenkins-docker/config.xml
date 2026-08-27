@@ -48,6 +48,11 @@
       <home>/usr/lib/jvm/temurin-24-jdk-amd64</home>
       <properties/>
     </jdk>
+    <jdk>
+      <name>jdk-25</name>
+      <home>/usr/lib/jvm/temurin-25-jdk-amd64</home>
+      <properties/>
+    </jdk>
   </jdks>
   <viewsTabBar class="hudson.views.DefaultViewsTabBar"/>
   <myViewsTabBar class="hudson.views.DefaultMyViewsTabBar"/>
@@ -574,7 +579,11 @@
       <properties class="hudson.model.View$PropertyList"/>
       <jobNames>
         <comparator class="java.lang.String$CaseInsensitiveComparator" reference="../../../listView/jobNames/comparator"/>
+        <string>create-vcf-indexes</string>
+        <string>generate-global-all-concepts</string>
         <string>new-hpds-etl-participant-migration-pipeline</string>
+        <string>participants-migration</string>
+        <string>split-allconcepts</string>
       </jobNames>
       <jobFilters/>
       <columns>
