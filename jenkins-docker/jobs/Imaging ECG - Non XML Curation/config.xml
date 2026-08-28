@@ -44,7 +44,7 @@ XML ECG Files will be converted to csvs and metadata.json generated</description
     </userRemoteConfigs>
     <branches>
       <hudson.plugins.git.BranchSpec>
-        <name>*/release_updates_9_25</name>
+        <name>*/heartshare-searchcvd-curation</name>
       </hudson.plugins.git.BranchSpec>
     </branches>
     <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>

@@ -10,9 +10,13 @@
       <triggers/>
       <parameters>
         <string>SKIP_TESTS</string>
+        <string>ALLOW_EMPTY</string>
         <string>JOB_TIMEOUT_SECONDS</string>
         <string>OUTPUT</string>
+        <string>MANAGED_INPUTS</string>
         <string>RETRY_ON_INFRA</string>
+        <string>CONTAINER_ASSUME_ROLE_ARN</string>
+        <string>ENV</string>
         <string>INSTANCE_TYPE</string>
         <string>RUN_ID</string>
       </parameters>
@@ -29,11 +33,28 @@
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
     </com.sonyericsson.rebuild.RebuildSettings>
+    <jenkins.model.BuildDiscarderProperty>
+      <strategy class="hudson.tasks.LogRotator">
+        <daysToKeep>-1</daysToKeep>
+        <numToKeep>50</numToKeep>
+        <artifactDaysToKeep>-1</artifactDaysToKeep>
+        <artifactNumToKeep>50</artifactNumToKeep>
+        <removeLastBuild>false</removeLastBuild>
+      </strategy>
+    </jenkins.model.BuildDiscarderProperty>
+    <org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty>
+      <abortPrevious>false</abortPrevious>
+    </org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty>
     <hudson.model.ParametersDefinitionProperty>
       <parameterDefinitions>
         <hudson.model.StringParameterDefinition>
           <name>OUTPUT</name>
           <description>REQUIRED. --output: where global_AllConcepts.csv is written (local path or s3:// URI). Appends the filename if it ends with /.</description>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>MANAGED_INPUTS</name>
+          <description>Override for the managed inputs CSV URI (local path or s3://). Blank uses the configured etl.managed-inputs.uri.</description>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
@@ -63,20 +84,26 @@
           <description>Retry once on exit 4 (INFRASTRUCTURE_ERROR).</description>
           <defaultValue>true</defaultValue>
         </hudson.model.BooleanParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>CONTAINER_ASSUME_ROLE_ARN</name>
+          <description>Cross-account IAM role ARN for the container to assume when reading S3 inputs. Blank disables cross-account access.</description>
+          <defaultValue>arn:aws:iam::736265540791:role/dbgap-etl</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.BooleanParameterDefinition>
+          <name>ALLOW_EMPTY</name>
+          <description>When true, exit 0 even if the database has no data (preflight mode).</description>
+          <defaultValue>false</defaultValue>
+        </hudson.model.BooleanParameterDefinition>
+        <hudson.model.ChoiceParameterDefinition>
+          <name>ENV</name>
+          <description>Target environment. Selects etl-runners/environments/&lt;ENV&gt;.tfvars.</description>
+          <choices>
+            <string>integration</string>
+          </choices>
+        </hudson.model.ChoiceParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
-    <jenkins.model.BuildDiscarderProperty>
-      <strategy class="hudson.tasks.LogRotator">
-        <daysToKeep>-1</daysToKeep>
-        <numToKeep>50</numToKeep>
-        <artifactDaysToKeep>-1</artifactDaysToKeep>
-        <artifactNumToKeep>50</artifactNumToKeep>
-        <removeLastBuild>false</removeLastBuild>
-      </strategy>
-    </jenkins.model.BuildDiscarderProperty>
-    <org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty>
-      <abortPrevious>false</abortPrevious>
-    </org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty>
   </properties>
   <definition class="org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition" plugin="workflow-cps@4238.va_6fb_65c1f699">
     <scm class="hudson.plugins.git.GitSCM" plugin="git@5.8.1">
