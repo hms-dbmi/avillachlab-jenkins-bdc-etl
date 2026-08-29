@@ -11,6 +11,7 @@
       <parameters>
         <string>VCF_INDEXES_JOB</string>
         <string>DATA_FOLDER</string>
+        <string>CONTAINER_ASSUME_ROLE_ARN</string>
         <string>ENV</string>
         <string>VCF_INDEXES_OUTPUT</string>
         <string>ALL_CONCEPTS_JOB</string>
@@ -109,6 +110,12 @@
           <name>VCF_INDEXES_OUTPUT</name>
           <description>Output location for vcfIndex.tsv and SampleIds.csv (local path or s3:// URI)</description>
           <defaultValue>s3://avillach-etl/output/vcf-indexes/</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>CONTAINER_ASSUME_ROLE_ARN</name>
+          <description>Cross-account IAM role ARN for containers to assume when reading S3 inputs from the 73 bucket. Passed to every downstream runner.</description>
+          <defaultValue>arn:aws:iam::736265540791:role/dbgap-etl</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.BooleanParameterDefinition>
