@@ -68,8 +68,8 @@
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
           <name>OUTPUT</name>
-          <description>--output: output directory for split files</description>
-          <defaultValue>./output</defaultValue>
+          <description>--output: output location for split files. Must be an s3:// URI (or a path under /reports): any other local path resolves inside the runner container and is destroyed with the instance.</description>
+          <defaultValue>s3://avillach-73-bdcatalyst-etl/__migration__/split_allconcepts/</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>

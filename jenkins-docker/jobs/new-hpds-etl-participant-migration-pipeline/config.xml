@@ -21,6 +21,7 @@
         <string>MANAGED_INPUTS</string>
         <string>RUN_INTEGRATION_TESTS</string>
         <string>SPLIT_ALLCONCEPTS_JOB</string>
+        <string>MAPPING_UPLOAD_BASE</string>
         <string>PARTICIPANTS_MIGRATION_JOB</string>
         <string>ALL_CONCEPTS_OUTPUT</string>
         <string>SPLIT_OUTPUT</string>
@@ -83,9 +84,15 @@
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
+          <name>MAPPING_UPLOAD_BASE</name>
+          <description>S3 prefix the orchestrator uploads each {studyid}_hpds_id_mapping.csv to before triggering split-allconcepts. Must be readable by CONTAINER_ASSUME_ROLE_ARN (the split container does ALL S3 I/O as that role). A per-build tag is appended.</description>
+          <defaultValue>s3://avillach-73-bdcatalyst-etl/__migration__/mappings</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
           <name>SPLIT_OUTPUT</name>
-          <description>Output directory for split allConcepts files (local path or s3:// URI)</description>
-          <defaultValue>./output</defaultValue>
+          <description>Output location for split allConcepts files. Must be an s3:// URI: a local path resolves INSIDE the runner container (/app), which is destroyed with the instance, silently discarding every per-consent CSV.</description>
+          <defaultValue>s3://avillach-73-bdcatalyst-etl/__migration__/split_allconcepts/</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
@@ -96,8 +103,8 @@
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
           <name>ALL_CONCEPTS_OUTPUT</name>
-          <description>Output location for global_AllConcepts.csv (local path or s3:// URI)</description>
-          <defaultValue>s3://avillach-etl/output/</defaultValue>
+          <description>Output location for global_AllConcepts.csv. Must be an s3:// URI reachable by CONTAINER_ASSUME_ROLE_ARN.</description>
+          <defaultValue>s3://avillach-73-bdcatalyst-etl/__migration__/global_allconcepts/</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
@@ -108,8 +115,8 @@
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
           <name>VCF_INDEXES_OUTPUT</name>
-          <description>Output location for vcfIndex.tsv and SampleIds.csv (local path or s3:// URI)</description>
-          <defaultValue>s3://avillach-etl/output/vcf-indexes/</defaultValue>
+          <description>Output location for vcfIndex.tsv and SampleIds.csv. Must be an s3:// URI reachable by CONTAINER_ASSUME_ROLE_ARN.</description>
+          <defaultValue>s3://avillach-73-bdcatalyst-etl/__migration__/vcf_indexes/</defaultValue>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>

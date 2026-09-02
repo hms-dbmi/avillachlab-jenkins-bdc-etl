@@ -13,7 +13,9 @@
         <string>JOB_TIMEOUT_SECONDS</string>
         <string>OUTPUT</string>
         <string>PREFLIGHT_ONLY</string>
+        <string>MANAGED_INPUTS</string>
         <string>RETRY_ON_INFRA</string>
+        <string>CONTAINER_ASSUME_ROLE_ARN</string>
         <string>ENV</string>
         <string>INSTANCE_TYPE</string>
         <string>RUN_ID</string>
@@ -51,6 +53,11 @@
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
+          <name>MANAGED_INPUTS</name>
+          <description>--managed-inputs: CSV listing studies to include (local path or s3:// URI). When blank the job falls back to etl.managed-inputs.uri from its config.</description>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
           <name>RUN_ID</name>
           <description>Correlation id. Blank derives one from BUILD_NUMBER.</description>
           <trim>false</trim>
@@ -77,6 +84,12 @@
           <description>Retry once on exit 4 (INFRASTRUCTURE_ERROR).</description>
           <defaultValue>true</defaultValue>
         </hudson.model.BooleanParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>CONTAINER_ASSUME_ROLE_ARN</name>
+          <description>Cross-account IAM role ARN for the container to assume when reading S3 inputs. Blank disables cross-account access.</description>
+          <defaultValue>arn:aws:iam::736265540791:role/dbgap-etl</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
         <hudson.model.BooleanParameterDefinition>
           <name>PREFLIGHT_ONLY</name>
           <description>Validate inputs and stop without provisioning anything</description>
