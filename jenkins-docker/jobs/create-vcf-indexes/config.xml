@@ -10,6 +10,7 @@
       <triggers/>
       <parameters>
         <string>SKIP_TESTS</string>
+        <string>INCLUDE_PROCESSED</string>
         <string>JOB_TIMEOUT_SECONDS</string>
         <string>OUTPUT</string>
         <string>PREFLIGHT_ONLY</string>
@@ -57,6 +58,11 @@
           <description>--managed-inputs: CSV listing studies to include (local path or s3:// URI). When blank the job falls back to etl.managed-inputs.uri from its config.</description>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
+        <hudson.model.BooleanParameterDefinition>
+          <name>INCLUDE_PROCESSED</name>
+          <description>--include-processed: also generate indexes for studies marked Data Processed in managed inputs. The migration pipeline sets this.</description>
+          <defaultValue>false</defaultValue>
+        </hudson.model.BooleanParameterDefinition>
         <hudson.model.StringParameterDefinition>
           <name>RUN_ID</name>
           <description>Correlation id. Blank derives one from BUILD_NUMBER.</description>

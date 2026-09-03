@@ -15,6 +15,7 @@
         <string>DATA_FOLDER</string>
         <string>PREFLIGHT_ONLY</string>
         <string>MANAGED_INPUTS</string>
+        <string>STUDY_FILTER</string>
         <string>RETRY_ON_INFRA</string>
         <string>CONTAINER_ASSUME_ROLE_ARN</string>
         <string>ENV</string>
@@ -58,6 +59,11 @@
           <name>DATA_FOLDER</name>
           <description>--data-folder: folder holding {studyid}_sstr.tsv, {ABV}_PatientMapping.v2.csv, and the shared GLOBAL_allConcepts_merged.csv</description>
           <defaultValue>s3://avillach-73-bdcatalyst-etl/__migration__/current</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>STUDY_FILTER</name>
+          <description>--study-filter: comma-separated study ids to process; blank processes every ready study</description>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>

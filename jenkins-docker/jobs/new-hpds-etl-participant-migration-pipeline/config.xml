@@ -11,6 +11,7 @@
       <parameters>
         <string>VCF_INDEXES_JOB</string>
         <string>DATA_FOLDER</string>
+        <string>STUDY_FILTER</string>
         <string>CONTAINER_ASSUME_ROLE_ARN</string>
         <string>ENV</string>
         <string>VCF_INDEXES_OUTPUT</string>
@@ -69,6 +70,11 @@
           <name>BATCH_SIZE</name>
           <description>Rows per batch insert, passed to every migration job</description>
           <defaultValue>1000</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>STUDY_FILTER</name>
+          <description>Comma-separated study ids; blank runs every ready study. Applies to the participants and split stages only -- the global AllConcepts and VCF stages always cover ALL ready studies from the DB, so a filtered rerun still ends with complete artifacts.</description>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
         <hudson.model.StringParameterDefinition>
