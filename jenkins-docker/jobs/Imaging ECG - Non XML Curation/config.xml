@@ -55,7 +55,7 @@ XML ECG Files will be converted to csvs and metadata.json generated</description
   <disabled>false</disabled>
   <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
   <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
-  <jdk>(System)</jdk>
+  <jdk>jdk-24</jdk>
   <triggers/>
   <concurrentBuild>false</concurrentBuild>
   <builders>
