@@ -122,42 +122,55 @@
                 withAWS(role:&apos;dbgap-etl&apos;, roleAccount:&apos;736265540791&apos;, duration: 3600, roleSessionName: &apos;dictionary-pipeline&apos;) {
                     s3Download(file:&apos;Managed_Inputs.csv&apos;, bucket:&apos;avillach-73-bdcatalyst-etl&apos;, path:&apos;general/resources/Managed_Inputs.csv&apos;, force:true)
                 }
-
+        
                 script {
+                    def MAX_CONCURRENT = 10
                     def inputs = readCSV file: &apos;Managed_Inputs.csv&apos;, format: CSVFormat.DEFAULT.withHeader()
-                    def updateRuns = [:]
-                    def inputCount = 0
-                    inputs.each() {
-                        inputCount+=1
-                        if  (it[&apos;Data is ready to process&apos;] == &apos;Yes&apos; &amp;&amp; it[&apos;Data Processed&apos;] == &apos;No&apos;) {
-                            echo &apos;Updating db for &apos; + it[&apos;Study Identifier&apos;]
-                            if(it[&apos;Use Manual Table Methods&apos;] == &apos;Yes&apos;){
-                             updateRuns[&quot;updateRuns${inputCount}&quot;] = {
-                                build job: &apos;Dictionary ETL - Curated metadata.json to dictionary db&apos;, propagate:true,
+        
+                    // Build a plain, serializable queue of work items
+                    def queue = []
+                    inputs.each { row -&gt;
+                        if (row[&apos;Data is ready to process&apos;] == &apos;Yes&apos; &amp;&amp; row[&apos;Data Processed&apos;] == &apos;No&apos;) {
+                            queue &lt;&lt; [
+                                stdyId  : row[&apos;Study Identifier&apos;],
+                                abv     : row[&apos;Study Abbreviated Name&apos;],
+                                jsonPath: (row[&apos;Use Manual Table Methods&apos;] == &apos;Yes&apos;)
+                            ]
+                        }
+                    }
+        
+                    echo &quot;Queued ${queue.size()} studies; running up to ${MAX_CONCURRENT} at a time&quot;
+        
+                    def workerCount = Math.min(MAX_CONCURRENT, queue.size())
+                    def workers = [:]
+        
+                    for (int w = 0; w &lt; workerCount; w++) {
+                        def workerId = w
+                        workers[&quot;worker-${workerId}&quot;] = {
+                            while (true) {
+                                // Safe: pipeline parallel branches share one CPS thread,
+                                // so this check-and-remove can&apos;t interleave between branches
+                                if (queue.isEmpty()) { break }
+                                def item = queue.remove(0)
+        
+                                echo &quot;[worker-${workerId}] Updating db for ${item.stdyId}&quot;
+                                build job: &apos;Dictionary ETL - Curated metadata.json to dictionary db&apos;, propagate: true,
                                     parameters: [
                                         string(name: &apos;api&apos;, value: &apos;http://172.20.0.2:8086/api&apos;),
-                                        string(name: &apos;stdy_id&apos;, value: it[&apos;Study Identifier&apos;]),
-                                        string(name: &apos;abv&apos;, value: it[&apos;Study Abbreviated Name&apos;]),
-                                        [$class: &apos;BooleanParameterValue&apos;, name: &apos;hasJsonConceptPaths&apos;, value:true]
+                                        string(name: &apos;stdy_id&apos;, value: item.stdyId),
+                                        string(name: &apos;abv&apos;, value: item.abv),
+                                        booleanParam(name: &apos;hasJsonConceptPaths&apos;, value: item.jsonPath)
                                     ]
-                                }
-                            }
-                            else{
-                                updateRuns[&quot;updateRuns${inputCount}&quot;] = {
-                                build job: &apos;Dictionary ETL - Curated metadata.json to dictionary db&apos;, propagate:true,
-                                    parameters: [
-                                        string(name: &apos;api&apos;, value: &apos;http://172.20.0.2:8086/api&apos;),
-                                        string(name: &apos;stdy_id&apos;, value: it[&apos;Study Identifier&apos;]),
-                                        string(name: &apos;abv&apos;, value: it[&apos;Study Abbreviated Name&apos;]),
-                                        [$class: &apos;BooleanParameterValue&apos;, name: &apos;hasJsonConceptPaths&apos;, value:false]
-                                    ]
-                                }
                             }
                         }
                     }
-                    parallel updateRuns
+        
+                    if (workers) {
+                        parallel workers
+                    } else {
+                        echo &apos;Nothing to process&apos;
+                    }
                 }
-                   
             }
         }
         stage(&apos;Get updated study counts from hpds&apos;) {
