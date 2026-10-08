@@ -1,0 +1,96 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
+      <doNotScan>false</doNotScan>
+    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
+    <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
+      <autoRebuild>false</autoRebuild>
+      <rebuildDisabled>false</rebuildDisabled>
+    </com.sonyericsson.rebuild.RebuildSettings>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.TextParameterDefinition>
+          <name>STUDIES</name>
+          <trim>false</trim>
+        </hudson.model.TextParameterDefinition>
+        <hudson.model.BooleanParameterDefinition>
+          <name>DRY_RUN</name>
+          <defaultValue>false</defaultValue>
+        </hudson.model.BooleanParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(System)</jdk>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/usr/bin/env bash
+# Set the genomic count (consent.sample_count) of every consent of the listed studies to -1 (dashboard shows &quot;N/A&quot;).
+# Parameters (Jenkins job parameters / env):
+#   STUDIES   phs accessions, separated by spaces, commas or newlines (phs000007 or phs000007.v33.p14)
+#   DRY_RUN   true = only show current values; change nothing
+#   API_BASE  dictionary ETL API (default http://dictionaryetl:8086/api, as in the Fetch Genomic Counts job)
+set -euo pipefail
+
+readonly COUNT=-1
+STUDIES=&quot;${STUDIES:-}&quot;
+DRY_RUN=&quot;${DRY_RUN:-false}&quot;
+API_BASE=&quot;${API_BASE:-http://dictionaryetl:8086/api}&quot;
+
+command -v jq &gt;/dev/null &amp;&amp; command -v curl &gt;/dev/null || { echo &quot;ERROR: needs curl and jq&quot;; exit 2; }
+[[ -n &quot;${STUDIES//[[:space:],]/}&quot; ]] || { echo &quot;ERROR: STUDIES is empty&quot;; exit 2; }
+
+REPORT=&quot;${WORKSPACE:-$PWD}/genomic_counts_set.csv&quot;
+echo &quot;study,consent_code,old_sample_count,new_sample_count,result&quot; &gt; &quot;$REPORT&quot;
+ok=0; failed=0
+
+for raw in $(tr &apos;,\n&apos; &apos;  &apos; &lt;&lt;&lt; &quot;$STUDIES&quot;); do
+  phs=&quot;${raw%%.*}&quot;                                          # phs000007.v33.p14 -&gt; phs000007
+  if [[ ! &quot;$phs&quot; =~ ^phs[0-9]{6}$ ]]; then
+    echo &quot;SKIP  &apos;$raw&apos;: not a phs accession&quot;; echo &quot;$raw,,,,bad_accession&quot; &gt;&gt; &quot;$REPORT&quot;; failed=$((failed + 1)); continue
+  fi
+
+  code=$(curl -sS -o consents.json -w &apos;%{http_code}&apos; &quot;${API_BASE}/consent?datasetRef=${phs}&quot; || echo 000)
+  if [[ &quot;$code&quot; == &quot;204&quot; ]]; then
+    echo &quot;SKIP  $phs: no consents in the dictionary&quot;; echo &quot;$phs,,,,no_consents&quot; &gt;&gt; &quot;$REPORT&quot;; failed=$((failed + 1)); continue
+  elif [[ &quot;$code&quot; != &quot;200&quot; ]]; then
+    echo &quot;FAIL  $phs: GET consents returned HTTP $code (study not in the dictionary?)&quot;
+    echo &quot;$phs,,,,lookup_http_$code&quot; &gt;&gt; &quot;$REPORT&quot;; failed=$((failed + 1)); continue
+  fi
+
+  while IFS=$&apos;\t&apos; read -r consent old; do
+    if [[ &quot;$DRY_RUN&quot; == &quot;true&quot; ]]; then
+      echo &quot;DRY   $phs ${consent:-&lt;no code&gt;}: sample_count=$old (would set $COUNT)&quot;
+      echo &quot;$phs,$consent,$old,$COUNT,dry_run&quot; &gt;&gt; &quot;$REPORT&quot;; continue
+    fi
+    code=$(curl -sS -o /dev/null -w &apos;%{http_code}&apos; --retry 3 --retry-delay 2 --request PUT \
+             --data-urlencode &quot;datasetRef=${phs}&quot; --data-urlencode &quot;consentCode=${consent}&quot; \
+             --data-urlencode &quot;sampleCount=${COUNT}&quot; &quot;${API_BASE}/consent/counts&quot; || echo 000)
+    if [[ &quot;$code&quot; == &quot;200&quot; ]]; then
+      echo &quot;OK    $phs ${consent:-&lt;no code&gt;}: $old -&gt; $COUNT&quot;; echo &quot;$phs,$consent,$old,$COUNT,updated&quot; &gt;&gt; &quot;$REPORT&quot;; ok=$((ok + 1))
+    else
+      echo &quot;FAIL  $phs ${consent:-&lt;no code&gt;}: PUT returned HTTP $code&quot;; echo &quot;$phs,$consent,$old,$COUNT,put_http_$code&quot; &gt;&gt; &quot;$REPORT&quot;; failed=$((failed + 1))
+    fi
+  done &lt; &lt;(jq -r &apos;.[] | [(.consentCode // &quot;&quot;), (.sampleCount // &quot;null&quot; | tostring)] | @tsv&apos; consents.json)
+done
+rm -f consents.json
+
+echo; echo &quot;updated=$ok failed=$failed  report: $REPORT&quot;; column -s, -t &quot;$REPORT&quot; 2&gt;/dev/null || cat &quot;$REPORT&quot;
+(( failed == 0 )) || exit 1</command>
+      <configuredLocalRules/>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers/>
+</project>
