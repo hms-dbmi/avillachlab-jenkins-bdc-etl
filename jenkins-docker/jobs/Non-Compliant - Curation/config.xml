@@ -39,6 +39,17 @@
           <description>phs00XXXX - this field is required</description>
           <trim>false</trim>
         </hudson.model.StringParameterDefinition>
+        <hudson.model.ChoiceParameterDefinition>
+          <name>UPLOAD_SCOPE</name>
+          <description>all = full curation upload (default). 
+metadata = curate as usual but upload only &lt;phs&gt;_&lt;study&gt;_metadata.json (decoded_data/ and javabin metadata copy), nothing deleted.</description>
+          <choices class="java.util.Arrays$ArrayList">
+            <a class="string-array">
+              <string>all</string>
+              <string>metadata</string>
+            </a>
+          </choices>
+        </hudson.model.ChoiceParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
   </properties>

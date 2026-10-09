@@ -147,17 +147,13 @@ aws s3 cp &quot;$MANAGED_INPUTS_URI&quot; Managed_Inputs.csv --no-progress
 aws s3 cp &quot;$MANAGED_INPUTS_URI&quot; data/Managed_Inputs.csv --no-progress
 
 # -----------------------------
-# Build updated studies list: ready to process AND not processed yet
-# (whole-value, case-insensitive match on Yes / No)
+# Build updated studies list
 # -----------------------------
-log &quot;Computing updated studies list (ready=yes, processed=no)&quot;
-csvgrep -c &quot;Data is ready to process&quot; -r &apos;^\s*[Yy][Ee][Ss]\s*$&apos; data/Managed_Inputs.csv \
-| csvgrep -c &quot;Data Processed&quot; -r &apos;^\s*[Nn][Oo]\s*$&apos; \
+log &quot;Computing updated studies list (ready=yes)&quot;
+csvgrep -c &quot;Data is ready to process&quot; -m &quot;Yes&quot; data/Managed_Inputs.csv \
 | csvcut -c &quot;Study Identifier&quot; \
 | csvformat -E \
 &gt; updated_studies.csv
-log &quot;Studies selected: $(tail -n +2 updated_studies.csv | grep -c . || true) ($(tail -n +2 updated_studies.csv | tr &apos;\n&apos; &apos; &apos;))&quot;
-
 
 # -----------------------------
 # Build study list from metadata
@@ -193,7 +189,7 @@ success_count=0
 fetch_failures=0
 api_failures=0
 missing_count_failures=0
-skipped_not_selected=0
+skipped_not_ready=0
 
 tail -n +2 study_list.csv &gt; .study_hits.tmp
 
@@ -207,7 +203,7 @@ while IFS=&apos;,&apos; read -r stdy_id version consent; do
   [[ -z &quot;$stdy_id&quot; || -z &quot;$version&quot; || -z &quot;$consent&quot; ]] &amp;&amp; continue
 
   if ! grep -Fxq &quot;$stdy_id&quot; updated_studies.csv; then
-    skipped_not_selected=$((skipped_not_selected + 1))
+    skipped_not_ready=$((skipped_not_ready + 1))
     continue
   fi
 
@@ -262,7 +258,7 @@ log &quot;  success_count=${success_count}&quot;
 log &quot;  fetch_failures=${fetch_failures}&quot;
 log &quot;  api_failures=${api_failures}&quot;
 log &quot;  missing_count_failures=${missing_count_failures}&quot;
-log &quot;  skipped_not_selected=${skipped_not_selected}&quot;
+log &quot;  skipped_not_ready=${skipped_not_ready}&quot;
 log &quot;  failed_output=failed_genomic_counts.csv&quot;</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
