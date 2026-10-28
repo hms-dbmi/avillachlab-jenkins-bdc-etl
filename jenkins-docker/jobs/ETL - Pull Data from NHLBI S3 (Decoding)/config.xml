@@ -4,6 +4,10 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <properties>
+    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
+    <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@2.6.1">
+      <doNotScan>false</doNotScan>
+    </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
     <com.sonyericsson.rebuild.RebuildSettings plugin="rebuild@338.va_0a_b_50e29397">
       <autoRebuild>false</autoRebuild>
       <rebuildDisabled>false</rebuildDisabled>
@@ -30,7 +34,6 @@
         </hudson.model.ChoiceParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
-    <hudson.plugins.disk__usage.DiskUsageProperty plugin="disk-usage@1.3"/>
   </properties>
   <scm class="hudson.scm.NullSCM"/>
   <canRoam>true</canRoam>
@@ -43,31 +46,25 @@
   <builders>
     <hudson.tasks.Shell>
       <command>#!/bin/bash
-mkdir downloads
-aws sts assume-role --role-arn arn:aws:iam::${nhlbi_account_number}:role/nih-nhlbi-TopMed-EC2Access-S3 --role-session-name &quot;get-phenotypic-data&quot; &gt; assume-role-output.txt
-export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-aws s3 cp --recursive s3://${bucket_s3_name} downloads/ --exclude &quot;*&quot; --include &quot;*.zip*&quot;  --exclude &quot;*/*&quot;
+set -euo pipefail
+set -x   # echo each command so the log shows what actually ran
 
-unset AWS_ACCESS_KEY_ID
-unset AWS_SECRET_ACCESS_KEY
-unset AWS_SESSION_TOKEN
-aws sts assume-role --duration-seconds 900 --role-arn arn:aws:iam::736265540791:role/dbgap-etl --role-session-name &quot;s3-test&quot; &gt; assume-role-output.txt
+# Strip any accidental whitespace from the parameter
+bucket=&quot;$(echo &quot;${bucket_s3_name}&quot; | tr -d &apos;[:space:]&apos;)&quot;
 
-export AWS_ACCESS_KEY_ID=`grep AccessKeyId assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SECRET_ACCESS_KEY=`grep SecretAccessKey assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
-export AWS_SESSION_TOKEN=`grep SessionToken assume-role-output.txt | cut -d &apos;:&apos; -f 2 | sed &quot;s/[ ,\&quot;]//g&quot;`
+mkdir -p downloads
 
-#aws s3 rm s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/rawData/ --recursive
-cd downloads
+# Get credentials directly as text instead of grepping JSON
+read -r AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN &lt; &lt;(
+  aws sts assume-role \
+    --role-arn &quot;arn:aws:iam::${nhlbi_account_number}:role/nih-nhlbi-TopMed-EC2Access-S3&quot; \
+    --role-session-name &quot;get-phenotypic-data&quot; \
+    --query &apos;Credentials.[AccessKeyId,SecretAccessKey,SessionToken]&apos; \
+    --output text
+)
+export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 
-gzip -d *.txt.gz
-aws s3 cp ./ s3://avillach-73-bdcatalyst-etl/${study_abv_name,,}/rawData/ --recursive
-unset AWS_ACCESS_KEY_ID
-unset AWS_SECRET_ACCESS_KEY
-unset AWS_SESSION_TOKEN
-</command>
+aws s3 cp &quot;s3://${bucket}&quot; ./downloads/ --recursive</command>
       <configuredLocalRules/>
     </hudson.tasks.Shell>
   </builders>
